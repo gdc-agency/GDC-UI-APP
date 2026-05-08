@@ -2,8 +2,8 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
@@ -18,6 +18,10 @@ const TL_ROWS = [
 ];
 
 const TIMESHEET_USERS = [
+  { gdcId: 'GDC-999999-01', name: 'Jawad Jameel', role: 'HR', team: 'Operations' },
+  { gdcId: 'GDC-999999-02', name: 'Jawad Jameel', role: 'Team Leader', team: 'Alpha Team' },
+  { gdcId: 'GDC-12002124-61', name: 'Awais', role: 'Employee', team: 'Alpha Team' },
+  { gdcId: 'GDC-12002124-82', name: 'Awais Khan', role: 'Employee', team: 'Alpha Team' },
   { gdcId: 'GDC-345678-01', name: 'Ali Raza', role: 'Team Leader', team: 'Blue Team' },
   { gdcId: 'GDC-345678-02', name: 'Sana Noor', role: 'HR', team: 'Operations' },
   { gdcId: 'GDC-345678-03', name: 'Ahsan', role: 'Employee', team: 'Support Team' },
@@ -27,6 +31,12 @@ const TIMESHEET_USERS = [
 ];
 
 const TIMESHEET_LOGS = [
+  { id: 'CLK-TL-001', gdcId: 'GDC-999999-02', date: '2026-05-08', checkIn: '11:59', checkOut: '--', hours: 4.53, status: 'L', source: 'clock' },
+  { id: 'CLK-TL-002', gdcId: 'GDC-999999-02', date: '2026-05-07', checkIn: '09:08', checkOut: '18:06', hours: 8.7, status: 'P', source: 'clock' },
+  { id: 'CLK-TM-001', gdcId: 'GDC-12002124-61', date: '2026-05-08', checkIn: '09:11', checkOut: '18:02', hours: 8.4, status: 'L', source: 'clock' },
+  { id: 'CLK-TM-002', gdcId: 'GDC-12002124-82', date: '2026-05-08', checkIn: '09:02', checkOut: '18:10', hours: 8.8, status: 'P', source: 'clock' },
+  { id: 'MAN-TM-001', gdcId: 'GDC-12002124-61', date: '2026-05-07', checkIn: '09:20', checkOut: '18:01', hours: 8.1, status: 'L', source: 'manual' },
+  { id: 'MAN-TM-002', gdcId: 'GDC-12002124-82', date: '2026-05-06', checkIn: '09:05', checkOut: '17:54', hours: 8.2, status: 'P', source: 'manual' },
   { id: 'CLK-001', gdcId: 'GDC-345678-01', date: '2026-05-05', checkIn: '09:12', checkOut: '18:26', hours: 8.9, status: 'L', source: 'clock' },
   { id: 'CLK-002', gdcId: 'GDC-345678-02', date: '2026-05-05', checkIn: '08:57', checkOut: '18:05', hours: 9.1, status: 'P', source: 'clock' },
   { id: 'CLK-003', gdcId: 'GDC-345678-03', date: '2026-05-04', checkIn: '09:00', checkOut: '17:52', hours: 8.3, status: 'P', source: 'clock' },
@@ -63,6 +73,22 @@ const MANUAL_TIME_REQUESTS = [
 ];
 
 const PROJECT_TASKS = [
+  {
+    id: 'TASK-42',
+    gdcId: 'GDC-999999-01',
+    title: 'wordpress logo',
+    description: 'yah jaldi bnao',
+    assignee: 'HR: Jawad Jameel',
+    assignedRole: 'HR',
+    assignedToName: 'Jawad Jameel',
+    priority: 'High',
+    status: 'Pending',
+    deadline: '2026-05-08',
+    createdAt: '2026-05-08',
+    attachmentName: 'Domicile.jpg',
+    attachmentUri: '',
+    createdByRole: 'Admin',
+  },
   {
     id: 'PM-1001',
     gdcId: 'GDC-345678-01',
@@ -102,9 +128,168 @@ const PROJECT_TASKS = [
     attachmentName: '',
     attachmentUri: '',
   },
+  {
+    id: 'PM-1004',
+    gdcId: 'GDC-345678-04',
+    title: 'Monthly report export polish',
+    description: 'Finalize PDF layout and validate HR summary download flow for mobile.',
+    assignee: 'Team Leader',
+    priority: 'Medium',
+    status: 'Submitted',
+    deadline: '2026-05-09',
+    createdAt: '2026-05-05',
+    attachmentName: 'report-format-v2.pdf',
+    attachmentUri: '',
+  },
+  {
+    id: 'PM-1005',
+    gdcId: 'GDC-345678-05',
+    title: 'Leave approval toast issue',
+    description: 'Fix stale toast showing old status after approval and rejection updates.',
+    assignee: 'Employee Team',
+    priority: 'High',
+    status: 'Overdue',
+    deadline: '2026-05-04',
+    createdAt: '2026-05-01',
+    attachmentName: '',
+    attachmentUri: '',
+  },
+  {
+    id: 'PM-1006',
+    gdcId: 'GDC-345678-06',
+    title: 'Attendance timeline cleanup',
+    description: 'Improve spacing and typography in attendance log cards for small screens.',
+    assignee: 'HR Team',
+    priority: 'Low',
+    status: 'Pending',
+    deadline: '2026-05-13',
+    createdAt: '2026-05-06',
+    attachmentName: '',
+    attachmentUri: '',
+  },
+  {
+    id: 'PM-1010',
+    gdcId: 'GDC-999999-01',
+    title: 'HR onboarding document review',
+    description: 'Verify employee onboarding files and align checklist with policy.',
+    assignee: 'HR: Jawad Jameel',
+    assignedRole: 'HR',
+    assignedToName: 'Jawad Jameel',
+    priority: 'Medium',
+    status: 'In Progress',
+    deadline: '2026-05-11',
+    createdAt: '2026-05-07',
+    attachmentName: '',
+    attachmentUri: '',
+    createdByRole: 'Admin',
+  },
+  {
+    id: 'PM-1011',
+    gdcId: 'GDC-999999-01',
+    title: 'Leave request audit sheet',
+    description: 'Prepare monthly pending leave audit and send to leadership.',
+    assignee: 'HR: Jawad Jameel',
+    assignedRole: 'HR',
+    assignedToName: 'Jawad Jameel',
+    priority: 'High',
+    status: 'Review',
+    deadline: '2026-05-12',
+    createdAt: '2026-05-07',
+    attachmentName: 'leave-audit.xlsx',
+    attachmentUri: '',
+    createdByRole: 'Admin',
+  },
+  {
+    id: 'PM-1012',
+    gdcId: 'GDC-999999-01',
+    title: 'Team availability follow-up',
+    description: 'Collect missing availability records from team members.',
+    assignee: 'HR: Jawad Jameel',
+    assignedRole: 'HR',
+    assignedToName: 'Jawad Jameel',
+    priority: 'Low',
+    status: 'Pending',
+    deadline: '2026-05-13',
+    createdAt: '2026-05-08',
+    attachmentName: '',
+    attachmentUri: '',
+    createdByRole: 'Admin',
+  },
+  {
+    id: 'PM-1013',
+    gdcId: 'GDC-999999-02',
+    title: 'Sprint planning board update',
+    description: 'Task forwarded by HR. Start work and update the sprint board items.',
+    assignee: 'TL: Jawad Jameel',
+    assignedRole: 'Team Leader',
+    assignedToName: 'Jawad Jameel',
+    priority: 'Medium',
+    status: 'Pending',
+    deadline: '2026-05-14',
+    createdAt: '2026-05-08',
+    attachmentName: '',
+    attachmentUri: '',
+    createdByRole: 'Admin',
+    forwardedBy: 'Jawad Jameel',
+    forwardedTeam: 'Alpha Team',
+  },
+  {
+    id: 'PM-1014',
+    gdcId: 'GDC-345678-03',
+    title: 'Client issue reproduction notes',
+    description: 'Reproduce reported bug and share exact steps with screenshots.',
+    assignee: 'Employee: Ahsan',
+    assignedRole: 'Employee',
+    assignedToName: 'Ahsan',
+    priority: 'Medium',
+    status: 'Pending',
+    deadline: '2026-05-15',
+    createdAt: '2026-05-09',
+    attachmentName: '',
+    attachmentUri: '',
+    createdByRole: 'Team Leader',
+  },
+  {
+    id: 'PM-1015',
+    gdcId: 'GDC-345678-04',
+    title: 'UI alignment quick fixes',
+    description: 'Fix spacing and typography issues in dashboard cards for mobile.',
+    assignee: 'Employee: Rabia',
+    assignedRole: 'Employee',
+    assignedToName: 'Rabia',
+    priority: 'High',
+    status: 'In Progress',
+    deadline: '2026-05-16',
+    createdAt: '2026-05-09',
+    attachmentName: 'ui-fixes-checklist.pdf',
+    attachmentUri: '',
+    createdByRole: 'Team Leader',
+  },
+  {
+    id: 'PM-1016',
+    gdcId: 'GDC-345678-05',
+    title: 'Daily update sheet submit',
+    description: 'Prepare and submit daily update summary before end of day.',
+    assignee: 'Employee: Umair',
+    assignedRole: 'Employee',
+    assignedToName: 'Umair',
+    priority: 'Low',
+    status: 'Review',
+    deadline: '2026-05-17',
+    createdAt: '2026-05-09',
+    attachmentName: '',
+    attachmentUri: '',
+    createdByRole: 'Team Leader',
+  },
 ];
 
-const TL_LEADS = ['Ali Raza', 'Sana Noor', 'Awais'];
+const TL_OPTIONS = [
+  { name: 'Jawad Jameel', team: 'Alpha Team' },
+  { name: 'Ali Raza', team: 'Blue Team' },
+  { name: 'Sana Noor', team: 'Growth Team' },
+  { name: 'Awais', team: 'Support Team' },
+];
+const TL_LEADS = TL_OPTIONS.map((entry) => entry.name);
 /** Full roster per TL — mirrors CRM web: name, role, department, team, email, GDC */
 const TEAM_ASSIGNMENTS = [
   {
@@ -187,11 +372,45 @@ const makeMockGdcId = () => {
   return `GDC-${mid}-${end}`;
 };
 
+const DEFAULT_HR_NAME = TIMESHEET_USERS.find((u) => u.role === 'HR')?.name || 'HR';
+const DEFAULT_TL_NAME = TL_OPTIONS[0]?.name || 'Team Leader';
+
+const normalizeProjectTask = (task) => {
+  if (task.assignedRole && task.assignedToName) return task;
+  const raw = String(task.assignee || '').toLowerCase();
+  if (raw.includes('hr')) {
+    return {
+      ...task,
+      assignedRole: 'HR',
+      assignedToName: DEFAULT_HR_NAME,
+      assignee: `HR: ${DEFAULT_HR_NAME}`,
+      createdByRole: task.createdByRole || 'Admin',
+    };
+  }
+  if (raw.includes('team leader')) {
+    return {
+      ...task,
+      assignedRole: 'Team Leader',
+      assignedToName: DEFAULT_TL_NAME,
+      assignee: `TL: ${DEFAULT_TL_NAME}`,
+      createdByRole: task.createdByRole || 'Admin',
+    };
+  }
+  return {
+    ...task,
+    assignedRole: task.assignedRole || 'Employee',
+    assignedToName: task.assignedToName || task.assignee || 'Unassigned',
+    createdByRole: task.createdByRole || 'Admin',
+  };
+};
+
 export default function RouteDetailScreen() {
   const params = useLocalSearchParams();
   const { id } = params;
   const router = useRouter();
   const { user } = useAuth();
+  const { width } = useWindowDimensions();
+  const isCompactMobile = width < 420;
   const slug = Array.isArray(id) ? id[0] : id;
   const route = useMemo(() => GDC_MODULES.find((m) => m.id === slug), [slug]);
   const [dateMode, setDateMode] = useState('today');
@@ -202,7 +421,7 @@ export default function RouteDetailScreen() {
   const [memberStatusFilter, setMemberStatusFilter] = useState('all');
   const [summarySearch, setSummarySearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('all');
-  const [projectTasks, setProjectTasks] = useState(PROJECT_TASKS);
+  const [projectTasks, setProjectTasks] = useState(() => PROJECT_TASKS.map(normalizeProjectTask));
   const [projectSearch, setProjectSearch] = useState('');
   const [projectStatusFilter, setProjectStatusFilter] = useState('all');
   const [projectFromDate, setProjectFromDate] = useState('');
@@ -218,6 +437,9 @@ export default function RouteDetailScreen() {
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskAttachmentName, setTaskAttachmentName] = useState('');
   const [taskAttachmentUri, setTaskAttachmentUri] = useState('');
+  const [forwardTlName, setForwardTlName] = useState('');
+  const [forwardTlDropdownOpen, setForwardTlDropdownOpen] = useState(false);
+  const [projectStatusMenuOpen, setProjectStatusMenuOpen] = useState(false);
   const [teamAssignments, setTeamAssignments] = useState(TEAM_ASSIGNMENTS);
   const [teamAssignSearch, setTeamAssignSearch] = useState('');
   const [adminControlTab, setAdminControlTab] = useState('employees');
@@ -238,14 +460,22 @@ export default function RouteDetailScreen() {
   const [departments, setDepartments] = useState(['Frontend Developer', 'MERN Stack', 'SEO', 'Support']);
   const [newDepartment, setNewDepartment] = useState('');
   const [timesheetWindow, setTimesheetWindow] = useState('7d');
+  const [tlTimesheetTab, setTlTimesheetTab] = useState('my-attendance');
+  const [myRequestsTab, setMyRequestsTab] = useState('leave');
   const [timesheetSearch, setTimesheetSearch] = useState('');
+  const [tlTeamSearch, setTlTeamSearch] = useState('');
+  const [tlRecordSearch, setTlRecordSearch] = useState('');
   const [timesheetRoleFilter, setTimesheetRoleFilter] = useState('all');
   const [recordProviderFilter, setRecordProviderFilter] = useState('all');
   const [recordSearch, setRecordSearch] = useState('');
   const [recordFromDate, setRecordFromDate] = useState('');
   const [recordToDate, setRecordToDate] = useState('');
+  const [requestStatusMenuOpen, setRequestStatusMenuOpen] = useState(false);
+  const [availabilityUsers, setAvailabilityUsers] = useState(AVAILABILITY_USERS);
   const [availabilityRoleFilter, setAvailabilityRoleFilter] = useState('all');
   const [availabilityStatusFilter, setAvailabilityStatusFilter] = useState('all');
+  const [availabilitySearch, setAvailabilitySearch] = useState('');
+  const [hoveredAvailabilityStatus, setHoveredAvailabilityStatus] = useState(null);
   const [availabilityFromDate, setAvailabilityFromDate] = useState('2026-05-01');
   const [availabilityToDate, setAvailabilityToDate] = useState('2026-05-31');
   const [leaveRequests, setLeaveRequests] = useState(LEAVE_REQUESTS);
@@ -259,6 +489,7 @@ export default function RouteDetailScreen() {
   const [manualDate, setManualDate] = useState('');
   const [manualClockIn, setManualClockIn] = useState('');
   const [manualClockOut, setManualClockOut] = useState('');
+  const [manualBreakOut, setManualBreakOut] = useState('');
   const [manualReason, setManualReason] = useState('');
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('All');
   const [manualStatusFilter, setManualStatusFilter] = useState('All');
@@ -270,6 +501,7 @@ export default function RouteDetailScreen() {
   const [shiftDate, setShiftDate] = useState('2026-05-07');
   const [shiftStart, setShiftStart] = useState('10:00 AM');
   const [shiftEnd, setShiftEnd] = useState('07:00 PM');
+  const forwardDropdownAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const tab = Array.isArray(params.tab) ? params.tab[0] : params.tab;
@@ -280,13 +512,27 @@ export default function RouteDetailScreen() {
       if (tab) setAdminControlTab(String(tab));
       if (filter) setAdminRoleFilter(String(filter));
     }
+    if (slug === 'my-requests' && tab) {
+      setMyRequestsTab(String(tab) === 'manual' ? 'manual' : 'leave');
+    }
     if (slug === 'request-management' && status) {
       setLeaveStatusFilter(String(status));
     }
     if (slug === 'manual-time-requests' && status) {
       setManualStatusFilter(String(status));
     }
+    if (slug === 'project-manager' && status) {
+      setProjectStatusFilter(String(status).toLowerCase());
+      setProjectStatusMenuOpen(false);
+    }
   }, [params.filter, params.status, params.tab, slug]);
+  useEffect(() => {
+    Animated.timing(forwardDropdownAnim, {
+      toValue: forwardTlDropdownOpen ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [forwardDropdownAnim, forwardTlDropdownOpen]);
 
   const tlMembers = useMemo(
     () => [
@@ -309,23 +555,69 @@ export default function RouteDetailScreen() {
   const filteredTlRows = useMemo(() => {
     const q = summarySearch.trim().toLowerCase();
     let rows = TL_ROWS;
-    if (teamFilter !== 'all') rows = rows.filter((r) => r.team === teamFilter);
     if (q) rows = rows.filter((r) => `${r.team} ${r.lead} ${r.summary}`.toLowerCase().includes(q));
     return rows;
-  }, [summarySearch, teamFilter]);
+  }, [summarySearch]);
+
+  const visibleProjectTasks = useMemo(() => {
+    if (!user?.role) return projectTasks;
+    if (user.role === 'Admin') return projectTasks;
+    if (user.role === 'HR') {
+      return projectTasks.filter(
+        (task) =>
+          task.assignedRole === 'HR' ||
+          (task.forwardedBy === user.name && task.assignedRole === 'Team Leader')
+      );
+    }
+    if (user.role === 'Team Leader') {
+      return projectTasks.filter((task) => {
+        const assigneeText = String(task.assignee || '').toLowerCase();
+        // Demo-friendly TL visibility: show explicit TL tasks even if assignee name differs.
+        if (task.assignedRole === 'Team Leader' && task.assignedToName === user.name) return true;
+        if (task.assignedRole === 'Team Leader') return true;
+        if (assigneeText.includes('team leader') || assigneeText.startsWith('tl:')) return true;
+        return task.forwardedTeam && String(task.forwardedTeam).trim().length > 0;
+      });
+    }
+    return projectTasks.filter((task) => task.assignedRole === 'Employee');
+  }, [projectTasks, user?.name, user?.role]);
 
   const filteredProjectTasks = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
-    return projectTasks.filter((task) => {
+    return visibleProjectTasks.filter((task) => {
       if (projectStatusFilter !== 'all' && task.status.toLowerCase() !== projectStatusFilter) return false;
       if (projectFromDate && task.deadline < projectFromDate) return false;
       if (projectToDate && task.deadline > projectToDate) return false;
       if (!q) return true;
       const haystack =
-        `${task.id} ${task.title} ${task.description} ${task.assignee} ${task.priority} ${task.status} ${task.attachmentName ?? ''}`.toLowerCase();
+        `${task.id} ${task.title} ${task.description} ${task.assignee} ${task.assignedToName ?? ''} ${task.priority} ${task.status} ${task.attachmentName ?? ''}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [projectFromDate, projectSearch, projectStatusFilter, projectTasks, projectToDate]);
+  }, [projectFromDate, projectSearch, projectStatusFilter, projectToDate, visibleProjectTasks]);
+  const formatProjectDueDate = useCallback((isoDate) => {
+    if (!isoDate) return 'Due date not set';
+    const parsed = new Date(isoDate);
+    if (Number.isNaN(parsed.getTime())) return `Due ${isoDate}`;
+    return `Due ${new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(parsed)}`;
+  }, []);
+  const projectStatusTone = useCallback((status) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'pending') return styles.projectStatusPending;
+    if (normalized === 'in progress') return styles.projectStatusProgress;
+    if (normalized === 'review') return styles.projectStatusReview;
+    if (normalized === 'submitted') return styles.projectStatusSubmitted;
+    if (normalized === 'overdue') return styles.projectStatusOverdue;
+    if (normalized === 'completed' || normalized === 'approved') return styles.projectStatusCompleted;
+    return styles.projectStatusDefault;
+  }, []);
+  const hrAssignableUsers = useMemo(() => TIMESHEET_USERS.filter((u) => u.role === 'HR').map((u) => u.name), []);
+  const canForwardProjectTask =
+    user?.role === 'HR' && selectedProjectTask?.status === 'Pending' && selectedProjectTask?.assignedRole === 'HR';
+  const canStartProjectTask =
+    user?.role === 'Team Leader' &&
+    selectedProjectTask?.assignedRole === 'Team Leader' &&
+    selectedProjectTask?.status === 'Pending' &&
+    (!selectedProjectTask?.assignedToName || selectedProjectTask?.assignedToName === user?.name);
   const employeeNameByGdcId = useMemo(
     () => Object.fromEntries(TIMESHEET_USERS.map((entry) => [entry.gdcId, entry.name])),
     []
@@ -395,6 +687,7 @@ export default function RouteDetailScreen() {
 
   const recordRouteTab = slug === 'clock-records' ? 'clock' : slug === 'manual-records' ? 'manual' : 'clock';
   const providerOptions = ['all', 'Employee', 'HR', 'Team Leader'];
+  const providerFilterOptions = user?.role === 'HR' ? ['all', 'Employee', 'Team Leader'] : providerOptions;
 
   const filteredRecords = useMemo(() => {
     const usersById = new Map(TIMESHEET_USERS.map((u) => [u.gdcId, u]));
@@ -410,14 +703,108 @@ export default function RouteDetailScreen() {
       return `${u.name} ${u.gdcId} ${u.team} ${rec.id}`.toLowerCase().includes(q);
     }).map((rec) => ({ ...rec, user: usersById.get(rec.gdcId) }));
   }, [recordFromDate, recordProviderFilter, recordRouteTab, recordSearch, recordToDate]);
+  const employeeProfile = useMemo(() => {
+    if (user?.role !== 'Employee') return null;
+    return TIMESHEET_USERS.find((u) => u.role === 'Employee' && u.name === user.name) || TIMESHEET_USERS.find((u) => u.role === 'Employee') || null;
+  }, [user?.name, user?.role]);
+  const employeeAttendanceLogs = useMemo(() => {
+    if (!employeeProfile) return [];
+    return TIMESHEET_LOGS.filter((log) => log.gdcId === employeeProfile.gdcId && timesheetDays.includes(log.date)).sort((a, b) => b.date.localeCompare(a.date));
+  }, [employeeProfile, timesheetDays]);
+  const employeeAttendanceSummary = useMemo(() => {
+    const totalHours = employeeAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
+    const overtime = employeeAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
+    const lateMarks = employeeAttendanceLogs.filter((row) => row.status === 'L').length;
+    return { totalHours, overtime, lateMarks };
+  }, [employeeAttendanceLogs]);
+  const employeeAttendanceEntry = useMemo(() => {
+    if (!employeeProfile) return null;
+    const cells = timesheetDays.map((day) => {
+      const log = TIMESHEET_LOGS.find((l) => l.gdcId === employeeProfile.gdcId && l.date === day);
+      return log ? log.status : 'A';
+    });
+    const counts = cells.reduce(
+      (acc, st) => {
+        if (st === 'P') acc.present += 1;
+        else if (st === 'L') acc.late += 1;
+        else acc.absent += 1;
+        return acc;
+      },
+      { present: 0, late: 0, absent: 0 }
+    );
+    return { ...employeeProfile, cells, counts };
+  }, [employeeProfile, timesheetDays]);
+  const tlProfile = useMemo(() => {
+    if (user?.role !== 'Team Leader') return null;
+    return TIMESHEET_USERS.find((u) => u.role === 'Team Leader' && u.name === user.name) || TIMESHEET_USERS.find((u) => u.role === 'Team Leader') || null;
+  }, [user?.name, user?.role]);
+  const tlTeamMembers = useMemo(() => {
+    if (!tlProfile) return [];
+    return TIMESHEET_USERS.filter((u) => u.team === tlProfile.team && u.role !== 'Team Leader');
+  }, [tlProfile]);
+  const tlTeamMemberIds = useMemo(() => new Set(tlTeamMembers.map((m) => m.gdcId)), [tlTeamMembers]);
+  const tlMyAttendanceLogs = useMemo(() => {
+    if (!tlProfile) return [];
+    return TIMESHEET_LOGS.filter((log) => log.gdcId === tlProfile.gdcId && timesheetDays.includes(log.date)).sort((a, b) => b.date.localeCompare(a.date));
+  }, [timesheetDays, tlProfile]);
+  const tlMyAttendanceSummary = useMemo(() => {
+    const totalHours = tlMyAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
+    const overtime = tlMyAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
+    const lateMarks = tlMyAttendanceLogs.filter((row) => row.status === 'L').length;
+    return { totalHours, overtime, lateMarks };
+  }, [tlMyAttendanceLogs]);
+  const tlMyAttendanceEntry = useMemo(() => {
+    if (!tlProfile) return null;
+    const cells = timesheetDays.map((day) => {
+      const log = TIMESHEET_LOGS.find((l) => l.gdcId === tlProfile.gdcId && l.date === day);
+      return log ? log.status : 'A';
+    });
+    const counts = cells.reduce(
+      (acc, st) => {
+        if (st === 'P') acc.present += 1;
+        else if (st === 'L') acc.late += 1;
+        else acc.absent += 1;
+        return acc;
+      },
+      { present: 0, late: 0, absent: 0 }
+    );
+    return { ...tlProfile, cells, counts };
+  }, [timesheetDays, tlProfile]);
+  const tlTeamOverviewRows = useMemo(() => {
+    const q = tlTeamSearch.trim().toLowerCase();
+    return attendanceRows
+      .filter((row) => tlTeamMemberIds.has(row.gdcId))
+      .filter((row) => (!q ? true : `${row.name} ${row.gdcId}`.toLowerCase().includes(q)));
+  }, [attendanceRows, tlTeamMemberIds, tlTeamSearch]);
+  const tlTeamRecordRows = useMemo(() => {
+    const q = tlRecordSearch.trim().toLowerCase();
+    const usersById = new Map(TIMESHEET_USERS.map((u) => [u.gdcId, u]));
+    return TIMESHEET_LOGS.filter((log) => tlTeamMemberIds.has(log.gdcId) && timesheetDays.includes(log.date))
+      .filter((log) => {
+        if (!q) return true;
+        const u = usersById.get(log.gdcId);
+        return `${u?.name ?? ''} ${u?.gdcId ?? ''} ${u?.team ?? ''}`.toLowerCase().includes(q);
+      })
+      .map((log) => ({ ...log, user: usersById.get(log.gdcId) }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [timesheetDays, tlRecordSearch, tlTeamMemberIds]);
 
   const filteredAvailabilityUsers = useMemo(() => {
-    return AVAILABILITY_USERS.filter((u) => {
+    const q = availabilitySearch.trim().toLowerCase();
+    return availabilityUsers.filter((u) => {
       if (availabilityRoleFilter !== 'all' && u.role !== availabilityRoleFilter) return false;
       if (availabilityStatusFilter !== 'all' && u.status !== availabilityStatusFilter) return false;
-      return true;
+      if (!q) return true;
+      return `${u.name} ${u.gdcId} ${u.team} ${u.role} ${u.status}`.toLowerCase().includes(q);
     });
-  }, [availabilityRoleFilter, availabilityStatusFilter]);
+  }, [availabilityRoleFilter, availabilitySearch, availabilityStatusFilter, availabilityUsers]);
+
+  const availabilitySummary = useMemo(() => {
+    const present = filteredAvailabilityUsers.filter((u) => u.status === 'Available').length;
+    const absent = filteredAvailabilityUsers.filter((u) => u.status === 'Unavailable').length;
+    const leave = filteredAvailabilityUsers.filter((u) => u.status === 'Leave').length;
+    return { total: filteredAvailabilityUsers.length, present, absent, leave };
+  }, [filteredAvailabilityUsers]);
 
   const filteredMyAvailabilityLog = useMemo(
     () => MY_AVAILABILITY_LOG.filter((r) => r.date >= availabilityFromDate && r.date <= availabilityToDate),
@@ -492,6 +879,7 @@ export default function RouteDetailScreen() {
         date: manualDate,
         clockIn: manualClockIn,
         clockOut: manualClockOut,
+        breakOut: manualBreakOut,
         reason: manualReason || 'No reason',
         status: 'Pending',
       },
@@ -501,6 +889,7 @@ export default function RouteDetailScreen() {
     setManualDate('');
     setManualClockIn('');
     setManualClockOut('');
+    setManualBreakOut('');
     setManualReason('');
   };
 
@@ -535,6 +924,23 @@ export default function RouteDetailScreen() {
     setRejectTargetId(null);
     setRejectTargetType('leave');
     setRejectReason('');
+  };
+
+  const openAvailabilityDatePicker = (target) => {
+    const currentRaw = target === 'from' ? availabilityFromDate : availabilityToDate;
+    const parsed = currentRaw ? new Date(`${currentRaw}T00:00:00`) : new Date();
+    const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    DateTimePickerAndroid.open({
+      value: safeDate,
+      onChange: (_event, selected) => {
+        if (!selected) return;
+        const next = formatDateISO(selected);
+        if (target === 'from') setAvailabilityFromDate(next);
+        else setAvailabilityToDate(next);
+      },
+      mode: 'date',
+      is24Hour: false,
+    });
   };
 
   const parseShiftDate = () => {
@@ -584,6 +990,52 @@ export default function RouteDetailScreen() {
     });
   };
 
+  const openLeaveDatePicker = (target) => {
+    const currentRaw = target === 'from' ? leaveFromDate : leaveToDate;
+    const parsed = currentRaw ? new Date(`${currentRaw}T00:00:00`) : new Date();
+    const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    DateTimePickerAndroid.open({
+      value: safeDate,
+      onChange: (_event, selected) => {
+        if (!selected) return;
+        const next = formatDateISO(selected);
+        if (target === 'from') setLeaveFromDate(next);
+        else setLeaveToDate(next);
+      },
+      mode: 'date',
+      is24Hour: false,
+    });
+  };
+
+  const openManualDatePicker = () => {
+    const parsed = manualDate ? new Date(`${manualDate}T00:00:00`) : new Date();
+    const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    DateTimePickerAndroid.open({
+      value: safeDate,
+      onChange: (_event, selected) => {
+        if (!selected) return;
+        setManualDate(formatDateISO(selected));
+      },
+      mode: 'date',
+      is24Hour: false,
+    });
+  };
+
+  const openManualTimePicker = (target) => {
+    DateTimePickerAndroid.open({
+      value: new Date(),
+      onChange: (_event, selected) => {
+        if (!selected) return;
+        const formatted = formatTimeAmPm(selected);
+        if (target === 'in') setManualClockIn(formatted);
+        else if (target === 'out') setManualClockOut(formatted);
+        else setManualBreakOut(formatted);
+      },
+      mode: 'time',
+      is24Hour: false,
+    });
+  };
+
   const selectedAdminUser = useMemo(
     () => adminUsers.find((member) => member.gdcId === selectedAdminUserId) ?? null,
     [adminUsers, selectedAdminUserId]
@@ -622,6 +1074,7 @@ export default function RouteDetailScreen() {
     setTaskDeadline('');
     setTaskAttachmentName('');
     setTaskAttachmentUri('');
+    setForwardTlName('');
     setEditingTaskId(null);
   };
 
@@ -650,13 +1103,16 @@ export default function RouteDetailScreen() {
                 ...task,
                 title,
                 description: taskDescription.trim() || 'No details provided.',
-                assignee,
+                assignee: `HR: ${assignee}`,
+                assignedRole: 'HR',
+                assignedToName: assignee,
                 priority: taskPriority,
                 status: taskStatus,
                 deadline,
                 attachmentName: taskAttachmentName,
                 attachmentUri: taskAttachmentUri,
                 gdcId: task.gdcId || makeMockGdcId(),
+                createdByRole: task.createdByRole || 'Admin',
               }
             : task
         )
@@ -667,7 +1123,9 @@ export default function RouteDetailScreen() {
           id: `PM-${1000 + prev.length + 1}`,
           title,
           description: taskDescription.trim() || 'No details provided.',
-          assignee,
+          assignee: `HR: ${assignee}`,
+          assignedRole: 'HR',
+          assignedToName: assignee,
           priority: taskPriority,
           status: taskStatus,
           deadline,
@@ -675,6 +1133,7 @@ export default function RouteDetailScreen() {
           attachmentName: taskAttachmentName,
           attachmentUri: taskAttachmentUri,
           gdcId: makeMockGdcId(),
+          createdByRole: 'Admin',
         },
         ...prev,
       ]);
@@ -687,7 +1146,7 @@ export default function RouteDetailScreen() {
     setEditingTaskId(task.id);
     setTaskTitle(task.title);
     setTaskDescription(task.description);
-    setTaskAssignee(task.assignee);
+    setTaskAssignee(task.assignedToName || task.assignee || '');
     setTaskPriority(task.priority || 'Medium');
     setTaskStatus(task.status || 'Pending');
     setTaskDeadline(task.deadline);
@@ -699,8 +1158,100 @@ export default function RouteDetailScreen() {
   const handleDeleteProjectTask = (taskId) => {
     setProjectTasks((prev) => prev.filter((task) => task.id !== taskId));
   };
+  const handleForwardProjectToTl = () => {
+    if (!selectedProjectTask || !forwardTlName || !canForwardProjectTask) return;
+    const selectedTl = TL_OPTIONS.find((entry) => entry.name === forwardTlName);
+    setProjectTasks((prev) =>
+      prev.map((task) =>
+        task.id === selectedProjectTask.id
+          ? {
+              ...task,
+              assignedRole: 'Team Leader',
+              assignedToName: forwardTlName,
+              assignee: `TL: ${forwardTlName}`,
+              forwardedBy: user?.name || 'HR',
+              forwardedAt: new Date().toISOString(),
+              forwardedTeam: selectedTl?.team || '',
+            }
+          : task
+      )
+    );
+    setSelectedProjectTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            assignedRole: 'Team Leader',
+            assignedToName: forwardTlName,
+            assignee: `TL: ${forwardTlName}`,
+            forwardedBy: user?.name || 'HR',
+            forwardedAt: new Date().toISOString(),
+            forwardedTeam: selectedTl?.team || '',
+          }
+        : prev
+    );
+    setForwardTlName('');
+    setForwardTlDropdownOpen(false);
+  };
+  const handleStartProjectTask = () => {
+    if (!selectedProjectTask || !canStartProjectTask) return;
+    setProjectTasks((prev) =>
+      prev.map((task) =>
+        task.id === selectedProjectTask.id
+          ? {
+              ...task,
+              status: 'In Progress',
+              startedBy: user?.name || 'Team Leader',
+              startedAt: new Date().toISOString(),
+            }
+          : task
+      )
+    );
+    setSelectedProjectTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: 'In Progress',
+            startedBy: user?.name || 'Team Leader',
+            startedAt: new Date().toISOString(),
+          }
+        : prev
+    );
+  };
   const assignEmployeeToTl = (assignmentId, tlName) => {
     setTeamAssignments((prev) => prev.map((row) => (row.id === assignmentId ? { ...row, tl: tlName } : row)));
+  };
+  const myAvailabilitySummary = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let totalHours = 0;
+    filteredMyAvailabilityLog.forEach((row) => {
+      if (row.status === 'Present') present += 1;
+      else if (row.status === 'Absent') absent += 1;
+      if (typeof row.hours === 'number') totalHours += row.hours;
+    });
+    const leave = filteredMyAvailabilityLog.filter((row) => row.status === 'Leave').length;
+    return { present, absent, leave, totalHours };
+  }, [filteredMyAvailabilityLog]);
+  const currentAvailabilityStatus = useMemo(() => {
+    if (!user?.role) return 'Available';
+    const match =
+      availabilityUsers.find((u) => u.name === user?.name && u.role === user.role) ||
+      availabilityUsers.find((u) => u.role === user.role);
+    return match?.status || 'Available';
+  }, [availabilityUsers, user?.name, user?.role]);
+  const updateMyAvailabilityStatus = (nextStatus) => {
+    if (!user?.role) return;
+    setAvailabilityUsers((prev) => {
+      const exactIdx = prev.findIndex((entry) => entry.name === user?.name && entry.role === user.role);
+      if (exactIdx >= 0) {
+        return prev.map((entry, index) => (index === exactIdx ? { ...entry, status: nextStatus } : entry));
+      }
+      const roleIdx = prev.findIndex((entry) => entry.role === user.role);
+      if (roleIdx >= 0) {
+        return prev.map((entry, index) => (index === roleIdx ? { ...entry, status: nextStatus } : entry));
+      }
+      return prev;
+    });
   };
 
   if (slug === 'daily-updates') {
@@ -813,15 +1364,6 @@ export default function RouteDetailScreen() {
                     style={styles.searchInput}
                   />
                 </View>
-                <View style={styles.chipRow}>
-                  {['all', 'Blue Team', 'Growth Team', 'Support Team'].map((t) => (
-                    <Pressable key={t} onPress={() => setTeamFilter(t)} style={[styles.filterChip, teamFilter === t && styles.filterChipActive]}>
-                      <Text style={[styles.filterChipText, teamFilter === t && styles.filterChipTextActive]}>
-                        {t === 'all' ? 'All' : t.replace(' Team', '')}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
               </View>
               {filteredTlRows.map((r) => (
                 <View key={r.team} style={styles.tlCard}>
@@ -849,16 +1391,6 @@ export default function RouteDetailScreen() {
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Admin</Text>
               <Text style={styles.panelSub}>Overview of team lead summaries and HR leadership note.</Text>
-              <View style={styles.statsRow}>
-                <View style={styles.statPill}>
-                  <Text style={styles.statPillLabel}>Teams</Text>
-                  <Text style={styles.statPillValue}>3</Text>
-                </View>
-                <View style={styles.statPill}>
-                  <Text style={styles.statPillLabel}>TL Summaries</Text>
-                  <Text style={styles.statPillValue}>3</Text>
-                </View>
-              </View>
               <View style={styles.filterRow}>
                 <View style={styles.searchWrap}>
                   <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
@@ -890,10 +1422,6 @@ export default function RouteDetailScreen() {
   }
 
   if (slug === 'project-manager') {
-    const total = filteredProjectTasks.length;
-    const pending = filteredProjectTasks.filter((t) => t.status === 'Pending').length;
-    const inProgress = filteredProjectTasks.filter((t) => t.status === 'In Progress').length;
-    const review = filteredProjectTasks.filter((t) => t.status === 'Review').length;
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <DashboardTopbar />
@@ -904,26 +1432,6 @@ export default function RouteDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>Project Manager</Text>
-              <Text style={styles.heroSub}>Admin task control with search, date filtering and quick actions.</Text>
-            </View>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statPill}>
-              <Text style={styles.statPillLabel}>Total</Text>
-              <Text style={styles.statPillValue}>{total}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statPillLabel}>Pending</Text>
-              <Text style={styles.statPillValue}>{pending}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statPillLabel}>Progress</Text>
-              <Text style={styles.statPillValue}>{inProgress}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statPillLabel}>Review</Text>
-              <Text style={styles.statPillValue}>{review}</Text>
             </View>
           </View>
 
@@ -940,15 +1448,40 @@ export default function RouteDetailScreen() {
                 style={styles.searchInput}
               />
             </View>
-            <View style={[styles.chipRow, { marginTop: 8 }]}>
-              {['all', 'pending', 'in progress', 'review', 'approved', 'completed'].map((status) => (
-                <Pressable
-                  key={status}
-                  onPress={() => setProjectStatusFilter(status)}
-                  style={[styles.filterChip, projectStatusFilter === status && styles.filterChipActive]}>
-                  <Text style={[styles.filterChipText, projectStatusFilter === status && styles.filterChipTextActive]}>{status}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.pmFilterSelectWrap}>
+              <Pressable style={styles.pmFilterSelectBtn} onPress={() => setProjectStatusMenuOpen((prev) => !prev)}>
+                <Text style={styles.pmFilterSelectText}>
+                  {projectStatusFilter === 'all'
+                    ? 'All'
+                    : projectStatusFilter
+                        .split(' ')
+                        .map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`)
+                        .join(' ')}
+                </Text>
+                <MaterialCommunityIcons name={projectStatusMenuOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#94a3b8" />
+              </Pressable>
+              {projectStatusMenuOpen ? (
+                <View style={styles.pmFilterSelectMenuInline}>
+                  {['all', 'pending', 'in progress', 'review', 'submitted', 'overdue', 'approved', 'completed'].map((status) => (
+                    <Pressable
+                      key={status}
+                      onPress={() => {
+                        setProjectStatusFilter(status);
+                        setProjectStatusMenuOpen(false);
+                      }}
+                      style={[styles.pmFilterOption, projectStatusFilter === status && styles.pmFilterOptionActive]}>
+                      <Text style={[styles.pmFilterOptionText, projectStatusFilter === status && styles.pmFilterOptionTextActive]}>
+                        {status === 'all'
+                          ? 'All'
+                          : status
+                              .split(' ')
+                              .map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`)
+                              .join(' ')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
             <View style={styles.dateFilterRow}>
               <TextInput
@@ -982,37 +1515,62 @@ export default function RouteDetailScreen() {
               </View>
             ) : (
               filteredProjectTasks.map((task) => (
-                <Pressable key={task.id} style={styles.projectCard} onPress={() => setSelectedProjectTask(task)}>
-                  <View style={styles.projectCardTop}>
-                    <Text style={styles.projectId}>{employeeNameByGdcId[task.gdcId] || task.assignee || 'Unassigned'}</Text>
-                    <Text style={styles.projectDeadline}>{task.deadline}</Text>
+                <Pressable key={task.id} style={[styles.projectCard, isCompactMobile && styles.projectCardCompact]} onPress={() => setSelectedProjectTask(task)}>
+                  <View style={[styles.projectDateStrip, isCompactMobile && styles.projectDateStripCompact]}>
+                    <Text style={styles.projectDateDay}>{task.deadline ? task.deadline.slice(-2) : '--'}</Text>
+                    <Text style={styles.projectDateMonth}>
+                      {task.deadline
+                        ? new Intl.DateTimeFormat('en-US', { month: 'short' }).format(new Date(task.deadline)).toUpperCase()
+                        : 'N/A'}
+                    </Text>
                   </View>
-                  <Text style={styles.projectTitle}>{task.title}</Text>
-                  <Text style={styles.projectDesc}>{task.description}</Text>
-                  <View style={styles.projectMetaRow}>
-                    <Text style={styles.projectMetaText}>Assignee: {task.assignee}</Text>
-                  </View>
-                  {task.attachmentName ? <Text style={styles.projectLinkText}>Attachment: {task.attachmentName}</Text> : null}
-                  <View style={styles.projectFooter}>
-                    <View style={[styles.filterChip, styles.projectStatusChip]}>
-                      <Text style={[styles.filterChipText, { color: '#1e3a8a' }]}>{task.status}</Text>
+                  <View style={styles.projectMainCol}>
+                    <View style={styles.projectCardTop}>
+                      <Text style={styles.projectTitle} numberOfLines={isCompactMobile ? 2 : 1}>
+                        {task.title}
+                      </Text>
+                      {user?.role === 'Admin' ? (
+                        <View style={styles.taskActionRow}>
+                          <Pressable
+                            onPress={() => handleEditProjectTask(task)}
+                            style={styles.editBtn}
+                            onPressIn={(e) => e.stopPropagation()}>
+                            <MaterialCommunityIcons name="pencil-outline" size={16} color="#ffffff" />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handleDeleteProjectTask(task.id)}
+                            style={styles.deleteBtn}
+                            onPressIn={(e) => e.stopPropagation()}>
+                            <MaterialCommunityIcons name="trash-can-outline" size={16} color="#e11d48" />
+                          </Pressable>
+                        </View>
+                      ) : null}
                     </View>
-                    {user?.role === 'Admin' ? (
-                      <View style={styles.taskActionRow}>
-                        <Pressable
-                          onPress={() => handleEditProjectTask(task)}
-                          style={styles.editBtn}
-                          onPressIn={(e) => e.stopPropagation()}>
-                          <MaterialCommunityIcons name="pencil-outline" size={16} color="#fff" />
-                        </Pressable>
-                        <Pressable
-                          onPress={() => handleDeleteProjectTask(task.id)}
-                          style={styles.deleteBtn}
-                          onPressIn={(e) => e.stopPropagation()}>
-                          <MaterialCommunityIcons name="trash-can-outline" size={16} color="#fff" />
-                        </Pressable>
+                    <View style={[styles.projectStatePill, projectStatusTone(task.status)]}>
+                      <Text style={styles.projectStateText}>{String(task.status || 'Pending').toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.projectIdentityRow}>
+                      <View style={styles.projectAssigneeBadge}>
+                        <Text style={styles.projectAssigneeBadgeText}>
+                          {String(task.assignedToName || employeeNameByGdcId[task.gdcId] || task.assignee || 'Unassigned').toUpperCase()}
+                        </Text>
                       </View>
-                    ) : null}
+                    </View>
+                    <View style={styles.projectInfoLine}>
+                      <MaterialCommunityIcons name="briefcase-outline" size={17} color="#f97316" />
+                      <Text style={styles.projectInfoText} numberOfLines={1}>
+                        {task.description || 'Web Development'}
+                      </Text>
+                    </View>
+                    <View style={styles.projectInfoLine}>
+                      <MaterialCommunityIcons name="account-outline" size={17} color="#f97316" />
+                      <Text style={styles.projectInfoText}>{task.assignedRole || task.assignee || 'Employee'}</Text>
+                    </View>
+                    <View style={styles.projectDueLine}>
+                      <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
+                      <Text style={styles.projectDueText}>{formatProjectDueDate(task.deadline)}</Text>
+                    </View>
+                    {task.attachmentName ? <Text style={styles.projectLinkText}>Attachment: {task.attachmentName}</Text> : null}
                   </View>
                 </Pressable>
               ))
@@ -1036,10 +1594,22 @@ export default function RouteDetailScreen() {
               <TextInput
                 value={taskAssignee}
                 onChangeText={setTaskAssignee}
-                placeholder="Assign to (e.g. HR Team)"
+                placeholder="Assign to HR (name)"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
               />
+              {user?.role === 'Admin' ? (
+                <View style={[styles.chipRow, { marginTop: 8 }]}>
+                  {hrAssignableUsers.map((hrName) => (
+                    <Pressable
+                      key={hrName}
+                      onPress={() => setTaskAssignee(hrName)}
+                      style={[styles.filterChip, taskAssignee === hrName && styles.filterChipActive]}>
+                      <Text style={[styles.filterChipText, taskAssignee === hrName && styles.filterChipTextActive]}>{hrName}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
               <TextInput
                 value={taskDeadline}
                 onChangeText={setTaskDeadline}
@@ -1090,23 +1660,135 @@ export default function RouteDetailScreen() {
             <View style={styles.modalCardShell}>
               <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
                 <View style={styles.modalCard}>
-                  <Text style={styles.modalTitle}>Task Details</Text>
-                  <Text style={styles.detailTitle}>{selectedProjectTask?.title}</Text>
-                  <Text style={styles.detailText}>
-                    Employee: {employeeNameByGdcId[selectedProjectTask?.gdcId] || selectedProjectTask?.assignee || 'Unassigned'}
-                  </Text>
-                  <Text style={styles.detailText}>Status: {selectedProjectTask?.status}</Text>
-                  <Text style={styles.detailText}>Deadline: {selectedProjectTask?.deadline}</Text>
-                  <Text style={styles.detailText}>Description:</Text>
-                  <Text style={styles.detailBody}>{selectedProjectTask?.description}</Text>
-                  {selectedProjectTask?.attachmentName ? (
-                    <Text style={styles.projectLinkText}>Attachment: {selectedProjectTask.attachmentName}</Text>
-                  ) : null}
-                  <View style={styles.modalActions}>
-                    <Pressable style={styles.cancelBtn} onPress={() => setSelectedProjectTask(null)}>
-                      <Text style={styles.cancelBtnText}>Close</Text>
-                    </Pressable>
+                  <View style={styles.taskDetailHeader}>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.taskDetailTitleRow}>
+                        <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#3b82f6" />
+                        <Text style={styles.taskDetailHeaderTitle}>Task Details</Text>
+                      </View>
+                      <Text style={styles.taskDetailHeaderSub}>
+                        Assignee: {selectedProjectTask?.assignedToName || employeeNameByGdcId[selectedProjectTask?.gdcId] || selectedProjectTask?.assignee || 'Unassigned'} (
+                        {selectedProjectTask?.assignedRole || 'Employee'})
+                      </Text>
+                    </View>
+                    <View style={styles.taskDetailHeaderActions}>
+                      {user?.role === 'Admin' ? (
+                        <>
+                          <Pressable
+                            style={styles.taskDetailActionBtn}
+                            onPress={() => {
+                              handleEditProjectTask(selectedProjectTask);
+                              setSelectedProjectTask(null);
+                            }}>
+                            <MaterialCommunityIcons name="pencil-outline" size={16} color="#0369a1" />
+                          </Pressable>
+                          <Pressable
+                            style={[styles.taskDetailActionBtn, styles.taskDetailDeleteBtn]}
+                            onPress={() => {
+                              handleDeleteProjectTask(selectedProjectTask.id);
+                              setSelectedProjectTask(null);
+                            }}>
+                            <MaterialCommunityIcons name="trash-can-outline" size={16} color="#e11d48" />
+                          </Pressable>
+                        </>
+                      ) : null}
+                      <Pressable onPress={() => setSelectedProjectTask(null)} hitSlop={8}>
+                        <MaterialCommunityIcons name="close" size={20} color="#94a3b8" />
+                      </Pressable>
+                    </View>
                   </View>
+
+                  <View style={[styles.taskDetailBody, isCompactMobile && styles.taskDetailBodyMobile]}>
+                    <View style={styles.taskDetailMainCol}>
+                      <Text style={styles.detailTitle}>{selectedProjectTask?.title}</Text>
+                      <Text style={styles.detailBody}>{selectedProjectTask?.description || 'No description'}</Text>
+                      {selectedProjectTask?.attachmentName ? (
+                        <View style={styles.taskDetailAttachmentCard}>
+                          <Text style={styles.taskDetailAttachmentLabel}>Attachment</Text>
+                          <View style={styles.taskDetailAttachmentRow}>
+                            <MaterialCommunityIcons name="paperclip" size={18} color="#2563eb" />
+                            <Text style={styles.taskDetailAttachmentName}>{selectedProjectTask.attachmentName}</Text>
+                          </View>
+                        </View>
+                      ) : null}
+                      <View style={styles.projectIdentityRow}>
+                        <View style={styles.forwardTeamPill}>
+                          <Text style={styles.forwardTeamPillText}>
+                            {String(selectedProjectTask?.assignedToName || employeeNameByGdcId[selectedProjectTask?.gdcId] || selectedProjectTask?.assignee || 'UNASSIGNED').toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={[styles.taskDetailAsideCol, isCompactMobile && styles.taskDetailAsideColMobile]}>
+                      <View style={[styles.projectStatePill, projectStatusTone(selectedProjectTask?.status)]}>
+                        <Text style={styles.projectStateText}>{String(selectedProjectTask?.status || 'Pending').toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.taskDetailDueRow}>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
+                        <Text style={styles.taskDetailDueText}>{formatProjectDueDate(selectedProjectTask?.deadline).replace('Due ', 'DUE ')}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {selectedProjectTask?.forwardedBy ? <Text style={styles.detailText}>Forwarded by: {selectedProjectTask.forwardedBy}</Text> : null}
+                  {canForwardProjectTask ? (
+                    <View style={styles.forwardWrap}>
+                      <Text style={styles.forwardTitle}>Forward to Team Leader</Text>
+                      <View style={styles.forwardSelectWrap}>
+                        <Pressable style={styles.forwardSelectBtn} onPress={() => setForwardTlDropdownOpen((prev) => !prev)}>
+                          <Text style={styles.forwardSelectText}>{forwardTlName || 'Select Team Leader'}</Text>
+                          <MaterialCommunityIcons name={forwardTlDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#94a3b8" />
+                        </Pressable>
+                        {forwardTlDropdownOpen ? (
+                          <Animated.View
+                            style={[
+                              styles.forwardSelectMenu,
+                              {
+                                opacity: forwardDropdownAnim,
+                                transform: [
+                                  {
+                                    translateY: forwardDropdownAnim.interpolate({
+                                      inputRange: [0, 1],
+                                      outputRange: [-8, 0],
+                                    }),
+                                  },
+                                ],
+                              },
+                            ]}>
+                            {TL_OPTIONS.map((lead) => (
+                              <Pressable
+                                key={`${lead.name}-${lead.team}`}
+                                onPress={() => {
+                                  setForwardTlName(lead.name);
+                                  setForwardTlDropdownOpen(false);
+                                }}
+                                style={[styles.forwardSelectOption, forwardTlName === lead.name && styles.forwardSelectOptionActive]}>
+                                <Text style={[styles.forwardSelectOptionText, forwardTlName === lead.name && styles.forwardSelectOptionTextActive]}>
+                                  {lead.name} — {lead.team}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </Animated.View>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        style={[styles.modalPrimaryBtn, !forwardTlName && styles.actionBtnDisabled]}
+                        disabled={!forwardTlName}
+                        onPress={handleForwardProjectToTl}>
+                        <Text style={styles.actionBtnText}>Forward to TL</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {canStartProjectTask ? (
+                    <View style={styles.forwardWrap}>
+                      <Text style={styles.forwardTitle}>Ready to start this task?</Text>
+                      <Pressable style={styles.startWorkBtn} onPress={handleStartProjectTask}>
+                        <MaterialCommunityIcons name="play-circle-outline" size={16} color="#fff" />
+                        <Text style={styles.actionBtnText}>Start Work</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
               </ScrollView>
             </View>
@@ -1118,6 +1800,8 @@ export default function RouteDetailScreen() {
 
   if (slug === 'timesheet' || slug === 'clock-records' || slug === 'manual-records') {
     const isRecordsOnlyRoute = slug === 'clock-records' || slug === 'manual-records';
+    const isTlTimesheetHome = user?.role === 'Team Leader' && !isRecordsOnlyRoute;
+    const isEmployeeTimesheetHome = user?.role === 'Employee' && !isRecordsOnlyRoute;
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <DashboardTopbar />
@@ -1127,147 +1811,571 @@ export default function RouteDetailScreen() {
               <MaterialCommunityIcons name="clock-time-four-outline" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle}>{isRecordsOnlyRoute ? 'Timesheet Records' : 'Timesheet'}</Text>
+              <Text style={styles.heroTitle}>
+                {isRecordsOnlyRoute ? 'Timesheet Records' : user?.role === 'Team Leader' ? 'TL Timesheet' : 'Timesheet'}
+              </Text>
             </View>
           </View>
 
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Timesheet Sections</Text>
-            <View style={styles.chipRow}>
-              {[
-                ['timesheet', 'Attendance Overview'],
-                ['clock-records', 'Clock Record'],
-                ['manual-records', 'Manual Record'],
-              ].map(([tabId, label]) => (
-                <Pressable
-                  key={tabId}
-                  onPress={() => router.push(`/dashboard/(tabs)/route/${tabId}`)}
-                  style={[styles.filterChip, slug === tabId && styles.filterChipActive]}>
-                  <Text style={[styles.filterChipText, slug === tabId && styles.filterChipTextActive]}>{label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {!isRecordsOnlyRoute ? (
-            <>
+          {!isTlTimesheetHome && !isEmployeeTimesheetHome ? (
             <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Attendance Window</Text>
-            <View style={styles.chipRow}>
-              {[
-                ['today', 'Today'],
-                ['7d', '7 days'],
-                ['30d', '30 days'],
-              ].map(([key, label]) => (
-                <Pressable
-                  key={key}
-                  onPress={() => setTimesheetWindow(key)}
-                  style={[styles.filterChip, timesheetWindow === key && styles.filterChipActive]}>
-                  <Text style={[styles.filterChipText, timesheetWindow === key && styles.filterChipTextActive]}>{label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {user?.role === 'Admin' ? (
-              <View style={[styles.chipRow, { marginTop: 8 }]}>
-                {['all', 'Team Leader', 'HR', 'Employee'].map((role) => (
+              <Text style={styles.panelTitle}>Timesheet Sections</Text>
+              <View style={styles.chipRow}>
+                {[
+                  ['timesheet', 'Attendance Overview'],
+                  ['clock-records', 'Clock Record'],
+                  ['manual-records', 'Manual Record'],
+                ].map(([tabId, label]) => (
                   <Pressable
-                    key={role}
-                    onPress={() => setTimesheetRoleFilter(role)}
-                    style={[styles.filterChip, timesheetRoleFilter === role && styles.filterChipActive]}>
-                    <Text style={[styles.filterChipText, timesheetRoleFilter === role && styles.filterChipTextActive]}>
-                      {role === 'all' ? 'All Roles' : role}
-                    </Text>
+                    key={tabId}
+                    onPress={() => router.push(`/dashboard/(tabs)/route/${tabId}`)}
+                    style={[styles.filterChip, slug === tabId && styles.filterChipActive]}>
+                    <Text style={[styles.filterChipText, slug === tabId && styles.filterChipTextActive]}>{label}</Text>
                   </Pressable>
                 ))}
               </View>
-            ) : null}
-            <View style={[styles.searchWrap, { marginTop: 10 }]}>
-              <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
-              <TextInput
-                value={timesheetSearch}
-                onChangeText={setTimesheetSearch}
-                placeholder="Search by name, GDC_ID or team"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-              />
             </View>
-            <View style={[styles.chipRow, { marginTop: 10 }]}>
-              <Text style={styles.legendTitle}>Legend:</Text>
-              <View style={[styles.statusCodePill, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                <Text style={[styles.statusCodeText, { color: '#166534' }]}>P</Text>
-              </View>
-              <View style={[styles.statusCodePill, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
-                <Text style={[styles.statusCodeText, { color: '#991b1b' }]}>L</Text>
-              </View>
-              <View style={[styles.statusCodePill, { backgroundColor: '#e2e8f0', borderColor: '#cbd5e1' }]}>
-                <Text style={[styles.statusCodeText, { color: '#334155' }]}>A</Text>
-              </View>
-            </View>
-          </View>
+          ) : null}
 
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Attendance Matrix</Text>
-            <Text style={styles.panelSub}>
-              {timesheetWindow === 'today' ? 'Today status' : timesheetWindow === '7d' ? 'Last 7 days (P/A/L)' : '30 days summary'}
-            </Text>
-            {attendanceRows.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyText}>No attendance records in selected window.</Text>
-              </View>
-            ) : timesheetWindow === 'today' ? (
-              attendanceRows.map((entry) => (
-                <View key={entry.gdcId} style={styles.timesheetCard}>
-                  <View style={styles.timesheetTopRow}>
-                    <Text style={styles.timesheetName}>{entry.name}</Text>
-                    <Text style={styles.timesheetDate}>{entry.role}</Text>
-                  </View>
-                  <Text style={styles.timesheetId}>{entry.gdcId}</Text>
-                  <Text style={styles.timesheetTeam}>{entry.team}</Text>
-                  <View style={styles.timesheetStatusRow}>
-                    <Text style={styles.timesheetMeta}>Today Status:</Text>
-                    <View style={styles.statusCodePill}>
-                      <Text style={styles.statusCodeText}>{entry.cells[0]}</Text>
+          {!isRecordsOnlyRoute ? (
+            <>
+              {user?.role === 'Team Leader' ? (
+                <>
+                  <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.tlTimesheetTabs}
+                      style={styles.tlTimesheetTabsScroll}>
+                      {[
+                        ['my-attendance', 'My attendance'],
+                        ['team-overview', 'Team overview'],
+                        ['team-records', 'Team records'],
+                      ].map(([tabId, label]) => (
+                        <Pressable
+                          key={tabId}
+                          onPress={() => setTlTimesheetTab(tabId)}
+                          style={[styles.tlTimesheetTabBtn, tlTimesheetTab === tabId && styles.tlTimesheetTabBtnActive]}>
+                          <Text
+                            numberOfLines={1}
+                            style={[styles.tlTimesheetTabText, tlTimesheetTab === tabId && styles.tlTimesheetTabTextActive]}>
+                            {label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <View style={[styles.tlTimesheetWindowRow, { marginTop: 10 }]}>
+                      <View style={styles.chipRow}>
+                        {[
+                          ['today', 'Today'],
+                          ['7d', '7 days'],
+                          ['30d', '30 days'],
+                        ].map(([key, label]) => (
+                          <Pressable
+                            key={key}
+                            onPress={() => setTimesheetWindow(key)}
+                            style={[styles.filterChip, timesheetWindow === key && styles.filterChipActive]}>
+                            <Text style={[styles.filterChipText, timesheetWindow === key && styles.filterChipTextActive]}>{label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))
-            ) : timesheetWindow === '7d' ? (
-              attendanceRows.map((entry) => (
-                <View key={entry.gdcId} style={styles.timesheetCard}>
-                  <View style={styles.timesheetTopRow}>
-                    <Text style={styles.timesheetName}>{entry.name}</Text>
-                    <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
-                  </View>
-                  <Text style={styles.timesheetTeam}>{entry.role} - {entry.team}</Text>
-                  <View style={styles.weekCellRow}>
-                    {entry.cells.map((cell, idx) => (
-                      <View key={`${entry.gdcId}-${timesheetDays[idx]}`} style={styles.weekCell}>
-                        <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
-                        <View style={styles.statusCodePill}>
-                          <Text style={styles.statusCodeText}>{cell}</Text>
+
+                  {tlTimesheetTab === 'my-attendance' ? (
+                    <>
+                      <View style={styles.tlSummaryGrid}>
+                        <View style={[styles.tlSummaryCard, styles.tlSummaryCardHours]}>
+                          <View style={styles.tlSummaryHead}>
+                            <View style={styles.tlSummaryIconWrap}>
+                              <MaterialCommunityIcons name="clock-time-four-outline" size={14} color="#2563eb" />
+                            </View>
+                            <Text style={styles.tlSummaryLabel}>T.HOURS</Text>
+                          </View>
+                          <Text style={styles.tlSummaryValue}>{tlMyAttendanceSummary.totalHours.toFixed(1)}</Text>
+                        </View>
+                        <View style={[styles.tlSummaryCard, styles.tlSummaryCardOvertime]}>
+                          <View style={styles.tlSummaryHead}>
+                            <View style={styles.tlSummaryIconWrap}>
+                              <MaterialCommunityIcons name="timer-plus-outline" size={14} color="#7c3aed" />
+                            </View>
+                            <Text style={styles.tlSummaryLabel}>OVERTIME</Text>
+                          </View>
+                          <Text style={styles.tlSummaryValue}>{tlMyAttendanceSummary.overtime.toFixed(1)}</Text>
+                        </View>
+                        <View style={[styles.tlSummaryCard, styles.tlSummaryCardLate]}>
+                          <View style={styles.tlSummaryHead}>
+                            <View style={styles.tlSummaryIconWrap}>
+                              <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#e11d48" />
+                            </View>
+                            <View>
+                              <Text style={styles.tlSummaryLabel}>LATE</Text>
+                              <Text style={styles.tlSummaryLabel}>MARKS</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.tlSummaryValue}>{tlMyAttendanceSummary.lateMarks}</Text>
                         </View>
                       </View>
-                    ))}
+                      <Text style={styles.tlGdcNote}>Employee GDC-ID: GDC-12002124-61</Text>
+                      <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                        <Text style={styles.panelTitle}>Clock history</Text>
+                        <Text style={styles.panelSub}>{tlMyAttendanceLogs.length} record(s)</Text>
+                        {timesheetWindow !== 'today' && tlMyAttendanceEntry ? (
+                          <View style={styles.timesheetCard}>
+                            <View style={styles.timesheetTopRow}>
+                              <Text style={styles.timesheetName}>{tlMyAttendanceEntry.name}</Text>
+                              <Text style={styles.timesheetDate}>{tlMyAttendanceEntry.gdcId}</Text>
+                            </View>
+                            <Text style={styles.timesheetTeam}>{tlMyAttendanceEntry.role} - {tlMyAttendanceEntry.team}</Text>
+                            {timesheetWindow === '7d' ? (
+                              <View style={styles.weekCellRow}>
+                                {tlMyAttendanceEntry.cells.map((cell, idx) => (
+                                  <View key={`${tlMyAttendanceEntry.gdcId}-self-${timesheetDays[idx]}`} style={styles.weekCell}>
+                                    <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
+                                    <View style={styles.statusCodePill}>
+                                      <Text style={styles.statusCodeText}>{cell}</Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <View style={styles.timesheetMetaRow}>
+                                <Text style={styles.timesheetMeta}>P: {tlMyAttendanceEntry.counts.present}</Text>
+                                <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {tlMyAttendanceEntry.counts.late}</Text>
+                                <Text style={styles.timesheetMeta}>A: {tlMyAttendanceEntry.counts.absent}</Text>
+                              </View>
+                            )}
+                          </View>
+                        ) : tlMyAttendanceLogs.length === 0 ? (
+                          <View style={styles.emptyBox}>
+                            <Text style={styles.emptyText}>No records in selected window.</Text>
+                          </View>
+                        ) : (
+                          tlMyAttendanceLogs.map((entry) => (
+                            <View key={entry.id} style={styles.timesheetCard}>
+                              <View style={styles.timesheetTopRow}>
+                                <Text style={styles.timesheetName}>{tlProfile?.name || 'Team Leader'}</Text>
+                                <Text style={styles.timesheetDate}>{tlProfile?.gdcId || 'GDC-12002124-61'}</Text>
+                              </View>
+                              <Text style={styles.timesheetTeam}>{tlProfile?.role || 'Team Leader'} - {tlProfile?.team || 'Alpha Team'}</Text>
+                              <View style={styles.timesheetTopRow}>
+                                <Text style={styles.timesheetDate}>{entry.date}</Text>
+                                <View style={styles.statusCodePill}>
+                                  <Text style={styles.statusCodeText}>{entry.status}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.timesheetClockRow}>
+                                <View style={styles.timesheetClockPill}>
+                                  <Text style={styles.timesheetClockLabel}>IN</Text>
+                                  <Text style={styles.timesheetClockValue}>{entry.checkIn}</Text>
+                                </View>
+                                <MaterialCommunityIcons name="arrow-right" size={16} color="#94a3b8" />
+                                <View style={styles.timesheetClockPill}>
+                                  <Text style={styles.timesheetClockLabel}>OUT</Text>
+                                  <Text style={styles.timesheetClockValue}>{entry.checkOut}</Text>
+                                </View>
+                              </View>
+                              <Text style={styles.timesheetMeta}>Hours: {entry.hours.toFixed(2)}</Text>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    </>
+                  ) : null}
+
+                  {tlTimesheetTab === 'team-overview' ? (
+                    <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                      <Text style={styles.panelTitle}>Attendance overview</Text>
+                      <View style={[styles.searchWrap, { marginTop: 10 }]}>
+                        <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+                        <TextInput
+                          value={tlTeamSearch}
+                          onChangeText={setTlTeamSearch}
+                          placeholder="Team member ID, code, or name"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.searchInput}
+                        />
+                      </View>
+                      <View style={[styles.chipRow, { marginTop: 10 }]}>
+                        <Text style={styles.legendTitle}>Legend:</Text>
+                        <View style={[styles.statusCodePill, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                          <Text style={[styles.statusCodeText, { color: '#166534' }]}>P</Text>
+                        </View>
+                        <View style={[styles.statusCodePill, { backgroundColor: '#fef9c3', borderColor: '#fde68a' }]}>
+                          <Text style={[styles.statusCodeText, { color: '#854d0e' }]}>L</Text>
+                        </View>
+                        <View style={[styles.statusCodePill, { backgroundColor: '#e2e8f0', borderColor: '#cbd5e1' }]}>
+                          <Text style={[styles.statusCodeText, { color: '#334155' }]}>A</Text>
+                        </View>
+                      </View>
+                      {tlTeamOverviewRows.length === 0 ? (
+                        <View style={styles.emptyBox}>
+                          <Text style={styles.emptyText}>No team members found.</Text>
+                        </View>
+                      ) : (
+                        tlTeamOverviewRows.map((entry) => (
+                          <View key={entry.gdcId} style={styles.timesheetCard}>
+                            <View style={styles.timesheetTopRow}>
+                              <Text style={styles.timesheetName}>{entry.name}</Text>
+                              <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
+                            </View>
+                            <Text style={styles.timesheetTeam}>{entry.role} - {entry.team}</Text>
+                            {timesheetWindow === 'today' ? (
+                              <View style={styles.timesheetStatusRow}>
+                                <Text style={styles.timesheetMeta}>Today:</Text>
+                                <View style={styles.statusCodePill}>
+                                  <Text style={styles.statusCodeText}>{entry.cells[0]}</Text>
+                                </View>
+                              </View>
+                            ) : null}
+                            {timesheetWindow === '7d' ? (
+                              <View style={styles.weekCellRow}>
+                                {entry.cells.map((cell, idx) => (
+                                  <View key={`${entry.gdcId}-tl-${timesheetDays[idx]}`} style={styles.weekCell}>
+                                    <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
+                                    <View style={styles.statusCodePill}>
+                                      <Text style={styles.statusCodeText}>{cell}</Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : null}
+                            {timesheetWindow === '30d' ? (
+                              <View style={styles.timesheetMetaRow}>
+                                <Text style={styles.timesheetMeta}>P: {entry.counts.present}</Text>
+                                <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {entry.counts.late}</Text>
+                                <Text style={styles.timesheetMeta}>A: {entry.counts.absent}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  ) : null}
+
+                  {tlTimesheetTab === 'team-records' ? (
+                    <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                      <Text style={styles.panelTitle}>Global attendance log</Text>
+                      <View style={[styles.searchWrap, { marginTop: 10 }]}>
+                        <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+                        <TextInput
+                          value={tlRecordSearch}
+                          onChangeText={setTlRecordSearch}
+                          placeholder="GDC-ID search"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.searchInput}
+                        />
+                      </View>
+                      <Text style={styles.panelSub}>{tlTeamRecordRows.length} filtered rows</Text>
+                      {timesheetWindow !== 'today' ? (
+                        tlTeamOverviewRows.length === 0 ? (
+                          <View style={styles.emptyBox}>
+                            <Text style={styles.emptyText}>No team records in selected window.</Text>
+                          </View>
+                        ) : (
+                          tlTeamOverviewRows.map((entry) => (
+                            <View key={`record-${entry.gdcId}`} style={styles.timesheetCard}>
+                              <View style={styles.timesheetTopRow}>
+                                <Text style={styles.timesheetName}>{entry.name}</Text>
+                                <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
+                              </View>
+                              <Text style={styles.timesheetTeam}>{entry.role} - {entry.team}</Text>
+                              {timesheetWindow === '7d' ? (
+                                <View style={styles.weekCellRow}>
+                                  {entry.cells.map((cell, idx) => (
+                                    <View key={`${entry.gdcId}-record-${timesheetDays[idx]}`} style={styles.weekCell}>
+                                      <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
+                                      <View style={styles.statusCodePill}>
+                                        <Text style={styles.statusCodeText}>{cell}</Text>
+                                      </View>
+                                    </View>
+                                  ))}
+                                </View>
+                              ) : (
+                                <View style={styles.timesheetMetaRow}>
+                                  <Text style={styles.timesheetMeta}>P: {entry.counts.present}</Text>
+                                  <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {entry.counts.late}</Text>
+                                  <Text style={styles.timesheetMeta}>A: {entry.counts.absent}</Text>
+                                </View>
+                              )}
+                            </View>
+                          ))
+                        )
+                      ) : tlTeamRecordRows.length === 0 ? (
+                        <View style={styles.emptyBox}>
+                          <Text style={styles.emptyText}>No team records in selected window.</Text>
+                        </View>
+                      ) : (
+                        tlTeamRecordRows.map((entry) => (
+                          <View key={entry.id} style={styles.timesheetCard}>
+                            <View style={styles.timesheetTopRow}>
+                              <Text style={styles.timesheetName}>{entry.user?.name}</Text>
+                              <Text style={styles.timesheetDate}>{entry.date}</Text>
+                            </View>
+                            <Text style={styles.timesheetId}>{entry.gdcId}</Text>
+                            <Text style={styles.timesheetTeam}>{entry.user?.role} - {entry.user?.team}</Text>
+                            <View style={styles.timesheetMetaRow}>
+                              <Text style={styles.timesheetMeta}>Hours: {entry.hours.toFixed(2)}</Text>
+                              <View style={styles.statusCodePill}>
+                                <Text style={styles.statusCodeText}>{entry.status}</Text>
+                              </View>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  ) : null}
+                </>
+              ) : user?.role === 'Employee' ? (
+                <>
+                  <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                    <View style={styles.tlTimesheetTabs}>
+                      <View style={[styles.tlTimesheetTabBtn, styles.tlTimesheetTabBtnActive]}>
+                        <Text style={[styles.tlTimesheetTabText, styles.tlTimesheetTabTextActive]}>My attendance</Text>
+                      </View>
+                    </View>
+                    <View style={styles.tlTimesheetWindowRow}>
+                      <View style={styles.chipRow}>
+                        {[
+                          ['today', 'Today'],
+                          ['7d', '7 days'],
+                          ['30d', '30 days'],
+                        ].map(([key, label]) => (
+                          <Pressable
+                            key={key}
+                            onPress={() => setTimesheetWindow(key)}
+                            style={[styles.filterChip, timesheetWindow === key && styles.filterChipActive]}>
+                            <Text style={[styles.filterChipText, timesheetWindow === key && styles.filterChipTextActive]}>{label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))
-            ) : (
-              attendanceRows.map((entry) => (
-                <View key={entry.gdcId} style={styles.timesheetCard}>
-                  <View style={styles.timesheetTopRow}>
-                    <Text style={styles.timesheetName}>{entry.name}</Text>
-                    <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
+
+                  <View style={styles.tlSummaryGrid}>
+                    <View style={[styles.tlSummaryCard, styles.tlSummaryCardHours]}>
+                      <View style={styles.tlSummaryHead}>
+                        <View style={styles.tlSummaryIconWrap}>
+                          <MaterialCommunityIcons name="clock-time-four-outline" size={14} color="#2563eb" />
+                        </View>
+                        <Text style={styles.tlSummaryLabel}>T.HOURS</Text>
+                      </View>
+                      <Text style={styles.tlSummaryValue}>{employeeAttendanceSummary.totalHours.toFixed(1)}</Text>
+                    </View>
+                    <View style={[styles.tlSummaryCard, styles.tlSummaryCardOvertime]}>
+                      <View style={styles.tlSummaryHead}>
+                        <View style={styles.tlSummaryIconWrap}>
+                          <MaterialCommunityIcons name="timer-plus-outline" size={14} color="#7c3aed" />
+                        </View>
+                        <Text style={styles.tlSummaryLabel}>OVERTIME</Text>
+                      </View>
+                      <Text style={styles.tlSummaryValue}>{employeeAttendanceSummary.overtime.toFixed(1)}</Text>
+                    </View>
+                    <View style={[styles.tlSummaryCard, styles.tlSummaryCardLate]}>
+                      <View style={styles.tlSummaryHead}>
+                        <View style={styles.tlSummaryIconWrap}>
+                          <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#e11d48" />
+                        </View>
+                        <View>
+                          <Text style={styles.tlSummaryLabel}>LATE</Text>
+                          <Text style={styles.tlSummaryLabel}>MARKS</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.tlSummaryValue}>{employeeAttendanceSummary.lateMarks}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.timesheetTeam}>{entry.role} - {entry.team}</Text>
-                  <View style={styles.timesheetMetaRow}>
-                    <Text style={styles.timesheetMeta}>P: {entry.counts.present}</Text>
-                    <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {entry.counts.late}</Text>
-                    <Text style={styles.timesheetMeta}>A: {entry.counts.absent}</Text>
+
+                  <Text style={styles.tlGdcNote}>Employee GDC-ID: {employeeProfile?.gdcId || 'GDC-12002124-61'}</Text>
+
+                  <View style={[styles.panel, styles.tlTimesheetPanel]}>
+                    <Text style={styles.panelTitle}>Clock history</Text>
+                    <Text style={styles.panelSub}>{employeeAttendanceLogs.length} record(s)</Text>
+                    {timesheetWindow !== 'today' && employeeAttendanceEntry ? (
+                      <View style={styles.timesheetCard}>
+                        <View style={styles.timesheetTopRow}>
+                          <Text style={styles.timesheetName}>{employeeAttendanceEntry.name}</Text>
+                          <Text style={styles.timesheetDate}>{employeeAttendanceEntry.gdcId}</Text>
+                        </View>
+                        <Text style={styles.timesheetTeam}>{employeeAttendanceEntry.role} - {employeeAttendanceEntry.team}</Text>
+                        {timesheetWindow === '7d' ? (
+                          <View style={styles.weekCellRow}>
+                            {employeeAttendanceEntry.cells.map((cell, idx) => (
+                              <View key={`${employeeAttendanceEntry.gdcId}-emp-${timesheetDays[idx]}`} style={styles.weekCell}>
+                                <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
+                                <View style={styles.statusCodePill}>
+                                  <Text style={styles.statusCodeText}>{cell}</Text>
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        ) : (
+                          <View style={styles.timesheetMetaRow}>
+                            <Text style={styles.timesheetMeta}>P: {employeeAttendanceEntry.counts.present}</Text>
+                            <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {employeeAttendanceEntry.counts.late}</Text>
+                            <Text style={styles.timesheetMeta}>A: {employeeAttendanceEntry.counts.absent}</Text>
+                          </View>
+                        )}
+                      </View>
+                    ) : employeeAttendanceLogs.length === 0 ? (
+                      <View style={styles.emptyBox}>
+                        <Text style={styles.emptyText}>No records in selected window.</Text>
+                      </View>
+                    ) : (
+                      employeeAttendanceLogs.map((entry) => (
+                        <View key={entry.id} style={styles.timesheetCard}>
+                          <View style={styles.timesheetTopRow}>
+                            <Text style={styles.timesheetName}>{employeeProfile?.name || 'Employee'}</Text>
+                            <Text style={styles.timesheetDate}>{employeeProfile?.gdcId || 'GDC-12002124-61'}</Text>
+                          </View>
+                          <Text style={styles.timesheetTeam}>{employeeProfile?.role || 'Employee'} - {employeeProfile?.team || 'Alpha Team'}</Text>
+                          <View style={styles.timesheetTopRow}>
+                            <Text style={styles.timesheetDate}>{entry.date}</Text>
+                            <View style={styles.statusCodePill}>
+                              <Text style={styles.statusCodeText}>{entry.status}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.timesheetClockRow}>
+                            <View style={styles.timesheetClockPill}>
+                              <Text style={styles.timesheetClockLabel}>IN</Text>
+                              <Text style={styles.timesheetClockValue}>{entry.checkIn}</Text>
+                            </View>
+                            <MaterialCommunityIcons name="arrow-right" size={16} color="#94a3b8" />
+                            <View style={styles.timesheetClockPill}>
+                              <Text style={styles.timesheetClockLabel}>OUT</Text>
+                              <Text style={styles.timesheetClockValue}>{entry.checkOut}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.timesheetMeta}>Hours: {entry.hours.toFixed(2)}</Text>
+                        </View>
+                      ))
+                    )}
                   </View>
-                </View>
-              ))
-            )}
-          </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.panel}>
+                    <Text style={styles.panelTitle}>Attendance Window</Text>
+                    <View style={styles.chipRow}>
+                      {[
+                        ['today', 'Today'],
+                        ['7d', '7 days'],
+                        ['30d', '30 days'],
+                      ].map(([key, label]) => (
+                        <Pressable
+                          key={key}
+                          onPress={() => setTimesheetWindow(key)}
+                          style={[styles.filterChip, timesheetWindow === key && styles.filterChipActive]}>
+                          <Text style={[styles.filterChipText, timesheetWindow === key && styles.filterChipTextActive]}>{label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {user?.role === 'Admin' ? (
+                      <View style={[styles.chipRow, { marginTop: 8 }]}>
+                        {['all', 'Team Leader', 'HR', 'Employee'].map((role) => (
+                          <Pressable
+                            key={role}
+                            onPress={() => setTimesheetRoleFilter(role)}
+                            style={[styles.filterChip, timesheetRoleFilter === role && styles.filterChipActive]}>
+                            <Text style={[styles.filterChipText, timesheetRoleFilter === role && styles.filterChipTextActive]}>
+                              {role === 'all' ? 'All Roles' : role}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                    <View style={[styles.searchWrap, { marginTop: 10 }]}>
+                      <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+                      <TextInput
+                        value={timesheetSearch}
+                        onChangeText={setTimesheetSearch}
+                        placeholder="Search by name, GDC_ID or team"
+                        placeholderTextColor="#94a3b8"
+                        style={styles.searchInput}
+                      />
+                    </View>
+                    <View style={[styles.chipRow, { marginTop: 10 }]}>
+                      <Text style={styles.legendTitle}>Legend:</Text>
+                      <View style={[styles.statusCodePill, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                        <Text style={[styles.statusCodeText, { color: '#166534' }]}>P</Text>
+                      </View>
+                      <View style={[styles.statusCodePill, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
+                        <Text style={[styles.statusCodeText, { color: '#991b1b' }]}>L</Text>
+                      </View>
+                      <View style={[styles.statusCodePill, { backgroundColor: '#e2e8f0', borderColor: '#cbd5e1' }]}>
+                        <Text style={[styles.statusCodeText, { color: '#334155' }]}>A</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.panel}>
+                    <Text style={styles.panelTitle}>Attendance Matrix</Text>
+                    <Text style={styles.panelSub}>
+                      {timesheetWindow === 'today' ? 'Today status' : timesheetWindow === '7d' ? 'Last 7 days (P/A/L)' : '30 days summary'}
+                    </Text>
+                    {attendanceRows.length === 0 ? (
+                      <View style={styles.emptyBox}>
+                        <Text style={styles.emptyText}>No attendance records in selected window.</Text>
+                      </View>
+                    ) : timesheetWindow === 'today' ? (
+                      attendanceRows.map((entry) => (
+                        <View key={entry.gdcId} style={styles.timesheetCard}>
+                          <View style={styles.timesheetTopRow}>
+                            <Text style={styles.timesheetName}>{entry.name}</Text>
+                            <Text style={styles.timesheetDate}>{entry.role}</Text>
+                          </View>
+                          <Text style={styles.timesheetId}>{entry.gdcId}</Text>
+                          <Text style={styles.timesheetTeam}>{entry.team}</Text>
+                          <View style={styles.timesheetStatusRow}>
+                            <Text style={styles.timesheetMeta}>Today Status:</Text>
+                            <View style={styles.statusCodePill}>
+                              <Text style={styles.statusCodeText}>{entry.cells[0]}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      ))
+                    ) : timesheetWindow === '7d' ? (
+                      attendanceRows.map((entry) => (
+                        <View key={entry.gdcId} style={styles.timesheetCard}>
+                          <View style={styles.timesheetTopRow}>
+                            <Text style={styles.timesheetName}>{entry.name}</Text>
+                            <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
+                          </View>
+                          <Text style={styles.timesheetTeam}>
+                            {entry.role} - {entry.team}
+                          </Text>
+                          <View style={styles.weekCellRow}>
+                            {entry.cells.map((cell, idx) => (
+                              <View key={`${entry.gdcId}-${timesheetDays[idx]}`} style={styles.weekCell}>
+                                <Text style={styles.weekCellDay}>{timesheetDays[idx].slice(8)}</Text>
+                                <View style={styles.statusCodePill}>
+                                  <Text style={styles.statusCodeText}>{cell}</Text>
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      attendanceRows.map((entry) => (
+                        <View key={entry.gdcId} style={styles.timesheetCard}>
+                          <View style={styles.timesheetTopRow}>
+                            <Text style={styles.timesheetName}>{entry.name}</Text>
+                            <Text style={styles.timesheetDate}>{entry.gdcId}</Text>
+                          </View>
+                          <Text style={styles.timesheetTeam}>
+                            {entry.role} - {entry.team}
+                          </Text>
+                          <View style={styles.timesheetMetaRow}>
+                            <Text style={styles.timesheetMeta}>P: {entry.counts.present}</Text>
+                            <Text style={[styles.timesheetMeta, styles.timesheetLate]}>L: {entry.counts.late}</Text>
+                            <Text style={styles.timesheetMeta}>A: {entry.counts.absent}</Text>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                </>
+              )}
             </>
           ) : null}
 
@@ -1278,7 +2386,7 @@ export default function RouteDetailScreen() {
               <View style={styles.recordField}>
                 <Text style={styles.recordFieldLabel}>Role</Text>
                 <View style={styles.recordChipWrap}>
-                  {providerOptions.map((role) => (
+                  {providerFilterOptions.map((role) => (
                     <Pressable
                       key={role}
                       onPress={() => setRecordProviderFilter(role)}
@@ -1382,6 +2490,7 @@ export default function RouteDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>{isAdminBoard ? 'Team Status Board' : 'My Availability'}</Text>
+              {isAdminBoard ? <Text style={styles.heroSub}>Website-style live roster with quick status filters.</Text> : null}
             </View>
           </View>
 
@@ -1389,6 +2498,7 @@ export default function RouteDetailScreen() {
             <>
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Filters</Text>
+                <Text style={styles.panelSub}>Filter by role, status, or search member.</Text>
                 <View style={styles.chipRow}>
                   {['all', 'Employee', 'HR', 'Team Leader'].map((role) => (
                     <Pressable
@@ -1412,6 +2522,16 @@ export default function RouteDetailScreen() {
                       </Text>
                     </Pressable>
                   ))}
+                </View>
+                <View style={[styles.searchWrap, { marginTop: 10 }]}>
+                  <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+                  <TextInput
+                    value={availabilitySearch}
+                    onChangeText={setAvailabilitySearch}
+                    placeholder="Search name, GDC ID, team..."
+                    placeholderTextColor="#94a3b8"
+                    style={styles.searchInput}
+                  />
                 </View>
               </View>
 
@@ -1460,37 +2580,127 @@ export default function RouteDetailScreen() {
           ) : (
             <>
               <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Current Status</Text>
-                <View style={styles.chipRow}>
-                  {['Present', 'Absent', 'Leave'].map((st) => (
-                    <View key={st} style={[styles.filterChip, st === 'Present' && styles.filterChipActive]}>
-                      <Text style={[styles.filterChipText, st === 'Present' && styles.filterChipTextActive]}>{st}</Text>
-                    </View>
+                <View style={styles.currentStatusTitleRow}>
+                  <MaterialCommunityIcons name="pulse" size={24} color="#10b981" />
+                  <Text style={styles.currentStatusTitleText}>Current status</Text>
+                </View>
+                <View style={styles.currentStatusChipRow}>
+                  {[
+                    ['Present', 'Available'],
+                    ['Absent', 'Unavailable'],
+                    ['Leave', 'Leave'],
+                  ].map(([label, value]) => (
+                    <Pressable
+                      key={label}
+                      onPress={() => updateMyAvailabilityStatus(value)}
+                      onHoverIn={() => setHoveredAvailabilityStatus(value)}
+                      onHoverOut={() => setHoveredAvailabilityStatus(null)}
+                      style={[
+                        styles.currentStatusChip,
+                        hoveredAvailabilityStatus === value && styles.currentStatusChipHover,
+                        currentAvailabilityStatus === value &&
+                          (value === 'Available'
+                            ? styles.currentStatusChipPresent
+                            : value === 'Unavailable'
+                              ? styles.currentStatusChipAbsent
+                              : styles.currentStatusChipLeave),
+                      ]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.currentStatusChipText,
+                          currentAvailabilityStatus === value && styles.currentStatusChipTextActive,
+                        ]}>
+                        {label.toUpperCase()}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
               </View>
 
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Attendance Log</Text>
+                <View style={styles.availabilitySummaryGrid}>
+                  <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryPresent]}>
+                    <Text style={styles.availabilitySummaryLabel}>Present</Text>
+                    <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.present}</Text>
+                  </View>
+                  <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryAbsent]}>
+                    <Text style={styles.availabilitySummaryLabel}>Absent</Text>
+                    <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.absent}</Text>
+                  </View>
+                  <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryLeave]}>
+                    <Text style={styles.availabilitySummaryLabel}>Leave</Text>
+                    <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.leave}</Text>
+                  </View>
+                  <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryHours]}>
+                    <Text style={styles.availabilitySummaryLabel}>T.HOURS</Text>
+                    <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.totalHours.toFixed(2)}</Text>
+                  </View>
+                </View>
                 <View style={styles.dateFilterRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.recordFieldLabel}>From</Text>
-                    <TextInput value={availabilityFromDate} onChangeText={setAvailabilityFromDate} style={styles.input} />
+                    <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('from')}>
+                      <Text style={styles.dateSelectText}>{availabilityFromDate || 'Select date'}</Text>
+                      <View style={styles.dateSelectIconWrap}>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
+                      </View>
+                    </Pressable>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.recordFieldLabel}>To</Text>
-                    <TextInput value={availabilityToDate} onChangeText={setAvailabilityToDate} style={styles.input} />
+                    <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('to')}>
+                      <Text style={styles.dateSelectText}>{availabilityToDate || 'Select date'}</Text>
+                      <View style={styles.dateSelectIconWrap}>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
+                      </View>
+                    </Pressable>
                   </View>
                 </View>
                 <View style={{ marginTop: 8 }}>
                   {filteredMyAvailabilityLog.map((row) => (
-                    <View key={row.date} style={styles.availabilityLogRow}>
-                      <Text style={styles.availabilityLogDate}>{row.date}</Text>
-                      <Text style={styles.availabilityLogTime}>
-                        {row.in} {'->'} {row.out}
-                      </Text>
-                      <Text style={styles.availabilityLogTime}>Breaks: {row.breaks}</Text>
-                      <Text style={styles.availabilityLogHours}>{row.hours.toFixed(2)}h</Text>
+                    <View
+                      key={row.date}
+                      style={[
+                        styles.availabilityLogRow,
+                        row.status === 'Present'
+                          ? styles.availabilityLogPresent
+                          : row.status === 'Leave'
+                            ? styles.availabilityLogLeave
+                            : styles.availabilityLogAbsent,
+                      ]}>
+                      <View style={styles.availabilityLogHeader}>
+                        <View style={styles.availabilityDateBadge}>
+                          <Text style={styles.availabilityDateDay}>{new Date(`${row.date}T00:00:00`).toLocaleDateString([], { weekday: 'short' })}</Text>
+                          <Text style={styles.availabilityDateNumber}>{new Date(`${row.date}T00:00:00`).getDate()}</Text>
+                          <Text style={styles.availabilityDateMonth}>{new Date(`${row.date}T00:00:00`).toLocaleDateString([], { month: 'short' })}</Text>
+                        </View>
+                        <View style={styles.availabilityStatusBlock}>
+                          <View style={[styles.availabilityStatusPill, row.status === 'Present' ? styles.availabilityPresent : row.status === 'Leave' ? styles.availabilityLeave : styles.availabilityAbsent]}>
+                            <Text style={styles.availabilityStatusText}>{row.status === 'Present' ? 'ACTIVE' : row.status.toUpperCase()}</Text>
+                          </View>
+                          <Text style={styles.availabilityTodayText}>TODAY</Text>
+                        </View>
+                      </View>
+                      <View style={styles.availabilityMetricsGrid}>
+                        <View style={styles.availabilityMetricPill}>
+                          <Text style={styles.availabilityMetricLabel}>IN</Text>
+                          <Text style={styles.availabilityMetricValue}>{row.in}</Text>
+                        </View>
+                        <View style={styles.availabilityMetricPill}>
+                          <Text style={styles.availabilityMetricLabel}>OUT</Text>
+                          <Text style={styles.availabilityMetricValue}>{row.out}</Text>
+                        </View>
+                        <View style={styles.availabilityMetricPill}>
+                          <Text style={styles.availabilityMetricLabel}>BREAKS</Text>
+                          <Text style={styles.availabilityMetricValue}>{row.breaks}</Text>
+                        </View>
+                        <View style={[styles.availabilityMetricPill, styles.availabilityHoursPill]}>
+                          <Text style={styles.availabilityMetricLabel}>HOURS</Text>
+                          <Text style={[styles.availabilityMetricValue, styles.availabilityLogHours]}>{row.hours.toFixed(2)}</Text>
+                        </View>
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -1805,9 +3015,10 @@ export default function RouteDetailScreen() {
     );
   }
 
-  if (slug === 'request-management' || slug === 'manual-time-requests') {
-    const isAdminReviewer = user?.role === 'Admin';
-    const isManualTab = slug === 'manual-time-requests';
+  if (slug === 'request-management' || slug === 'manual-time-requests' || slug === 'my-requests') {
+    const isMyRequestsRoute = slug === 'my-requests';
+    const isAdminReviewer = !isMyRequestsRoute && (user?.role === 'Admin' || user?.role === 'HR');
+    const isManualTab = slug === 'manual-time-requests' || (isMyRequestsRoute && myRequestsTab === 'manual');
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <DashboardTopbar />
@@ -1817,21 +3028,27 @@ export default function RouteDetailScreen() {
               <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle}>Request Management</Text>
+              <Text style={styles.heroTitle}>{isMyRequestsRoute ? 'My Requests' : 'Request Management'}</Text>
             </View>
           </View>
 
-          <View style={styles.panel}>
-            <View style={styles.chipRow}>
+          <View style={styles.requestTabsPanel}>
+            <View style={styles.requestTabsBar}>
               <Pressable
-                onPress={() => router.push('/dashboard/(tabs)/route/request-management')}
-                style={[styles.filterChip, !isManualTab && styles.filterChipActive]}>
-                <Text style={[styles.filterChipText, !isManualTab && styles.filterChipTextActive]}>Leave Requests</Text>
+                onPress={() => {
+                  if (isMyRequestsRoute) setMyRequestsTab('leave');
+                  else router.push('/dashboard/(tabs)/route/request-management');
+                }}
+                style={[styles.requestTabBtn, !isManualTab && styles.requestTabBtnActive]}>
+                <Text style={[styles.requestTabText, !isManualTab && styles.requestTabTextActive]}>Leave requests</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.push('/dashboard/(tabs)/route/manual-time-requests')}
-                style={[styles.filterChip, isManualTab && styles.filterChipActive]}>
-                <Text style={[styles.filterChipText, isManualTab && styles.filterChipTextActive]}>Manual Time Requests</Text>
+                onPress={() => {
+                  if (isMyRequestsRoute) setMyRequestsTab('manual');
+                  else router.push('/dashboard/(tabs)/route/manual-time-requests');
+                }}
+                style={[styles.requestTabBtn, isManualTab && styles.requestTabBtnActive]}>
+                <Text style={[styles.requestTabText, isManualTab && styles.requestTabTextActive]}>Manual time requests</Text>
               </Pressable>
             </View>
           </View>
@@ -1871,9 +3088,12 @@ export default function RouteDetailScreen() {
                   </View>
                   <Text style={styles.requestMeta}>{req.role} - {isManualTab ? 'Manual Time' : req.type}</Text>
                   {isManualTab ? (
-                    <Text style={styles.requestMeta}>
-                      {req.clockIn} {'->'} {req.clockOut}
-                    </Text>
+                    <>
+                      <Text style={styles.requestMeta}>
+                        {req.clockIn} {'->'} {req.clockOut}
+                      </Text>
+                      {req.breakOut ? <Text style={styles.requestMeta}>Break-out: {req.breakOut}</Text> : null}
+                    </>
                   ) : null}
                   <Text style={styles.requestReason}>{req.reason}</Text>
                   {req.status === 'Rejected' && req.adminReason ? (
@@ -1906,55 +3126,87 @@ export default function RouteDetailScreen() {
             </View>
           ) : (
             <>
-              <View style={styles.panel}>
-                <View style={styles.requestHeaderRow}>
-                  <Text style={styles.panelTitle}>{isManualTab ? 'My Manual Time Requests' : 'My Leave Requests'}</Text>
-                </View>
-                <View style={[styles.chipRow, { marginBottom: 8 }]}>
-                  {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
+              <View style={styles.myRequestsHeaderCard}>
+                <View style={styles.myRequestsHeaderTop}>
+                  <Text style={styles.myRequestsHeaderTitle}>
+                    {(isManualTab ? manualStatusFilter : leaveStatusFilter) === 'All'
+                      ? 'All Requests'
+                      : `${isManualTab ? manualStatusFilter : leaveStatusFilter} Requests`}
+                  </Text>
+                  <View style={styles.myRequestsTopActions}>
+                    <View style={styles.myRequestsSelectWrap}>
+                      <Pressable style={styles.requestStatusSelectInput} onPress={() => setRequestStatusMenuOpen((v) => !v)}>
+                        <Text style={styles.requestStatusSelectText}>{isManualTab ? manualStatusFilter : leaveStatusFilter}</Text>
+                        <MaterialCommunityIcons name="chevron-down" size={16} color="#94a3b8" />
+                      </Pressable>
+                      {requestStatusMenuOpen ? (
+                        <View style={styles.requestStatusMenu}>
+                          {['Pending', 'All', 'Approved', 'Rejected'].map((st) => (
+                            <Pressable
+                              key={st}
+                              onPress={() => {
+                                if (isManualTab) setManualStatusFilter(st);
+                                else setLeaveStatusFilter(st);
+                                setRequestStatusMenuOpen(false);
+                              }}
+                              style={[
+                                styles.requestStatusOption,
+                                (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.requestStatusOptionActive,
+                              ]}>
+                              <Text
+                                style={[
+                                  styles.requestStatusOptionText,
+                                  (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.requestStatusOptionTextActive,
+                                ]}>
+                                {st}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
                     <Pressable
-                      key={st}
-                      onPress={() => (isManualTab ? setManualStatusFilter(st) : setLeaveStatusFilter(st))}
-                      style={[styles.filterChip, (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.filterChipActive]}>
-                      <Text style={[styles.filterChipText, (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.filterChipTextActive]}>
-                        {st}
-                      </Text>
+                      style={[styles.myRequestsCreateBtn, styles.myRequestsCreateBtnIconOnly]}
+                      onPress={() => (isManualTab ? setManualModalOpen(true) : setLeaveModalOpen(true))}>
+                      <MaterialCommunityIcons name="plus-circle-outline" size={19} color="#fff" />
                     </Pressable>
-                  ))}
+                  </View>
                 </View>
-                <Text style={styles.panelSub}>
-                  {isManualTab ? 'Create and track manual time requests.' : 'Create and track your leave request status.'}
-                </Text>
-                <Pressable style={styles.actionBtn} onPress={() => (isManualTab ? setManualModalOpen(true) : setLeaveModalOpen(true))}>
-                  <Text style={styles.actionBtnText}>{isManualTab ? 'Request Manual Time' : 'Apply for Leave'}</Text>
-                </Pressable>
               </View>
 
-              <View style={styles.panel}>
+              <View style={styles.myRequestsListWrap}>
                 {(isManualTab ? filteredMyManualRequests : filteredMyLeaveRequests).length === 0 ? (
                   <View style={styles.emptyBox}>
                     <Text style={styles.emptyText}>{isManualTab ? 'No manual requests yet.' : 'No leave requests yet.'}</Text>
                   </View>
                 ) : (
                   (isManualTab ? filteredMyManualRequests : filteredMyLeaveRequests).map((req) => (
-                    <View key={req.id} style={styles.requestCard}>
-                      <View style={styles.requestTopRow}>
-                        <Text style={styles.requestName}>{isManualTab ? 'Manual Time' : req.type}</Text>
-                        <Text style={styles.requestDate}>{isManualTab ? req.date : `${req.from} -> ${req.to}`}</Text>
+                    <View
+                      key={req.id}
+                      style={[
+                        styles.myRequestCard,
+                        req.status === 'Approved' ? styles.myRequestCardApproved : req.status === 'Rejected' ? styles.myRequestCardRejected : styles.myRequestCardPending,
+                      ]}>
+                      <View style={styles.myRequestTopRow}>
+                        <Text style={styles.myRequestName}>{isManualTab ? 'Manual Time' : req.type}</Text>
+                        <Text style={styles.myRequestDate}>{isManualTab ? req.date : `${req.from} -> ${req.to}`}</Text>
                       </View>
                       {isManualTab ? (
-                        <Text style={styles.requestMeta}>
-                          {req.clockIn} {'->'} {req.clockOut}
-                        </Text>
+                        <>
+                          <Text style={styles.myRequestMeta}>
+                            {req.clockIn} {'->'} {req.clockOut}
+                          </Text>
+                          {req.breakOut ? <Text style={styles.myRequestMeta}>Break-out: {req.breakOut}</Text> : null}
+                        </>
                       ) : null}
-                      <Text style={styles.requestReason}>{req.reason}</Text>
+                      <Text style={styles.myRequestReason}>{req.reason}</Text>
                       {req.status === 'Rejected' && req.adminReason ? (
-                        <View style={styles.rejectReasonBox}>
+                        <View style={styles.myRejectReasonBox}>
                           <Text style={styles.rejectReasonTitle}>Admin feedback</Text>
                           <Text style={styles.rejectReasonText}>{req.adminReason}</Text>
                         </View>
                       ) : null}
-                      <View style={styles.requestFooter}>
+                      <View style={styles.myRequestFooter}>
                         <View style={[styles.filterChip, req.status === 'Approved' && styles.approvedChip, req.status === 'Rejected' && styles.rejectedChip]}>
                           <Text style={[styles.filterChipText, req.status === 'Approved' && styles.approvedChipText, req.status === 'Rejected' && styles.rejectedChipText]}>
                             {req.status}
@@ -2000,11 +3252,17 @@ export default function RouteDetailScreen() {
                   <View style={styles.dateFilterRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.recordFieldLabel}>From</Text>
-                      <TextInput value={leaveFromDate} onChangeText={setLeaveFromDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" style={styles.input} />
+                      <Pressable style={styles.modalPickerField} onPress={() => openLeaveDatePicker('from')}>
+                        <Text style={styles.modalPickerText}>{leaveFromDate || 'YYYY-MM-DD'}</Text>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                      </Pressable>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.recordFieldLabel}>To</Text>
-                      <TextInput value={leaveToDate} onChangeText={setLeaveToDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" style={styles.input} />
+                      <Pressable style={styles.modalPickerField} onPress={() => openLeaveDatePicker('to')}>
+                        <Text style={styles.modalPickerText}>{leaveToDate || 'YYYY-MM-DD'}</Text>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                      </Pressable>
                     </View>
                   </View>
                   <Text style={styles.recordFieldLabel}>Reason</Text>
@@ -2040,17 +3298,35 @@ export default function RouteDetailScreen() {
                   <View style={styles.dateFilterRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.recordFieldLabel}>Date</Text>
-                      <TextInput value={manualDate} onChangeText={setManualDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" style={styles.input} />
+                      <Pressable style={styles.modalPickerField} onPress={openManualDatePicker}>
+                        <Text style={styles.modalPickerText}>{manualDate || 'YYYY-MM-DD'}</Text>
+                        <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                      </Pressable>
                     </View>
                   </View>
                   <View style={styles.dateFilterRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.recordFieldLabel}>Clock In</Text>
-                      <TextInput value={manualClockIn} onChangeText={setManualClockIn} placeholder="09:00" placeholderTextColor="#94a3b8" style={styles.input} />
+                      <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('in')}>
+                        <Text style={styles.modalPickerText}>{manualClockIn || '--:-- --'}</Text>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                      </Pressable>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.recordFieldLabel}>Clock Out</Text>
-                      <TextInput value={manualClockOut} onChangeText={setManualClockOut} placeholder="18:00" placeholderTextColor="#94a3b8" style={styles.input} />
+                      <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('out')}>
+                        <Text style={styles.modalPickerText}>{manualClockOut || '--:-- --'}</Text>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.dateFilterRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.recordFieldLabel}>Break-out (optional)</Text>
+                      <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('breakOut')}>
+                        <Text style={styles.modalPickerText}>{manualBreakOut || '--:-- --'}</Text>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                      </Pressable>
                     </View>
                   </View>
                   <Text style={styles.recordFieldLabel}>Reason</Text>
@@ -2068,7 +3344,7 @@ export default function RouteDetailScreen() {
                       <Text style={styles.cancelBtnText}>Cancel</Text>
                     </Pressable>
                     <Pressable style={styles.modalPrimaryBtn} onPress={submitManualRequest}>
-                      <Text style={styles.actionBtnText}>Submit Manual Request</Text>
+                      <Text style={styles.actionBtnText}>Submit</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2279,6 +3555,29 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   panelTitle: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
+  currentStatusTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  currentStatusTitleText: { fontSize: 19, fontWeight: '900', color: '#0f172a' },
+  currentStatusChipRow: { flexDirection: 'row', gap: 10 },
+  currentStatusChip: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#cfd5e5',
+    backgroundColor: '#f4f6fd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  currentStatusChipHover: {
+    borderColor: '#facc15',
+    backgroundColor: '#fffbeb',
+  },
+  currentStatusChipPresent: { borderColor: '#6ee7b7', borderWidth: 3, backgroundColor: '#ecfdf5' },
+  currentStatusChipAbsent: { borderColor: '#a78bfa', borderWidth: 3, backgroundColor: '#f5f3ff' },
+  currentStatusChipLeave: { borderColor: '#f9a8d4', borderWidth: 3, backgroundColor: '#fff1f2' },
+  currentStatusChipText: { fontSize: 12, color: '#475569', fontWeight: '800', letterSpacing: 1.1 },
+  currentStatusChipTextActive: { color: '#0f172a' },
   panelSub: { marginTop: 3, marginBottom: 10, fontSize: 12, color: BrandColors.textMuted, lineHeight: 18 },
   adminGrid: { gap: 10 },
   adminCard: {
@@ -2643,20 +3942,119 @@ const styles = StyleSheet.create({
   dateFilterRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   dateInput: { flex: 1 },
   projectCard: {
+    flexDirection: 'row',
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    marginBottom: 8,
+    borderColor: '#dbe4fb',
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    marginBottom: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  projectCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  projectId: { fontSize: 11, fontWeight: '800', color: '#1e3a8a' },
-  projectDeadline: { fontSize: 11, fontWeight: '700', color: '#475569' },
-  projectTitle: { marginTop: 6, fontSize: 14, fontWeight: '800', color: BrandColors.text },
-  projectDesc: { marginTop: 4, fontSize: 12, color: '#334155', lineHeight: 18 },
+  projectDateStrip: {
+    width: 78,
+    backgroundColor: '#dce2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  projectCardCompact: { borderRadius: 18 },
+  projectDateStripCompact: { width: 66 },
+  projectDateDay: { fontSize: 24, color: '#0284c7', fontWeight: '900', lineHeight: 28 },
+  projectDateMonth: { marginTop: 2, fontSize: 9, color: '#0284c7', fontWeight: '800', letterSpacing: 1.2 },
+  projectMainCol: { flex: 1, paddingHorizontal: 14, paddingVertical: 14 },
+  projectCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  projectTitle: { flex: 1, fontSize: 17, fontWeight: '900', color: '#0f172a' },
+  projectStatePill: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  projectStatusDefault: { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+  projectStatusPending: { borderColor: '#fde68a', backgroundColor: '#fff7d6' },
+  projectStatusProgress: { borderColor: '#bfdbfe', backgroundColor: '#eff6ff' },
+  projectStatusReview: { borderColor: '#ddd6fe', backgroundColor: '#f5f3ff' },
+  projectStatusSubmitted: { borderColor: '#99f6e4', backgroundColor: '#ecfeff' },
+  projectStatusOverdue: { borderColor: '#fecaca', backgroundColor: '#fff1f2' },
+  projectStatusCompleted: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
+  projectStateText: { fontSize: 12, color: '#b45309', fontWeight: '900', letterSpacing: 0.8 },
+  projectIdentityRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  projectAssigneeBadge: {
+    borderRadius: 999,
+    backgroundColor: '#d8dced',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  projectAssigneeBadgeText: { fontSize: 12, fontWeight: '800', color: '#334155' },
+  projectInfoLine: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  projectInfoText: { fontSize: 13, color: '#334155', fontWeight: '500' },
+  projectDueLine: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  projectDueText: { fontSize: 13, color: '#1e3a5f', fontWeight: '800' },
+  projectTagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#fff',
+  },
+  projectAssigneeChip: { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+  projectPriorityHigh: { borderColor: '#fecaca', backgroundColor: '#fff1f2' },
+  projectPriorityMedium: { borderColor: '#fde68a', backgroundColor: '#fffbeb' },
+  projectPriorityLow: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
+  projectTagText: { fontSize: 11, fontWeight: '700', color: '#334155' },
   projectMetaRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   projectMetaText: { fontSize: 11, color: BrandColors.textMuted, fontWeight: '700' },
+  pmFilterSelectWrap: { marginTop: 8, position: 'relative', zIndex: 40 },
+  pmFilterSelectBtn: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cfd8ee',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pmFilterSelectText: { fontSize: 16, color: '#334155', fontWeight: '700' },
+  pmFilterSelectMenuInline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 54,
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  pmFilterOption: { paddingHorizontal: 14, paddingVertical: 10 },
+  pmFilterOptionActive: { backgroundColor: '#eef2ff' },
+  pmFilterOptionText: { fontSize: 14, color: '#475569', fontWeight: '600' },
+  pmFilterOptionTextActive: { color: '#1d4ed8', fontWeight: '800' },
   projectFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   projectStatusChip: { backgroundColor: '#dbeafe', borderColor: '#93c5fd' },
   deleteBtn: {
@@ -2665,7 +4063,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#dc2626',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+    backgroundColor: '#fff1f2',
   },
   deleteBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   emptyBox: {
@@ -2764,6 +4164,112 @@ const styles = StyleSheet.create({
   detailTitle: { fontSize: 18, fontWeight: '800', color: BrandColors.text, marginBottom: 6 },
   detailText: { fontSize: 13, color: '#334155', marginTop: 3, fontWeight: '600' },
   detailBody: { fontSize: 13, color: '#475569', marginTop: 6, lineHeight: 20 },
+  taskDetailHeader: {
+    marginHorizontal: -14,
+    marginTop: -14,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    backgroundColor: '#f4f6fb',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  taskDetailTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  taskDetailHeaderTitle: { fontSize: 18, fontWeight: '900', color: '#1e293b' },
+  taskDetailHeaderSub: { marginTop: 3, fontSize: 13, color: '#64748b', fontWeight: '600' },
+  taskDetailHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  taskDetailActionBtn: {
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+    borderRadius: 999,
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskDetailDeleteBtn: { borderColor: '#fecdd3', backgroundColor: '#fff1f2' },
+  taskDetailBody: { flexDirection: 'row', gap: 10 },
+  taskDetailMainCol: { flex: 1 },
+  taskDetailAsideCol: { width: 112, alignItems: 'flex-end', gap: 10 },
+  taskDetailBodyMobile: { flexDirection: 'column' },
+  taskDetailAsideColMobile: { width: '100%', alignItems: 'flex-start' },
+  taskDetailDueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  taskDetailDueText: { fontSize: 13, color: '#64748b', fontWeight: '800', letterSpacing: 0.8 },
+  taskDetailAttachmentCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#d9deec',
+    borderRadius: 12,
+    backgroundColor: '#eceff7',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  taskDetailAttachmentLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 1, textTransform: 'uppercase' },
+  taskDetailAttachmentRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  taskDetailAttachmentName: { flex: 1, fontSize: 13, color: '#2563eb', fontWeight: '700' },
+  forwardTeamPill: {
+    borderRadius: 999,
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  forwardTeamPillText: { color: '#334155', fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  forwardWrap: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#eef2ff',
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+  },
+  forwardTitle: { fontSize: 12, fontWeight: '800', color: '#3730a3' },
+  forwardSelectWrap: { position: 'relative' },
+  forwardSelectBtn: {
+    height: 42,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  forwardSelectText: { fontSize: 13, color: '#334155', fontWeight: '700' },
+  forwardSelectMenu: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  forwardSelectOption: { paddingHorizontal: 12, paddingVertical: 9 },
+  forwardSelectOptionActive: { backgroundColor: '#eef2ff' },
+  forwardSelectOptionText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  forwardSelectOptionTextActive: { color: '#1e3a8a', fontWeight: '800' },
+  startWorkBtn: {
+    marginTop: 2,
+    borderRadius: 10,
+    backgroundColor: '#2563eb',
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionBtnDisabled: { opacity: 0.5 },
   projectLinkText: { marginTop: 4, fontSize: 11, color: '#2563eb', fontWeight: '600' },
   taskActionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   requestApproveBtn: {
@@ -2916,6 +4422,64 @@ const styles = StyleSheet.create({
   modalPreviewTask: { fontSize: 12, fontWeight: '700', color: BrandColors.text },
   modalPreviewSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
   modalPreviewEdit: { fontSize: 11, fontWeight: '800', color: '#2563eb' },
+  tlTimesheetPanel: {
+    borderColor: '#d7def4',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  tlTimesheetTabsScroll: { marginHorizontal: -2, marginBottom: 10 },
+  tlTimesheetTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    gap: 6,
+    paddingRight: 6,
+  },
+  tlTimesheetTabBtn: {
+    minWidth: 120,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  tlTimesheetTabBtnActive: { borderBottomColor: '#4f46e5', backgroundColor: '#eef2ff' },
+  tlTimesheetTabText: { fontSize: 12, color: '#64748b', fontWeight: '700' },
+  tlTimesheetTabTextActive: { color: '#0f172a', fontWeight: '800' },
+  tlTimesheetWindowRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  tlSummaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10, marginBottom: 8 },
+  tlSummaryCard: {
+    flex: 1,
+    minWidth: 96,
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    paddingTop: 14,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    borderLeftWidth: 4,
+  },
+  tlSummaryCardHours: { borderLeftColor: '#2563eb' },
+  tlSummaryCardOvertime: { borderLeftColor: '#7c3aed' },
+  tlSummaryCardLate: { borderLeftColor: '#e11d48' },
+  tlSummaryHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tlSummaryIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 8,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tlSummaryLabel: { fontSize: 10, color: '#64748b', fontWeight: '800', lineHeight: 14 },
+  tlSummaryValue: { marginTop: 6, fontSize: 28, fontWeight: '900', color: '#0f172a' },
+  tlGdcNote: { marginBottom: 10, fontSize: 12, color: '#334155', fontWeight: '700' },
   timesheetCard: {
     borderWidth: 1,
     borderColor: '#dbe4fb',
@@ -2995,55 +4559,177 @@ const styles = StyleSheet.create({
   availabilityActivity: { fontSize: 11, fontWeight: '800' },
   availabilityLogRow: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    borderColor: '#e5e7eb',
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginBottom: 6,
   },
-  availabilityLogDate: { fontSize: 12, color: '#0f172a', fontWeight: '800' },
-  availabilityLogTime: { marginTop: 2, fontSize: 11, color: '#475569', fontWeight: '700' },
-  availabilityLogHours: { marginTop: 3, fontSize: 11, color: '#1e40af', fontWeight: '800' },
-  requestCard: {
+  availabilityLogPresent: { borderLeftColor: '#16a34a' },
+  availabilityLogAbsent: { borderLeftColor: '#f59e0b' },
+  availabilityLogLeave: { borderLeftColor: '#e11d48' },
+  availabilityLogHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  availabilityDateBadge: {
+    width: 58,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  requestHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  leaveTypeWrap: { position: 'relative', zIndex: 5 },
-  leaveTypeTrigger: {
+  availabilityDateDay: { fontSize: 10, color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase' },
+  availabilityDateNumber: { fontSize: 24, lineHeight: 26, color: '#0f172a', fontWeight: '800' },
+  availabilityDateMonth: { fontSize: 11, color: '#64748b', fontWeight: '700' },
+  availabilityStatusBlock: { minWidth: 74, alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1 },
+  availabilityTodayText: { fontSize: 10, color: '#4f46e5', fontWeight: '800', letterSpacing: 0.4 },
+  availabilityMetricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  availabilityMetricPill: {
+    width: '48%',
+    minHeight: 54,
     borderWidth: 1,
-    borderColor: '#dbe4fb',
-    borderRadius: 10,
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+  },
+  availabilityMetricLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '800', letterSpacing: 0.6 },
+  availabilityMetricValue: { marginTop: 3, fontSize: 20, lineHeight: 22, color: '#0f172a', fontWeight: '800' },
+  availabilityHoursPill: { backgroundColor: '#eef2ff', borderColor: '#c7d2fe' },
+  availabilityLogDate: { fontSize: 12, color: '#0f172a', fontWeight: '800' },
+  availabilityLogTime: { marginTop: 2, fontSize: 11, color: '#475569', fontWeight: '700' },
+  availabilityLogHours: { marginTop: 3, fontSize: 20, color: '#1e40af', fontWeight: '800' },
+  availabilitySummaryGrid: { marginTop: 10, marginBottom: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  availabilitySummaryCard: {
+    width: '48%',
+    minWidth: 140,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  leaveTypeTriggerText: { fontSize: 13, color: '#1e293b', fontWeight: '700' },
+  availabilitySummaryPresent: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
+  availabilitySummaryAbsent: { borderColor: '#fde68a', backgroundColor: '#fffbeb' },
+  availabilitySummaryLeave: { borderColor: '#fecdd3', backgroundColor: '#fff1f2' },
+  availabilitySummaryHours: { borderColor: '#c7d2fe', backgroundColor: '#eef2ff' },
+  availabilitySummaryLabel: { fontSize: 10, color: '#64748b', fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  availabilitySummaryValue: { fontSize: 22, color: '#0f172a', fontWeight: '800' },
+  dateSelectField: {
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateSelectText: { flex: 1, color: BrandColors.text, fontSize: 14, fontWeight: '700' },
+  dateSelectIconWrap: {
+    marginLeft: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestCard: {
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  requestHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  leaveTypeWrap: { position: 'relative', zIndex: 40, overflow: 'visible' },
+  leaveTypeTrigger: {
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leaveTypeTriggerText: { fontSize: 14, color: '#334155', fontWeight: '700' },
   leaveTypeMenu: {
-    marginTop: 6,
+    position: 'absolute',
+    top: 46,
+    left: 0,
+    right: 0,
     borderWidth: 1,
     borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#fff',
     overflow: 'hidden',
+    zIndex: 50,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   leaveTypeOption: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  leaveTypeOptionActive: { backgroundColor: '#2563eb' },
-  leaveTypeOptionText: { fontSize: 13, color: '#0f172a', fontWeight: '600' },
-  leaveTypeOptionTextActive: { color: '#fff', fontWeight: '700' },
-  requestTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  requestName: { fontSize: 14, fontWeight: '800', color: BrandColors.text },
-  requestDate: { fontSize: 11, fontWeight: '700', color: '#475569' },
-  requestMeta: { marginTop: 4, fontSize: 11, color: '#64748b', fontWeight: '700' },
-  requestReason: { marginTop: 6, fontSize: 12, color: '#334155' },
+  leaveTypeOptionActive: { backgroundColor: '#eef2ff' },
+  leaveTypeOptionText: { fontSize: 13, color: '#334155', fontWeight: '600' },
+  leaveTypeOptionTextActive: { color: '#1e3a8a', fontWeight: '800' },
+  requestsRouteCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  requestsRouteCardActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#cbd5e1',
+    borderLeftWidth: 4,
+    borderLeftColor: '#cbd5e1',
+  },
+  requestsRouteIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestsRouteIconWrapActive: {
+    backgroundColor: '#e2e8f0',
+  },
+  requestsRouteTitle: { fontSize: 16, fontWeight: '700', color: '#64748b' },
+  requestsRouteTitleActive: { color: '#0f172a' },
+  requestTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  requestName: { fontSize: 16, fontWeight: '800', color: BrandColors.text },
+  requestDate: { fontSize: 12, fontWeight: '700', color: '#64748b', textAlign: 'right' },
+  requestMeta: { marginTop: 4, fontSize: 12, color: '#475569', fontWeight: '700' },
+  requestReason: { marginTop: 8, fontSize: 14, color: '#334155', lineHeight: 20 },
   rejectReasonBox: {
     marginTop: 8,
     borderWidth: 1,
@@ -3054,7 +4740,149 @@ const styles = StyleSheet.create({
   },
   rejectReasonTitle: { fontSize: 11, color: '#b91c1c', fontWeight: '800', textTransform: 'uppercase' },
   rejectReasonText: { marginTop: 4, fontSize: 12, color: '#7f1d1d', lineHeight: 18 },
-  requestFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestFooter: { marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestTabsPanel: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingBottom: 8,
+    marginBottom: 2,
+  },
+  requestTabsBar: { flexDirection: 'row', gap: 20 },
+  requestTabBtn: {
+    paddingVertical: 8,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  requestTabBtnActive: { borderBottomColor: '#4f46e5' },
+  requestTabText: { fontSize: 14, color: '#64748b', fontWeight: '700' },
+  requestTabTextActive: { color: '#0f172a' },
+  requestTopControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 },
+  requestTopActions: { alignItems: 'flex-end', gap: 10 },
+  requestStatusSelectWrap: { minWidth: 122, position: 'relative', zIndex: 20 },
+  requestStatusSelectInput: {
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    height: 40,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  requestStatusSelectText: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  requestStatusMenu: {
+    position: 'absolute',
+    top: 44,
+    right: 0,
+    left: 0,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    overflow: 'hidden',
+  },
+  requestStatusOption: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  requestStatusOptionActive: { backgroundColor: '#eef2ff' },
+  requestStatusOptionText: { fontSize: 13, color: '#334155', fontWeight: '600' },
+  requestStatusOptionTextActive: { color: '#1e3a8a', fontWeight: '800' },
+  modalPickerField: {
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalPickerText: { color: '#1e293b', fontSize: 13, fontWeight: '700' },
+  requestCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#2563eb',
+    shadowColor: '#1d4ed8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  requestCreateBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  myRequestsHeaderCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 16,
+    padding: 12,
+  },
+  myRequestsHeaderTop: { gap: 10 },
+  myRequestsHeaderTitle: { fontSize: 18, fontWeight: '800', color: BrandColors.text },
+  myRequestsTopActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  myRequestsSelectWrap: { width: 132, position: 'relative', zIndex: 20 },
+  myRequestsCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#2563eb',
+    shadowColor: '#1d4ed8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  myRequestsCreateBtnIconOnly: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    justifyContent: 'center',
+    gap: 0,
+  },
+  myRequestsCreateBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  myRequestsListWrap: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dbe4fb',
+    borderRadius: 16,
+    padding: 10,
+    marginTop: 8,
+  },
+  myRequestCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+  },
+  myRequestCardPending: { borderLeftColor: '#f59e0b' },
+  myRequestCardApproved: { borderLeftColor: '#16a34a' },
+  myRequestCardRejected: { borderLeftColor: '#dc2626' },
+  myRequestTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  myRequestName: { fontSize: 16, fontWeight: '800', color: BrandColors.text },
+  myRequestDate: { fontSize: 12, fontWeight: '700', color: '#64748b', textAlign: 'right' },
+  myRequestMeta: { marginTop: 4, fontSize: 12, color: '#475569', fontWeight: '700' },
+  myRequestReason: { marginTop: 8, fontSize: 14, color: '#334155', lineHeight: 20 },
+  myRejectReasonBox: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 10,
+    backgroundColor: '#fef2f2',
+    padding: 10,
+  },
+  myRequestFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   approvedChip: { backgroundColor: '#dcfce7', borderColor: '#86efac' },
   approvedChipText: { color: '#166534' },
   rejectedChip: { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },

@@ -19,10 +19,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WaveDivider } from '@/components/wave-divider';
-import { BRAND_COMPANY_NAME, BRAND_SHORT_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
+import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 
-const HEADER_RATIO = 0.4;
+const HEADER_RATIO = 0.37;
 
 export default function LoginScreen() {
   const { user, signIn } = useAuth();
@@ -68,8 +68,8 @@ export default function LoginScreen() {
             <View style={styles.headerLogoWrap}>
               <Image source={BRAND_LOGO_SOURCE} style={styles.headerLogoImg} contentFit="contain" />
             </View>
-            <Text style={styles.headerBrand}>{BRAND_SHORT_NAME}</Text>
             <Text style={styles.headerSub}>{BRAND_COMPANY_NAME}</Text>
+            <Text style={styles.headerTagline}>Turning Clicks into Clients</Text>
           </View>
           <WaveDivider fill="#FFFFFF" />
         </LinearGradient>
@@ -80,20 +80,13 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: 10, paddingBottom: insets.bottom + 6 }]}
+          contentContainerStyle={[styles.scroll, { paddingTop: 2, paddingBottom: insets.bottom + 6 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
           <View style={styles.formStack}>
             <View style={styles.formBody}>
               <Text style={styles.formTitle}>Sign in to your account</Text>
-              <View style={styles.demoCard}>
-                <Text style={styles.demoTitle}>Demo credentials</Text>
-                <Text style={styles.demoLine}>Admin: admin@gdc.com / Admin@123</Text>
-                <Text style={styles.demoLine}>Team Leader: teamleader@gdc.com / TL@123</Text>
-                <Text style={styles.demoLine}>HR: hr@gdc.com / HR@123</Text>
-                <Text style={styles.demoLine}>Employee: employee@gdc.com / Emp@123</Text>
-              </View>
 
               {error ? (
                 <View style={styles.alert}>
@@ -194,21 +187,33 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerLogoWrap: {
-    marginBottom: 12,
+    marginBottom: 10,
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
   },
   headerLogoImg: {
-    width: 128,
-    height: 128,
-  },
-  headerBrand: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    width: 103,
+    height: 103,
   },
   headerSub: {
+    marginTop: 2,
+    fontSize: 23,
+    fontWeight: '800',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  headerTagline: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: '600',
@@ -222,14 +227,14 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 28,
   },
   formStack: {
     width: '100%',
-    minHeight: '92%',
-    justifyContent: 'space-evenly',
-    gap: 20,
+    minHeight: '86%',
+    justifyContent: 'flex-start',
+    gap: 14,
   },
   formBody: {
     width: '100%',
@@ -241,16 +246,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 28,
   },
-  demoCard: {
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 14,
-  },
-  demoTitle: { fontSize: 12, fontWeight: '800', color: '#1e3a8a', marginBottom: 4 },
-  demoLine: { fontSize: 11, color: '#334155', lineHeight: 16 },
   alert: {
     backgroundColor: '#fef2f2',
     borderRadius: 12,

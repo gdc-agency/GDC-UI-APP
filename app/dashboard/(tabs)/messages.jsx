@@ -253,7 +253,7 @@ export default function MessagesScreen() {
       {selected ? (
         <KeyboardAvoidingView
           style={styles.safe}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.select({ ios: 'padding', android: 'padding' })}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
           <View style={styles.chatHeader}>
             <Pressable style={styles.backBtn} onPress={() => setSelectedId(null)}>
@@ -271,7 +271,8 @@ export default function MessagesScreen() {
           <FlatList
             data={selected.messages}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={[styles.msgList, { paddingBottom: 92 + Math.max(insets.bottom, 8) }]}
+            style={styles.messagesList}
+            contentContainerStyle={[styles.msgList, { paddingBottom: 16 }]}
             ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Start chatting.</Text>}
             renderItem={({ item }) => (
               <View style={[styles.msgRow, item.me ? styles.msgRowMe : styles.msgRowOther]}>
@@ -355,7 +356,7 @@ export default function MessagesScreen() {
             style={[
               styles.composer,
               {
-                paddingBottom: Math.max(insets.bottom, 8),
+                paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8,
                 marginBottom: 0,
               },
             ]}>
@@ -669,6 +670,7 @@ const styles = StyleSheet.create({
   headerMeta: { flex: 1 },
   chatName: { fontSize: 16, fontWeight: '700', color: BrandColors.text },
   chatStatus: { marginTop: 1, fontSize: 12, color: '#16a34a' },
+  messagesList: { flex: 1 },
   msgList: { paddingHorizontal: 10, paddingTop: 12, paddingBottom: 8, gap: 8 },
   msgRow: { width: '100%', flexDirection: 'row' },
   msgRowMe: { justifyContent: 'flex-end' },
@@ -753,18 +755,7 @@ const styles = StyleSheet.create({
   msgTimeMe: { color: '#dbeafe', textAlign: 'right' },
   msgTimeOther: { color: '#64748b' },
   composer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#dbe4fb',
-    backgroundColor: '#fff',
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8, borderTopWidth: 1, borderTopColor: '#dbe4fb', backgroundColor: '#fff',
   },
   input: {
     flex: 1,

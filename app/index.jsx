@@ -61,7 +61,7 @@ export default function WelcomeScreen() {
             <Image source={BRAND_LOGO_SOURCE} style={styles.loaderLogo} contentFit="contain" />
           </View>
           <Text style={styles.loaderTitle}>{BRAND_COMPANY_NAME}</Text>
-          <Text style={styles.loaderSub}>Loading CRM workspace...</Text>
+          <Text style={styles.loaderTagline}>Turning Clicks into Clients</Text>
 
           <View style={styles.progressTrack}>
             <Animated.View style={[styles.progressFill, { transform: [{ translateX }] }]} />
@@ -91,9 +91,8 @@ export default function WelcomeScreen() {
             />
           </View>
 
-          <Text style={styles.brandShort}>{BRAND_SHORT_NAME}</Text>
-          <Text style={styles.companyFull}>{BRAND_COMPANY_NAME}</Text>
-          <Text style={styles.tagline}>{BRAND_TAGLINE}</Text>
+          <Text style={styles.heroCompany}>{BRAND_COMPANY_NAME}</Text>
+          <Text style={styles.heroTagline}>{BRAND_TAGLINE}</Text>
         </View>
 
         <View style={styles.footer}>
@@ -127,50 +126,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   loaderCard: {
-    width: 168,
-    height: 168,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 176,
+    height: 176,
+    borderRadius: 88,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: 'rgba(148,163,184,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   loaderLogo: {
-    width: 120,
-    height: 120,
+    width: 132,
+    height: 132,
   },
   loaderTitle: {
-    marginTop: 22,
-    fontSize: 28,
+    marginTop: 18,
+    fontSize: 30,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
+    letterSpacing: 0.4,
   },
-  loaderSub: {
-    marginTop: 8,
+  loaderTagline: {
+    marginTop: 6,
     fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.88)',
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
   },
   progressTrack: {
-    marginTop: 28,
-    width: 260,
-    height: 8,
+    marginTop: 24,
+    width: 240,
+    height: 7,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.24)',
     overflow: 'hidden',
   },
   progressFill: {
-    width: 130,
-    height: 8,
+    width: 112,
+    height: 7,
     borderRadius: 999,
-    backgroundColor: '#fff',
+    backgroundColor: '#eaf3ff',
   },
   hero: {
     flex: 1,
@@ -186,34 +187,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   logoWrap: {
-    marginBottom: 28,
+    marginBottom: 20,
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
   },
   logoImg: {
-    width: 180,
-    height: 180,
+    width: 108,
+    height: 108,
   },
-  brandShort: {
-    fontSize: 36,
+  heroCompany: {
+    marginTop: 4,
+    fontSize: 24,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 1,
-  },
-  companyFull: {
-    marginTop: 6,
-    fontSize: 15,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.88)',
     textAlign: 'center',
   },
-  tagline: {
-    marginTop: 20,
-    fontSize: 15,
-    fontWeight: '400',
+  heroTagline: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
     maxWidth: 320,
     paddingHorizontal: 8,
   },

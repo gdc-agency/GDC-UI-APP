@@ -1,10 +1,26 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { BrandColors } from '@/constants/brand';
+
+function TabPillIcon({ icon, label, color, focused }) {
+  if (focused) {
+    return (
+      <View style={styles.tabActivePill}>
+        <MaterialCommunityIcons name={icon} size={20} color={color} />
+        <Text style={styles.tabActiveText}>{label}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.tabIconOuter}>
+      <MaterialCommunityIcons name={icon} size={22} color={color} />
+    </View>
+  );
+}
 
 export default function DashboardTabsLayout() {
   return (
@@ -12,36 +28,27 @@ export default function DashboardTabsLayout() {
       initialRouteName="index"
       screenOptions={{
         tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: 'rgba(191,219,254,0.95)',
+        tabBarInactiveTintColor: 'rgba(191,219,254,0.9)',
         tabBarHideOnKeyboard: true,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarShowLabel: false,
         tabBarStyle: styles.tabBar,
+        tabBarItemStyle: styles.tabBarItem,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconOuter, focused && styles.tabIconOuterActive]}>
-              <MaterialCommunityIcons name="home-variant" size={focused ? 24 : 22} color={color} />
-            </View>
-          ),
+          tabBarIcon: ({ color, focused }) => <TabPillIcon icon="home-variant" label="Home" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Messages',
+          title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconOuter, focused && styles.tabIconOuterActive]}>
-              <MaterialCommunityIcons
-                name={focused ? 'chat' : 'chat-outline'}
-                size={focused ? 24 : 22}
-                color={color}
-              />
-            </View>
+            <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
           ),
         }}
       />
@@ -49,11 +56,7 @@ export default function DashboardTabsLayout() {
         name="notifications"
         options={{
           title: 'Alerts',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconOuter, focused && styles.tabIconOuterActive]}>
-              <MaterialCommunityIcons name={focused ? 'bell' : 'bell-outline'} size={focused ? 24 : 22} color={color} />
-            </View>
-          ),
+          tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -67,13 +70,7 @@ export default function DashboardTabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconOuter, focused && styles.tabIconOuterActive]}>
-              <MaterialCommunityIcons
-                name={focused ? 'account-circle' : 'account-circle-outline'}
-                size={focused ? 24 : 22}
-                color={color}
-              />
-            </View>
+            <TabPillIcon icon={focused ? 'account-circle' : 'account-circle-outline'} label="Profile" color={color} focused={focused} />
           ),
         }}
       />
@@ -87,36 +84,47 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 82,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    height: 68,
     borderTopWidth: 0,
-    borderWidth: 1,
-    backgroundColor: BrandColors.splashTop,
-    borderColor: 'rgba(96,165,250,0.2)',
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
-    shadowColor: '#0b2c6a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    borderWidth: 1.2,
+    borderColor: 'rgba(147,197,253,0.35)',
+    backgroundColor: '#0b3f8a',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 10,
+    paddingTop: 7,
+    paddingBottom: 7,
+    shadowColor: '#03122f',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.34,
+    shadowRadius: 12,
     elevation: 12,
   },
+  tabBarItem: { paddingVertical: 0, alignItems: 'center', justifyContent: 'center' },
   tabIconOuter: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(147,197,253,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
-  tabIconOuterActive: {
-    backgroundColor: BrandColors.primaryLight,
-    shadowColor: BrandColors.primaryLight,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 9,
+  tabActivePill: {
+    minWidth: 108,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  tabActiveText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

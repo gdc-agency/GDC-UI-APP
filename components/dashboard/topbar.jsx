@@ -27,13 +27,19 @@ export function DashboardTopbar() {
     { id: 'project-manager', label: 'Project Manager' },
     { id: 'timesheet', label: 'Timesheet' },
     { id: 'availability', label: 'Availability' },
+    { id: 'my-requests', label: 'My Requests' },
   ];
-  const routes = user?.role === 'Admin' ? adminRoutes : nonAdminRoutes;
+  const hrExtraRoutes = [
+    { id: 'request-management', label: 'Request Management' },
+    { id: 'team-tl', label: 'Team assign to TL' },
+  ];
+  const routes = user?.role === 'Admin' ? adminRoutes : user?.role === 'HR' ? [...nonAdminRoutes, ...hrExtraRoutes] : nonAdminRoutes;
   const routeIconMap = {
     'daily-updates': 'text-box-outline',
     'project-manager': 'calendar-month-outline',
     timesheet: 'clock-outline',
     availability: 'calendar-clock-outline',
+    'my-requests': 'clipboard-text-outline',
     'request-management': 'account-group-outline',
     'team-tl': 'account-cog-outline',
     admin: 'shield-check-outline',
@@ -197,10 +203,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#bfdbfe',
   },
   drawerBrand: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 },
-  drawerLogo: { width: 28, height: 28 },
-  drawerBrandText: { fontSize: 15, fontWeight: '800', color: BrandColors.text },
+  drawerLogo: { width: 34, height: 34 },
+  drawerBrandText: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
   closeBtn: {
     width: 34,
     height: 34,
