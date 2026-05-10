@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,16 +15,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WaveDivider } from '@/components/wave-divider';
+import { API_BASE_URL } from '@/constants/api-config';
 import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 
-const HEADER_RATIO = 0.37;
+const HEADER_RATIO = 0.39;
 
 export default function LoginScreen() {
-  const { user, signIn } = useAuth();
+  const { user, signIn, hydrated } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = Math.round(Dimensions.get('window').height * HEADER_RATIO);
@@ -35,6 +36,14 @@ export default function LoginScreen() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  if (!hydrated) {
+    return (
+      <View style={[styles.root, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={BrandColors.primaryMid} />
+      </View>
+    );
+  }
 
   if (user) {
     return <Redirect href="/dashboard" />;
@@ -75,93 +84,97 @@ export default function LoginScreen() {
         </LinearGradient>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
-        <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: 2, paddingBottom: insets.bottom + 6 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          style={styles.scrollView}>
-          <View style={styles.formStack}>
-            <View style={styles.formBody}>
-              <Text style={styles.formTitle}>Sign in to your account</Text>
+      <KeyboardAwareScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 20) }]}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={24}
+        extraHeight={Platform.OS === 'ios' ? 24 : 60}
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollView}>
+        <View style={styles.formStack}>
+          <View style={styles.formBody}>
+            <Text style={styles.formTitle}>Sign in with email</Text>
 
-              {error ? (
-                <View style={styles.alert}>
+            <Text style={styles.apiHint} numberOfLines={2}>
+              API: {API_BASE_URL}
+            </Text>
+
+            {error ? (
+              <View style={styles.alert}>
+                <ScrollView style={styles.alertScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                   <Text style={styles.alertText}>{error}</Text>
-                </View>
-              ) : null}
+                </ScrollView>
+              </View>
+            ) : null}
 
-              <View style={styles.field}>
-                <Text style={styles.label}>E-mail Address</Text>
+            <View style={styles.field}>
+              <Text style={styles.label}>E-mail Address</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your mail"
+                placeholderTextColor="#94a3b8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <View>
                 <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter your mail"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
                   placeholderTextColor="#94a3b8"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
+                  secureTextEntry={!showPw}
+                  autoComplete="password"
                   style={styles.input}
                 />
+                <TouchableOpacity
+                  style={styles.eye}
+                  onPress={() => setShowPw((v) => !v)}
+                  hitSlop={12}
+                  accessibilityLabel={showPw ? 'Hide password' : 'Show password'}>
+                  <Text style={styles.eyeText}>{showPw ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Password</Text>
-                <View>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Enter your password"
-                    placeholderTextColor="#94a3b8"
-                    secureTextEntry={!showPw}
-                    autoComplete="password"
-                    style={styles.input}
-                  />
-                  <TouchableOpacity
-                    style={styles.eye}
-                    onPress={() => setShowPw((v) => !v)}
-                    hitSlop={12}
-                    accessibilityLabel={showPw ? 'Hide password' : 'Show password'}>
-                    <Text style={styles.eyeText}>{showPw ? 'Hide' : 'Show'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.forgot}
-                onPress={() =>
-                  Alert.alert('Forgot password?', 'Use the GDC web app forgot-password page until mobile reset is wired.')
-                }>
-                <Text style={styles.forgotText}>Forgot password?</Text>
-              </TouchableOpacity>
             </View>
 
-            <View style={styles.btnRow}>
-              <TouchableOpacity
-                style={[styles.primaryPill, loading && styles.pillDisabled]}
-                onPress={onSubmit}
-                disabled={loading}
-                activeOpacity={0.9}>
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryPillText}>Login</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.secondaryPill}
-                onPress={() => router.back()}
-                disabled={loading}
-                activeOpacity={0.88}>
-                <Text style={styles.secondaryPillText}>Back</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.forgot}
+              onPress={() =>
+                Alert.alert('Forgot password?', 'Use the GDC web app forgot-password page until mobile reset is wired.')
+              }>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          <View style={styles.btnRow}>
+            <TouchableOpacity
+              style={[styles.primaryPill, loading && styles.pillDisabled]}
+              onPress={onSubmit}
+              disabled={loading}
+              activeOpacity={0.9}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryPillText}>Login</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryPill}
+              onPress={() => router.back()}
+              disabled={loading}
+              activeOpacity={0.88}>
+              <Text style={styles.secondaryPillText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -232,19 +245,30 @@ const styles = StyleSheet.create({
   },
   formStack: {
     width: '100%',
-    minHeight: '86%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    minHeight: '100%',
     justifyContent: 'flex-start',
     gap: 14,
   },
   formBody: {
     width: '100%',
+    marginTop: 2,
   },
   formTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#475569',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#334155',
+    letterSpacing: 0.2,
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 8,
+  },
+  apiHint: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '600',
   },
   alert: {
     backgroundColor: '#fef2f2',
@@ -253,8 +277,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#fecaca',
+    maxHeight: 160,
   },
-  alertText: { color: '#b91c1c', fontSize: 14, fontWeight: '600' },
+  alertScroll: {
+    maxHeight: 140,
+  },
+  alertText: { color: '#b91c1c', fontSize: 13, fontWeight: '600', lineHeight: 18 },
   field: { marginBottom: 26 },
   label: {
     fontSize: 14,
@@ -292,12 +320,13 @@ const styles = StyleSheet.create({
     color: BrandColors.primaryMid,
   },
   btnRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 14,
     alignItems: 'center',
+    width: '100%',
   },
   primaryPill: {
-    flex: 1,
+    width: '100%',
     backgroundColor: BrandColors.primaryMid,
     borderRadius: 999,
     paddingVertical: 16,
@@ -312,7 +341,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   secondaryPill: {
-    flex: 1,
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 999,
     paddingVertical: 16,

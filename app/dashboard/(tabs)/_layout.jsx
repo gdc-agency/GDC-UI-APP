@@ -1,130 +1,392 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Tabs, usePathname } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { BrandColors } from '@/constants/brand';
+import { useAuth } from '@/context/auth-context';
+import { listNotifications } from '@/services/api';
+import { subscribeNotificationInbox } from '@/utils/notification-invalidate';
+import { mapNotificationRow, normalizeNotificationsList } from '@/utils/notification-helpers';
+
+/** Content row above home indicator; total bar height = this + insets.bottom */
+const TAB_BAR_BASE_HEIGHT = 70;
+/** Match `DashboardTopbar`: marginTop 8 + row 68 + marginBottom 10 */
+const TOPBAR_BLOCK = 86;
+
+function skeletonCardCountForPath(pathname) {
+  if (!pathname) return 3;
+  const p = pathname.toLowerCase();
+  if (p.includes('messages')) return 4;
+  if (p.includes('notifications')) return 4;
+  if (p.includes('profile')) return 2;
+  if (p.includes('route')) return 5;
+  if (p.match(/\(tabs\)\/?$/)) return 4;
+  return 3;
+}
+
+function RouteSkeletonOverlay({ shimmerX, overlayStyle, cardCount }) {
+  return (
+    <View style={[styles.skeletonOverlay, overlayStyle]} pointerEvents="auto">
+      {Array.from({ length: cardCount }, (_, item) => (
+        <View key={item} style={[styles.skeletonCard, item < cardCount - 1 ? styles.skeletonCardSpacing : null]}>
+          <View style={styles.skeletonRowTop}>
+            <View style={[styles.skeletonLine, styles.skeletonLineWide]} />
+            <View style={styles.skeletonChip} />
+          </View>
+          <View style={[styles.skeletonLine, styles.skeletonLineMid]} />
+          <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+          <View style={[styles.skeletonLine, styles.skeletonLineFull]} />
+
+          <Animated.View style={[styles.skeletonShimmer, { transform: [{ translateX: shimmerX }] }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function TabBarBackground() {
+  return (
+    <LinearGradient
+      colors={[BrandColors.splashTop, BrandColors.primary, '#0d5cbe']}
+      locations={[0, 0.45, 1]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.tabBarGradientFill}
+    />
+  );
+}
 
 function TabPillIcon({ icon, label, color, focused }) {
+  const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(progress, {
+      toValue: focused ? 1 : 0,
+      useNativeDriver: true,
+      stiffness: 300,
+      damping: 22,
+      mass: 0.85,
+    }).start();
+  }, [focused, progress]);
+
+  const orbScale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.94, 1],
+  });
+  const textOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
   if (focused) {
     return (
-      <View style={styles.tabActivePill}>
-        <MaterialCommunityIcons name={icon} size={20} color={color} />
-        <Text style={styles.tabActiveText}>{label}</Text>
+      <View style={styles.tabIconSlot}>
+        <Animated.View style={[styles.activeOrbLift, { transform: [{ scale: orbScale }] }]}>
+          <LinearGradient
+            colors={[BrandColors.primaryLight, BrandColors.primaryMid, BrandColors.primary]}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.activeOrbGradient}>
+            <MaterialCommunityIcons name={icon} size={20} color="#ffffff" />
+          </LinearGradient>
+        </Animated.View>
+        <Animated.Text style={[styles.activeText, { opacity: textOpacity }]} numberOfLines={1} ellipsizeMode="clip">
+          {label}
+        </Animated.Text>
       </View>
     );
   }
   return (
-    <View style={styles.tabIconOuter}>
-      <MaterialCommunityIcons name={icon} size={22} color={color} />
+    <View style={styles.tabIconSlot}>
+      <View style={styles.tabIconOuter}>
+        <MaterialCommunityIcons name={icon} size={21} color={color} />
+      </View>
     </View>
   );
 }
 
 export default function DashboardTabsLayout() {
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const { token } = useAuth();
+  const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [notificationTabBadge, setNotificationTabBadge] = useState(undefined);
+  const [notificationInboxEpoch, setNotificationInboxEpoch] = useState(0);
+  const shimmerX = useRef(new Animated.Value(-140)).current;
+  const skeletonCardCount = skeletonCardCountForPath(pathname);
+
+  useEffect(() => {
+    return subscribeNotificationInbox(() => {
+      setNotificationInboxEpoch((n) => n + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    setIsRouteLoading(true);
+    const hideTimer = setTimeout(() => setIsRouteLoading(false), 430);
+    return () => clearTimeout(hideTimer);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!token) {
+      setNotificationTabBadge(undefined);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listNotifications(token, 100);
+        const rows = normalizeNotificationsList(res).map(mapNotificationRow);
+        const n = rows.filter((r) => !r.read).length;
+        if (cancelled) return;
+        if (n <= 0) setNotificationTabBadge(undefined);
+        else if (n > 99) setNotificationTabBadge('99+');
+        else setNotificationTabBadge(n);
+      } catch {
+        if (!cancelled) setNotificationTabBadge(undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, pathname, notificationInboxEpoch]);
+
+  useEffect(() => {
+    if (!isRouteLoading) return undefined;
+
+    shimmerX.setValue(-420);
+    const loop = Animated.loop(
+      Animated.timing(shimmerX, {
+        toValue: 420,
+        duration: 980,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+
+    return () => loop.stop();
+  }, [isRouteLoading, shimmerX]);
+
   return (
-    <Tabs
-      initialRouteName="index"
-      screenOptions={{
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: 'rgba(191,219,254,0.9)',
-        tabBarHideOnKeyboard: true,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarItemStyle: styles.tabBarItem,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => <TabPillIcon icon="home-variant" label="Home" color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Chat',
-          tabBarIcon: ({ color, focused }) => (
-            <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="route/[id]"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <TabPillIcon icon={focused ? 'account-circle' : 'account-circle-outline'} label="Profile" color={color} focused={focused} />
-          ),
-        }}
-      />
-    </Tabs>
+    <View style={styles.container}>
+      <Tabs
+        initialRouteName="index"
+        screenOptions={{
+          tabBarActiveTintColor: '#ffffff',
+          tabBarInactiveTintColor: 'rgba(224,242,254,0.92)',
+          tabBarHideOnKeyboard: true,
+          headerShown: false,
+          tabBarButton: HapticTab,
+          tabBarShowLabel: false,
+          tabBarBackground: () => <TabBarBackground />,
+          tabBarStyle: [
+            styles.tabBar,
+            {
+              height: tabBarTotalHeight,
+              paddingBottom: insets.bottom,
+            },
+          ],
+          tabBarItemStyle: styles.tabBarItem,
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => <TabPillIcon icon="home-variant" label="Home" color={color} focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="messages"
+          options={{
+            title: 'Chat',
+            tabBarIcon: ({ color, focused }) => (
+              <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            title: 'Alerts',
+            tabBarBadge: notificationTabBadge,
+            tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="route/[id]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="[id]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'account' : 'account-outline'} label="Profile" color={color} focused={focused} />,
+          }}
+        />
+      </Tabs>
+
+      {isRouteLoading ? (
+        <RouteSkeletonOverlay
+          shimmerX={shimmerX}
+          cardCount={skeletonCardCount}
+          overlayStyle={{
+            bottom: tabBarTotalHeight,
+            paddingTop: insets.top + TOPBAR_BLOCK + 4,
+            paddingHorizontal: 18,
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1 },
+  skeletonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    backgroundColor: BrandColors.pageBg,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+  },
+  skeletonCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+    padding: 14,
+  },
+  skeletonCardSpacing: {
+    marginBottom: 12,
+  },
+  skeletonRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 11,
+  },
+  skeletonLineWide: {
+    width: '66%',
+    marginBottom: 0,
+  },
+  skeletonLineMid: {
+    width: '60%',
+  },
+  skeletonLineShort: {
+    width: '22%',
+  },
+  skeletonLineFull: {
+    width: '95%',
+    marginBottom: 0,
+  },
+  skeletonChip: {
+    width: 32,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 180,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    opacity: 0.82,
+  },
+  tabBarGradientFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
   tabBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 68,
-    borderTopWidth: 0,
-    borderWidth: 1.2,
-    borderColor: 'rgba(147,197,253,0.35)',
-    backgroundColor: '#0b3f8a',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingHorizontal: 10,
-    paddingTop: 7,
-    paddingBottom: 7,
-    shadowColor: '#03122f',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.34,
+    borderWidth: 0,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    overflow: 'visible',
+    zIndex: 100,
+    shadowColor: '#020617',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
     shadowRadius: 12,
-    elevation: 12,
+    elevation: 24,
   },
-  tabBarItem: { paddingVertical: 0, alignItems: 'center', justifyContent: 'center' },
+  tabBarItem: { flex: 1, paddingVertical: 0, alignItems: 'center', justifyContent: 'center' },
+  tabIconSlot: {
+    width: 76,
+    height: 58,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   tabIconOuter: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  tabActivePill: {
-    minWidth: 108,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: 'rgba(255,255,255,0.14)',
   },
-  tabActiveText: {
-    color: '#ffffff',
-    fontSize: 15,
+  activeOrbLift: {
+    marginBottom: 2,
+    borderRadius: 26,
+    shadowColor: BrandColors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 14,
+  },
+  activeOrbGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.95)',
+  },
+  activeText: {
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: '800',
+    letterSpacing: 0.35,
+    color: 'rgba(255,255,255,0.98)',
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
 });

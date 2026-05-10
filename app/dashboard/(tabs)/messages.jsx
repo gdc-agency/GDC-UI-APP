@@ -10,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
+import { isAdminRole } from '@/utils/roles';
 
 const HOME_TAB_BAR_STYLE = {
   position: 'absolute',
@@ -112,7 +113,7 @@ export default function MessagesScreen() {
   const [groupMembers, setGroupMembers] = useState([]);
 
   const roleTitle = useMemo(() => {
-    if (user?.role === 'Admin') return 'Admin';
+    if (isAdminRole(user?.role)) return 'Admin';
     if (user?.role === 'HR') return 'HR';
     if (user?.role === 'Team Leader') return 'Team Leader';
     return 'Employee';

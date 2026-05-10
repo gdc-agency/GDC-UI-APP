@@ -1,72 +1,266 @@
-import React from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from 'expo-router';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { BRAND_COMPANY_NAME, BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
+import { updateProfile } from '@/services/api';
+
+function empty(s) {
+  return String(s ?? '').trim();
+}
 
 export default function ProfileScreen() {
-  const { user } = useAuth();
+  const { user, token, refreshProfile, mergeFromServerUserRow } = useAuth();
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
-  const firstName = user?.name?.split(' ')?.[0] ?? 'Faisal';
-  const gdcId = `GDC-${String(user?.id ?? '11840499')}-40`;
-  const profileFields = [
-    { key: 'email', label: 'EMAIL', value: user?.email ?? 'Not provided', half: true },
-    { key: 'department', label: 'DEPARTMENT', value: 'Web Development', half: true },
-    { key: 'phone', label: 'PHONE NUMBER', value: '03062672226', half: true },
-    { key: 'cnic', label: 'CNIC', value: '35202-0000000-0', half: true },
-    { key: 'address', label: 'ADDRESS', value: 'Goheer Town, Bahawalpur', full: true, multiline: true },
-  ];
-  const profileFieldsWide = [
-    { key: 'email', label: 'EMAIL', value: user?.email ?? 'Not provided', half: true },
-    { key: 'phone', label: 'PHONE NUMBER', value: '03062672226', half: true },
-    { key: 'department', label: 'DEPARTMENT', value: 'Web Development', half: true },
-    { key: 'cnic', label: 'CNIC', value: '35202-0000000-0', half: true },
-    { key: 'address', label: 'ADDRESS', value: 'Goheer Town, Bahawalpur', full: true, multiline: true },
-  ];
+
+  /** Latest session user for focus effect (avoid deps on `user` → infinite re-fetch / stuck loading). */
+  const userRef = React.useRef(user);
+  userRef.current = user;
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [department, setDepartment] = useState('');
+  const [cnic, setCnic] = useState('');
+  const [address, setAddress] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        setLoading(true);
+        try {
+          const r = await refreshProfile();
+          if (cancelled) return;
+          if (!r.ok) {
+            const u = userRef.current;
+            setName(empty(u?.name));
+            setEmail(empty(u?.email));
+            setPhone(empty(u?.phone));
+            setDepartment(empty(u?.department));
+            setCnic(empty(u?.cnic));
+            setAddress(empty(u?.address));
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [refreshProfile]),
+  );
+
+  React.useEffect(() => {
+    setName(empty(user?.name));
+    setEmail(empty(user?.email));
+    setPhone(empty(user?.phone));
+    setDepartment(empty(user?.department));
+    setCnic(empty(user?.cnic));
+    setAddress(empty(user?.address));
+  }, [user]);
+
+  const firstName = (name || user?.name || 'U').split(' ')?.[0] ?? 'U';
+  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '')}`;
+
+  const fieldPayload = () => ({
+    name: name.trim(),
+    email: email.trim(),
+    phone: phone.trim(),
+    department: department.trim(),
+    cnic: cnic.trim(),
+    address: address.trim(),
+  });
+
+  async function submitProfile(asset) {
+    if (!token) {
+      Alert.alert('Error', 'Not signed in');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await updateProfile(
+        token,
+        fieldPayload(),
+        asset
+          ? {
+              uri: asset.uri,
+              name: asset.fileName ?? undefined,
+              type: asset.mimeType ?? undefined,
+            }
+          : undefined,
+      );
+      const serverUser = res && typeof res === 'object' && res.user && typeof res.user === 'object' ? res.user : null;
+      if (serverUser) {
+        mergeFromServerUserRow(serverUser);
+      }
+      await refreshProfile();
+      Alert.alert('Saved', asset ? 'Profile photo updated.' : 'Profile updated successfully.');
+    } catch (e) {
+      Alert.alert('Update failed', e?.message ?? 'Could not save profile');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function pickFromLibrary() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access to change your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await submitProfile(result.assets[0]);
+  }
+
+  async function pickFromCamera() {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow camera access to take a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await submitProfile(result.assets[0]);
+  }
+
+  function onChangePhoto() {
+    if (Platform.OS === 'web') {
+      void pickFromLibrary();
+      return;
+    }
+    Alert.alert('Profile photo', 'Choose a source', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Photo library', onPress: () => void pickFromLibrary() },
+      { text: 'Camera', onPress: () => void pickFromCamera() },
+    ]);
+  }
+
+  function onSave() {
+    void submitProfile(undefined);
+  }
+
+  const fields = (
+    <>
+      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
+        <Text style={styles.label}>FULL NAME</Text>
+        <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Name" placeholderTextColor="#94a3b8" />
+      </View>
+      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
+        <Text style={styles.label}>EMAIL</Text>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          placeholder="Email"
+          placeholderTextColor="#94a3b8"
+        />
+      </View>
+      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
+        <Text style={styles.label}>PHONE</Text>
+        <TextInput value={phone} onChangeText={setPhone} style={styles.input} keyboardType="phone-pad" placeholderTextColor="#94a3b8" />
+      </View>
+      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
+        <Text style={styles.label}>DEPARTMENT</Text>
+        <TextInput value={department} onChangeText={setDepartment} style={styles.input} placeholderTextColor="#94a3b8" />
+      </View>
+      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
+        <Text style={styles.label}>CNIC</Text>
+        <TextInput value={cnic} onChangeText={setCnic} style={styles.input} placeholderTextColor="#94a3b8" />
+      </View>
+      <View style={[styles.fieldWrap, styles.fieldFull]}>
+        <Text style={styles.label}>ADDRESS</Text>
+        <TextInput
+          value={address}
+          onChangeText={setAddress}
+          style={[styles.input, styles.multilineInput]}
+          multiline
+          placeholderTextColor="#94a3b8"
+        />
+      </View>
+    </>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <View style={styles.hero}>
             <View style={styles.avatarWrap}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarText}>{firstName.slice(0, 1).toUpperCase()}</Text>
+                {user?.avatar ? (
+                  <Image
+                    key={user.avatar}
+                    source={{ uri: user.avatar }}
+                    style={styles.avatarImg}
+                    contentFit="cover"
+                    cachePolicy="none"
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>{firstName.slice(0, 1).toUpperCase()}</Text>
+                )}
               </View>
-              <TouchableOpacity style={styles.cameraBtn} activeOpacity={0.9}>
+              <TouchableOpacity
+                style={styles.cameraBtn}
+                activeOpacity={0.9}
+                onPress={onChangePhoto}
+                disabled={saving || loading || !token}>
                 <MaterialCommunityIcons name="camera-outline" size={15} color="#fff" />
               </TouchableOpacity>
             </View>
             <Text style={styles.title}>{user?.name ?? BRAND_COMPANY_NAME}</Text>
-            <Text style={styles.gdcId}>{gdcId}</Text>
+            <Text style={styles.gdcId}>{gdcLabel}</Text>
           </View>
 
-          <View style={[styles.formGrid, isWide && styles.formGridWide]}>
-            {(isWide ? profileFieldsWide : profileFields).map((field) => (
-              <View key={field.key} style={[styles.fieldWrap, isWide && field.half && styles.fieldHalf, field.full && styles.fieldFull]}>
-                <Text style={styles.label}>{field.label}</Text>
-                <View style={styles.inputWrap}>
-                  <TextInput
-                    value={field.value}
-                    editable={false}
-                    multiline={field.multiline}
-                    style={[styles.input, field.multiline && styles.multilineInput]}
-                    placeholderTextColor="#94a3b8"
-                  />
-                  {field.rightIcon ? <MaterialCommunityIcons name={field.rightIcon} size={20} color="#475569" /> : null}
-                </View>
-              </View>
-            ))}
-          </View>
+          {loading ? (
+            <ActivityIndicator style={{ marginVertical: 24 }} color={BrandColors.primaryMid} />
+          ) : (
+            <View style={[styles.formGrid, isWide && styles.formGridWide]}>{fields}</View>
+          )}
+
+          <TouchableOpacity style={styles.saveBtn} onPress={onSave} disabled={saving || loading} activeOpacity={0.9}>
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveBtnText}>Save changes</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
-
     </SafeAreaView>
   );
 }
@@ -103,7 +297,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1729',
     borderWidth: 3,
     borderColor: '#dbeafe',
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   avatarText: { color: '#e2e8f0', fontSize: 40, fontWeight: '800' },
   cameraBtn: {
     position: 'absolute',
@@ -143,23 +339,25 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   label: { fontSize: 12, color: '#64748b', fontWeight: '800', letterSpacing: 0.8, marginBottom: 6 },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   input: {
     fontSize: 16,
     color: BrandColors.text,
     fontWeight: '500',
     paddingVertical: 2,
-    flex: 1,
+    minHeight: 28,
   },
   multilineInput: {
     minHeight: 76,
     textAlignVertical: 'top',
     paddingTop: 2,
-    fontSize: 16,
   },
+  saveBtn: {
+    marginTop: 20,
+    backgroundColor: BrandColors.primaryMid,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

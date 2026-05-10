@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'expo-router';
 
 import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
+import { isAdminRole, isHrRole } from '@/utils/roles';
 
 export function DashboardTopbar() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function DashboardTopbar() {
     { id: 'request-management', label: 'Request Management' },
     { id: 'team-tl', label: 'Team assign to TL' },
   ];
-  const routes = user?.role === 'Admin' ? adminRoutes : user?.role === 'HR' ? [...nonAdminRoutes, ...hrExtraRoutes] : nonAdminRoutes;
+  const routes = isAdminRole(user?.role) ? adminRoutes : isHrRole(user?.role) ? [...nonAdminRoutes, ...hrExtraRoutes] : nonAdminRoutes;
   const routeIconMap = {
     'daily-updates': 'text-box-outline',
     'project-manager': 'calendar-month-outline',

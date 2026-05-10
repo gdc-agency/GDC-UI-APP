@@ -1,13 +1,16 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
+import { getPendingUsersCount, getWorkforceCount } from '@/services/api';
+import { extractPendingUsersCount, extractWorkforceCount } from '@/utils/admin-api-response';
+import { isAdminRole } from '@/utils/roles';
 
 function StatCard({ label, value, icon, color, onPress }) {
   const Wrapper = onPress ? Pressable : View;
@@ -69,26 +72,39 @@ function TlDashboardCard({ label, value, icon, tint, iconColor, onPress }) {
 }
 
 function roleCode(role) {
-  if (role === 'Admin') return 'AD';
+  if (isAdminRole(role)) return 'AD';
   if (role === 'Team Leader') return 'TL';
   if (role === 'HR') return 'HR';
   if (role === 'Employee') return 'EMP';
   return 'USR';
 }
 
-function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenProjectStatus }) {
-  if (role === 'Admin') {
+/** Backend / drivers may return counts as number or numeric string. */
+function parseStatCount(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenProjectStatus, workforceCount, pendingUsersCount }) {
+  const wf = workforceCount != null ? String(workforceCount) : '—';
+  const pend = pendingUsersCount != null ? String(pendingUsersCount) : '—';
+
+  if (isAdminRole(role)) {
     return (
       <View style={styles.rolePanel}>
         <Text style={styles.roleTitle}>Admin Workspace</Text>
         <Text style={styles.roleSub}>System overview, approvals, and policy control.</Text>
         <View style={styles.statGrid}>
-          <StatCard label="Workforce" value="16" icon="account-group-outline" color="#2563eb" />
-          <StatCard label="Active Now" value="3" icon="pulse" color="#16a34a" />
+          <StatCard label="Workforce" value={wf} icon="account-group-outline" color="#2563eb" />
+          <StatCard label="Active Now" value="—" icon="pulse" color="#16a34a" />
           <StatCard label="Pending Leave" value="0" icon="calendar-clock-outline" color="#f59e0b" onPress={onOpenPendingLeave} />
-          <StatCard label="Pending Tasks" value="2" icon="bullseye-arrow" color="#6366f1" />
-          <StatCard label="Overdue" value="0" icon="alert-circle-outline" color="#dc2626" />
-          <StatCard label="Pending Approval" value="0" icon="shield-check-outline" color="#9333ea" onPress={onOpenPendingApprovals} />
+          <StatCard label="Pending Tasks" value="—" icon="bullseye-arrow" color="#6366f1" />
+          <StatCard label="Overdue" value="—" icon="alert-circle-outline" color="#dc2626" />
+          <StatCard label="Pending Approval" value={pend} icon="shield-check-outline" color="#9333ea" onPress={onOpenPendingApprovals} />
         </View>
       </View>
     );
@@ -151,9 +167,43 @@ function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenPro
 }
 
 export default function DashboardHomeScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const router = useRouter();
   const nowText = React.useMemo(() => new Date().toLocaleString(), []);
+  const [adminStats, setAdminStats] = React.useState({ workforce: null, pendingUsers: null });
+
+  const loadAdminStats = useCallback(async () => {
+    if (!isAdminRole(user?.role) || !token) {
+      setAdminStats({ workforce: null, pendingUsers: null });
+      return;
+    }
+    try {
+      const [w, p] = await Promise.all([getWorkforceCount(token), getPendingUsersCount(token)]);
+      setAdminStats({
+        workforce: parseStatCount(extractWorkforceCount(w)),
+        pendingUsers: parseStatCount(extractPendingUsersCount(p)),
+      });
+    } catch (e) {
+      if (__DEV__ && e && typeof e.message === 'string') {
+        console.warn('[dashboard] admin stats fetch failed:', e.message);
+      }
+      setAdminStats({ workforce: null, pendingUsers: null });
+    }
+  }, [user?.role, token]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadAdminStats();
+    }, [loadAdminStats]),
+  );
+
+  React.useEffect(() => {
+    if (!isAdminRole(user?.role) || !token) return undefined;
+    const id = setInterval(() => void loadAdminStats(), 45000);
+    return () => clearInterval(id);
+  }, [user?.role, token, loadAdminStats]);
+
+  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '0001').toUpperCase()}`;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -162,11 +212,21 @@ export default function DashboardHomeScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, user?.role === 'Employee' && styles.heroCardEmployee]}>
           <View style={styles.heroTop}>
-            <View style={styles.heroAvatarWrap}>
+            <View style={styles.heroAvatarRing} accessibilityRole="image" accessibilityLabel="Profile photo">
               {user?.avatar ? (
-                <Image source={{ uri: user.avatar }} style={styles.heroAvatar} contentFit="cover" />
+                <Image
+                  key={user.avatar}
+                  source={{ uri: user.avatar }}
+                  style={styles.heroAvatarImage}
+                  contentFit="cover"
+                  contentPosition="center"
+                  transition={180}
+                  cachePolicy="none"
+                />
               ) : (
-                <Text style={styles.heroAvatarFallback}>{roleCode(user?.role)}</Text>
+                <View style={styles.heroAvatarPlaceholder}>
+                  <Text style={styles.heroAvatarFallback}>{roleCode(user?.role)}</Text>
+                </View>
               )}
             </View>
             <View style={styles.heroMeta}>
@@ -177,19 +237,21 @@ export default function DashboardHomeScreen() {
               </View>
               <View style={styles.heroInfoPill}>
                 <MaterialCommunityIcons name="card-account-details-outline" size={13} color="#bfdbfe" />
-                <Text style={styles.heroId}>GDC_ID: GDC-{String(user?.id ?? '0001').toUpperCase()}</Text>
+                <Text style={styles.heroId}>GDC_ID: {gdcLabel}</Text>
               </View>
               <View style={styles.heroInfoPill}>
                 <MaterialCommunityIcons name="clock-outline" size={13} color="#bfdbfe" />
-                <Text style={styles.heroNow}>Date.Now: {nowText}</Text>
+                <Text style={styles.heroNow}>As of {nowText}</Text>
               </View>
             </View>
           </View>
-          {user?.role === 'Admin' ? <Text style={styles.workspaceTag}>Admin Workspace</Text> : null}
+          {isAdminRole(user?.role) ? <Text style={styles.workspaceTag}>Admin Workspace</Text> : null}
         </View>
 
         <RolePanel
           role={user?.role}
+          workforceCount={adminStats.workforce}
+          pendingUsersCount={adminStats.pendingUsers}
           onOpenPendingApprovals={() => router.push('/dashboard/(tabs)/route/admin?tab=employees&filter=Pending')}
           onOpenPendingLeave={() => router.push('/dashboard/(tabs)/route/request-management?status=Pending')}
           onOpenProjectStatus={(status) => router.push(`/dashboard/(tabs)/route/project-manager?status=${encodeURIComponent(status)}`)}
@@ -219,19 +281,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 20,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroAvatarWrap: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  /** Filled circular avatar — image uses full diameter + overflow clip (no square-in-circle look). */
+  heroAvatarRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.92)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  heroAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroAvatarPlaceholder: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(15,23,42,0.25)',
   },
-  heroAvatar: { width: 46, height: 46 },
-  heroAvatarFallback: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  heroAvatarFallback: { color: '#ffffff', fontSize: 17, fontWeight: '800', letterSpacing: 0.4 },
   heroMeta: { flex: 1 },
   hello: { color: '#fff', fontSize: 22, fontWeight: '800' },
   heroInfoPill: {
