@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image } from 'expo-image';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import { BlurView } from 'expo-blur';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 
@@ -8,15 +9,19 @@ import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/
 import { useAuth } from '@/context/auth-context';
 import { isAdminRole, isHrRole } from '@/utils/roles';
 
+const DRAWER_WIDTH = 304;
+
 export function DashboardTopbar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const [open, setOpen] = React.useState(false);
-  const drawerAnim = React.useRef(new Animated.Value(320)).current;
+  const drawerAnim = React.useRef(new Animated.Value(DRAWER_WIDTH + 18)).current;
+  const backdropAnim = React.useRef(new Animated.Value(0)).current;
   const adminRoutes = [
     { id: 'admin', label: 'Admin Control' },
     { id: 'daily-updates', label: 'Daily Updates' },
+    { id: 'team-data', label: 'Teams Management' },
     { id: 'project-manager', label: 'Project Manager' },
     { id: 'timesheet', label: 'Timesheet' },
     { id: 'availability', label: 'Availability' },
@@ -32,11 +37,13 @@ export function DashboardTopbar() {
   ];
   const hrExtraRoutes = [
     { id: 'request-management', label: 'Request Management' },
+    { id: 'team-data', label: 'Teams Management' },
     { id: 'team-tl', label: 'Team assign to TL' },
   ];
   const routes = isAdminRole(user?.role) ? adminRoutes : isHrRole(user?.role) ? [...nonAdminRoutes, ...hrExtraRoutes] : nonAdminRoutes;
   const routeIconMap = {
     'daily-updates': 'text-box-outline',
+    'team-data': 'account-group-outline',
     'project-manager': 'calendar-month-outline',
     timesheet: 'clock-outline',
     availability: 'calendar-clock-outline',
@@ -48,30 +55,46 @@ export function DashboardTopbar() {
 
   const openDrawer = React.useCallback(() => {
     setOpen(true);
-    drawerAnim.setValue(320);
-    Animated.timing(drawerAnim, {
-      toValue: 0,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [drawerAnim]);
+    drawerAnim.setValue(DRAWER_WIDTH + 18);
+    backdropAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(backdropAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(drawerAnim, {
+        toValue: 0,
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [backdropAnim, drawerAnim]);
 
   const closeDrawer = React.useCallback(
     (afterClose) => {
-      Animated.timing(drawerAnim, {
-        toValue: 320,
-        duration: 220,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) {
-          setOpen(false);
-          if (typeof afterClose === 'function') afterClose();
-        }
+      Animated.parallel([
+        Animated.timing(backdropAnim, {
+          toValue: 0,
+          duration: 200,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(drawerAnim, {
+          toValue: DRAWER_WIDTH + 18,
+          duration: 240,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished) return;
+        setOpen(false);
+        if (typeof afterClose === 'function') afterClose();
       });
     },
-    [drawerAnim]
+    [backdropAnim, drawerAnim],
   );
 
   return (
@@ -91,14 +114,24 @@ export function DashboardTopbar() {
 
       <Modal visible={open} transparent animationType="none" onRequestClose={() => closeDrawer()}>
         <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => closeDrawer()} />
+          <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => closeDrawer()} />
+
           <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerAnim }] }]}>
+            <BlurView intensity={22} tint="light" style={StyleSheet.absoluteFillObject} />
+            <View style={styles.drawerChromeOverlay} pointerEvents="none" />
+
             <View style={styles.drawerHeader}>
               <View style={styles.drawerBrand}>
                 <Image source={BRAND_LOGO_SOURCE} style={styles.drawerLogo} contentFit="contain" />
-                <Text style={styles.drawerBrandText}>{BRAND_COMPANY_NAME}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.drawerBrandText}>{BRAND_COMPANY_NAME}</Text>
+                  <Text style={styles.drawerUserMeta} numberOfLines={1}>
+                    {user?.name ? user.name : 'Signed in'}{user?.email ? ` • ${user.email}` : ''}
+                  </Text>
+                </View>
               </View>
-              <Pressable style={styles.closeBtn} onPress={() => setOpen(false)}>
+              <Pressable style={styles.closeBtn} onPress={() => closeDrawer()}>
                 <MaterialCommunityIcons name="close" size={20} color={BrandColors.textMuted} />
               </Pressable>
             </View>
@@ -183,11 +216,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   name: { fontSize: 16, fontWeight: '800', color: BrandColors.text },
-  overlay: { flex: 1, flexDirection: 'row' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.35)' },
+  overlay: { flex: 1 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.42)' },
   drawer: {
-    width: 290,
-    backgroundColor: '#fff',
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: DRAWER_WIDTH,
+    backgroundColor: 'rgba(255,255,255,0.82)',
     borderLeftWidth: 1,
     borderLeftColor: '#dbe4fb',
     paddingTop: 18,
@@ -198,6 +235,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 14,
+  },
+  drawerChromeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   drawerHeader: {
     flexDirection: 'row',
@@ -211,6 +252,7 @@ const styles = StyleSheet.create({
   drawerBrand: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 },
   drawerLogo: { width: 34, height: 34 },
   drawerBrandText: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
+  drawerUserMeta: { marginTop: 2, fontSize: 11, color: BrandColors.textMuted, fontWeight: '600' },
   closeBtn: {
     width: 34,
     height: 34,

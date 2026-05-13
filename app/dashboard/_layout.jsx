@@ -1,7 +1,8 @@
 import { Redirect, Stack } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 
 import { BrandColors } from '@/constants/brand';
+import { SkeletonCardGrid, SkeletonGroup, SkeletonText } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
 
 export default function DashboardRootLayout() {
@@ -9,9 +10,15 @@ export default function DashboardRootLayout() {
 
   if (!hydrated) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: BrandColors.pageBg }}>
-        <ActivityIndicator size="large" color={BrandColors.primaryMid} />
-      </View>
+      <SkeletonGroup speedMs={1700} delayMs={120}>
+        <View style={{ flex: 1, backgroundColor: BrandColors.pageBg, paddingTop: 28, paddingHorizontal: 18 }}>
+          <SkeletonText lines={2} widths={['52%', '34%']} lineH={14} />
+          <View style={{ height: 14 }} />
+          <SkeletonCardGrid cols={2} rows={2} />
+          <View style={{ height: 14 }} />
+          <SkeletonCardGrid cols={2} rows={2} />
+        </View>
+      </SkeletonGroup>
     );
   }
 
@@ -26,7 +33,6 @@ export default function DashboardRootLayout() {
         contentStyle: { backgroundColor: '#F2F4FC' },
       }}>
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="module/[id]" />
     </Stack>
   );
 }

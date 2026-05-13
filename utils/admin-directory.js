@@ -11,6 +11,29 @@ export function displayRoleFromDb(role) {
   return 'Employee';
 }
 
+/** Ladder: Employee → Team Leader → HR (promote / same level only; no demotions). */
+const PROMOTION_RANK = {
+  Employee: 0,
+  'Team Leader': 1,
+  HR: 2,
+  Admin: 3,
+};
+
+const PROMOTION_PICK_ORDER = ['Employee', 'Team Leader', 'HR'];
+
+/** Role labels shown in admin "Promote / Role" modal for the given member role. */
+export function displayRoleOptionsForPromotion(currentDisplay) {
+  if (!currentDisplay || currentDisplay === 'Pending User') return [...PROMOTION_PICK_ORDER];
+  if (currentDisplay === 'Admin') return ['Admin'];
+  const cur = PROMOTION_RANK[currentDisplay];
+  if (cur === undefined) return [...PROMOTION_PICK_ORDER];
+  return PROMOTION_PICK_ORDER.filter((label) => PROMOTION_RANK[label] >= cur);
+}
+
+export function isRolePromotionAllowed(currentDisplay, nextDisplay) {
+  return displayRoleOptionsForPromotion(currentDisplay).includes(nextDisplay);
+}
+
 /** Map modal / UI role label to API body (`approve-user`, `update-role`). */
 export function apiRoleFromDisplay(display) {
   if (display === 'Team Leader') return 'team_leader';

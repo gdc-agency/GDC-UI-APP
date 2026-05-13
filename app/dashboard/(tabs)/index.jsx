@@ -1,4 +1,4 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
@@ -6,9 +6,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
-import { getPendingUsersCount, getWorkforceCount } from '@/services/api';
+import { getMyTeamRoster, getPendingUsersCount, getWorkforceCount, listTasks } from '@/services/api';
+import { buildDashboardTaskSnapshot, countTeamEmployeesInRoster } from '@/utils/dashboard-task-stats';
 import { extractPendingUsersCount, extractWorkforceCount } from '@/utils/admin-api-response';
 import { isAdminRole } from '@/utils/roles';
 
@@ -89,9 +91,29 @@ function parseStatCount(value) {
   return null;
 }
 
-function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenProjectStatus, workforceCount, pendingUsersCount }) {
+function fmtCount(n) {
+  return n != null && Number.isFinite(Number(n)) ? String(n) : '—';
+}
+
+function RolePanel({
+  role,
+  onOpenPendingApprovals,
+  onOpenPendingLeave,
+  onOpenProjectStatus,
+  workforceCount,
+  pendingUsersCount,
+  taskBoard,
+}) {
   const wf = workforceCount != null ? String(workforceCount) : '—';
   const pend = pendingUsersCount != null ? String(pendingUsersCount) : '—';
+  const b = taskBoard || {};
+  const p = fmtCount(b.pending);
+  const ip = fmtCount(b.inProgress);
+  const rv = fmtCount(b.review);
+  const sb = fmtCount(b.submitted);
+  const ap = fmtCount(b.approved);
+  const od = fmtCount(b.overdue);
+  const tlEmp = fmtCount(b.tlTeamMemberCount);
 
   if (isAdminRole(role)) {
     return (
@@ -102,8 +124,12 @@ function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenPro
           <StatCard label="Workforce" value={wf} icon="account-group-outline" color="#2563eb" />
           <StatCard label="Active Now" value="—" icon="pulse" color="#16a34a" />
           <StatCard label="Pending Leave" value="0" icon="calendar-clock-outline" color="#f59e0b" onPress={onOpenPendingLeave} />
-          <StatCard label="Pending Tasks" value="—" icon="bullseye-arrow" color="#6366f1" />
-          <StatCard label="Overdue" value="—" icon="alert-circle-outline" color="#dc2626" />
+          <StatCard label="Pending Tasks" value={p} icon="bullseye-arrow" color="#6366f1" onPress={() => onOpenProjectStatus?.('pending')} />
+          <StatCard label="In Progress" value={ip} icon="chart-box-outline" color="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
+          <StatCard label="Review" value={rv} icon="timer-outline" color="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
+          <StatCard label="Submitted" value={sb} icon="arrow-top-right" color="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
+          <StatCard label="Approved" value={ap} icon="check-decagram" color="#10b981" onPress={() => onOpenProjectStatus?.('approved')} />
+          <StatCard label="Overdue" value={od} icon="alert-circle-outline" color="#dc2626" onPress={() => onOpenProjectStatus?.('overdue')} />
           <StatCard label="Pending Approval" value={pend} icon="shield-check-outline" color="#9333ea" onPress={onOpenPendingApprovals} />
         </View>
       </View>
@@ -117,8 +143,51 @@ function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenPro
         <Text style={styles.roleSub}>Track requests, leaves, and people operations.</Text>
         <View style={styles.hrStatGrid}>
           <HrWideCard label="TEAM MEMBERS" value="2" icon="account-group-outline" tint="#ecf3ff" iconColor="#2563eb" note="Active people in roster" />
-          <HrWideCard label="TEAM TASKS" value="0" icon="bullseye-arrow" tint="#efefff" iconColor="#6366f1" note="Open assignments today" />
-          <HrWideCard label="COMPLETED" value="0" icon="check-circle-outline" tint="#ebfaf5" iconColor="#10b981" note="Tasks closed this week" />
+          <HrWideCard
+            label="PENDING TASKS"
+            value={p}
+            icon="bullseye-arrow"
+            tint="#efefff"
+            iconColor="#6366f1"
+            note="Your visible tasks"
+            onPress={() => onOpenProjectStatus?.('pending')}
+          />
+          <HrWideCard
+            label="IN PROGRESS"
+            value={ip}
+            icon="chart-box-outline"
+            tint="#eef2ff"
+            iconColor="#4f46e5"
+            note="Your visible tasks"
+            onPress={() => onOpenProjectStatus?.('in progress')}
+          />
+          <HrWideCard
+            label="REVIEW"
+            value={rv}
+            icon="timer-outline"
+            tint="#f5f3ff"
+            iconColor="#7c3aed"
+            note="Your visible tasks"
+            onPress={() => onOpenProjectStatus?.('review')}
+          />
+          <HrWideCard
+            label="SUBMITTED"
+            value={sb}
+            icon="arrow-top-right"
+            tint="#ecfeff"
+            iconColor="#0f766e"
+            note="Your visible tasks"
+            onPress={() => onOpenProjectStatus?.('submitted')}
+          />
+          <HrWideCard
+            label="OVERDUE TASKS"
+            value={od}
+            icon="alert-circle-outline"
+            tint="#fff1f2"
+            iconColor="#e11d48"
+            note="Past deadline (pending / in progress)"
+            onPress={() => onOpenProjectStatus?.('overdue')}
+          />
           <HrWideCard
             label="PENDING LEAVE"
             value="1"
@@ -139,12 +208,19 @@ function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenPro
         <Text style={styles.roleTitle}>Team Leader Dashboard</Text>
         <Text style={styles.roleSub}>Team delivery, assignments, and member progress.</Text>
         <View style={styles.tlDashGrid}>
-          <TlDashboardCard label="EMPLOYEES" value="5" icon="account-group-outline" tint="#eff6ff" iconColor="#2563eb" onPress={() => onOpenProjectStatus?.('all')} />
-          <TlDashboardCard label="PENDING" value="1" icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} />
-          <TlDashboardCard label="IN PROGRESS" value="0" icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
-          <TlDashboardCard label="REVIEW" value="0" icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
-          <TlDashboardCard label="SUBMITTED" value="0" icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
-          <TlDashboardCard label="OVERDUE" value="1" icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} />
+          <TlDashboardCard
+            label="TEAM MEMBERS"
+            value={tlEmp}
+            icon="account-group-outline"
+            tint="#eff6ff"
+            iconColor="#2563eb"
+            onPress={() => onOpenProjectStatus?.('all')}
+          />
+          <TlDashboardCard label="PENDING" value={p} icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} />
+          <TlDashboardCard label="IN PROGRESS" value={ip} icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
+          <TlDashboardCard label="REVIEW" value={rv} icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
+          <TlDashboardCard label="SUBMITTED" value={sb} icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
+          <TlDashboardCard label="OVERDUE" value={od} icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} />
         </View>
       </View>
     );
@@ -155,22 +231,63 @@ function RolePanel({ role, onOpenPendingApprovals, onOpenPendingLeave, onOpenPro
       <Text style={styles.roleTitle}>Employee Dashboard</Text>
       <Text style={styles.roleSub}>Your work summary, activity, and tasks.</Text>
       <View style={styles.tlDashGrid}>
-        <TlDashboardCard label="PENDING" value="0" icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} />
-        <TlDashboardCard label="IN PROGRESS" value="0" icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
-        <TlDashboardCard label="REVIEW" value="0" icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
-        <TlDashboardCard label="SUBMITTED" value="0" icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
-        <TlDashboardCard label="COMPLETED" value="0" icon="check-circle-outline" tint="#ecfdf5" iconColor="#10b981" onPress={() => onOpenProjectStatus?.('completed')} />
-        <TlDashboardCard label="OVERDUE" value="0" icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} />
+        <TlDashboardCard label="PENDING" value={p} icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} />
+        <TlDashboardCard label="IN PROGRESS" value={ip} icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
+        <TlDashboardCard label="REVIEW" value={rv} icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
+        <TlDashboardCard label="SUBMITTED" value={sb} icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
+        <TlDashboardCard label="COMPLETED" value={ap} icon="check-circle-outline" tint="#ecfdf5" iconColor="#10b981" onPress={() => onOpenProjectStatus?.('completed')} />
+        <TlDashboardCard label="OVERDUE" value={od} icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} />
       </View>
     </View>
   );
 }
+
+const EMPTY_TASK_BOARD = {
+  pending: null,
+  inProgress: null,
+  review: null,
+  submitted: null,
+  approved: null,
+  overdue: null,
+  tlTeamMemberCount: null,
+};
 
 export default function DashboardHomeScreen() {
   const { user, token } = useAuth();
   const router = useRouter();
   const nowText = React.useMemo(() => new Date().toLocaleString(), []);
   const [adminStats, setAdminStats] = React.useState({ workforce: null, pendingUsers: null });
+  const [taskBoard, setTaskBoard] = React.useState(EMPTY_TASK_BOARD);
+
+  const loadDashboardTaskBoard = React.useCallback(async () => {
+    if (!token) {
+      setTaskBoard(EMPTY_TASK_BOARD);
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const rows = await listTasks(token, {});
+      const snap = buildDashboardTaskSnapshot(rows, user, today);
+      let tlTeamMemberCount = null;
+      if (user?.role === 'Team Leader') {
+        try {
+          const roster = await getMyTeamRoster(token);
+          tlTeamMemberCount = countTeamEmployeesInRoster(roster);
+        } catch (e) {
+          if (__DEV__ && e && typeof e.message === 'string') {
+            console.warn('[dashboard] TL roster fetch failed:', e.message);
+          }
+          tlTeamMemberCount = null;
+        }
+      }
+      setTaskBoard({ ...snap, tlTeamMemberCount });
+    } catch (e) {
+      if (__DEV__ && e && typeof e.message === 'string') {
+        console.warn('[dashboard] task board fetch failed:', e.message);
+      }
+      setTaskBoard(EMPTY_TASK_BOARD);
+    }
+  }, [token, user]);
 
   const loadAdminStats = useCallback(async () => {
     if (!isAdminRole(user?.role) || !token) {
@@ -194,20 +311,26 @@ export default function DashboardHomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void loadAdminStats();
-    }, [loadAdminStats]),
+      void loadDashboardTaskBoard();
+    }, [loadAdminStats, loadDashboardTaskBoard]),
   );
 
   React.useEffect(() => {
-    if (!isAdminRole(user?.role) || !token) return undefined;
-    const id = setInterval(() => void loadAdminStats(), 45000);
+    if (!token) return undefined;
+    const id = setInterval(() => {
+      void loadDashboardTaskBoard();
+      if (isAdminRole(user?.role)) void loadAdminStats();
+    }, 45000);
     return () => clearInterval(id);
-  }, [user?.role, token, loadAdminStats]);
+  }, [token, user?.role, loadDashboardTaskBoard, loadAdminStats]);
 
   const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '0001').toUpperCase()}`;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
+
+      <FloatingParticles density={1.15} style={styles.magicParticles} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, user?.role === 'Employee' && styles.heroCardEmployee]}>
@@ -252,6 +375,7 @@ export default function DashboardHomeScreen() {
           role={user?.role}
           workforceCount={adminStats.workforce}
           pendingUsersCount={adminStats.pendingUsers}
+          taskBoard={taskBoard}
           onOpenPendingApprovals={() => router.push('/dashboard/(tabs)/route/admin?tab=employees&filter=Pending')}
           onOpenPendingLeave={() => router.push('/dashboard/(tabs)/route/request-management?status=Pending')}
           onOpenProjectStatus={(status) => router.push(`/dashboard/(tabs)/route/project-manager?status=${encodeURIComponent(status)}`)}
@@ -263,6 +387,7 @@ export default function DashboardHomeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BrandColors.pageBg },
+  magicParticles: { zIndex: 0 },
   scroll: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 96, paddingTop: 4 },
   heroCard: {
     backgroundColor: '#0b4da6',

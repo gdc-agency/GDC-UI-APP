@@ -1,6 +1,6 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import React, { useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
@@ -11,6 +11,10 @@ export function DailyUpdatesSection({
   dateMode,
   setDateMode,
   user,
+  reportingYmd = '',
+  dailyScreenLoading = false,
+  dailyScreenError = null,
+  dailySaveBusy = false,
   employeeUpdate,
   setEmployeeUpdate,
   leaderSummary,
@@ -25,7 +29,14 @@ export function DailyUpdatesSection({
   summarySearch,
   setSummarySearch,
   filteredTlRows,
+  onSaveEmployeeUpdate,
+  onSaveTlTeamSummary,
+  onSaveHrNote,
 }) {
+  const [tlEmpDailyModal, setTlEmpDailyModal] = useState(
+    /** @type {{ name: string; body: string; date: string } | null} */ (null),
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
@@ -37,7 +48,7 @@ export function DailyUpdatesSection({
           <View style={{ flex: 1 }}>
             <Text style={styles.heroTitle}>Daily Updates</Text>
             <Text style={styles.heroSub}>
-              {dateMode === 'today' ? 'Today reporting' : 'Yesterday reporting'} - {new Date().toLocaleDateString()}
+              {dateMode === 'today' ? 'Today reporting' : 'Yesterday reporting'} — {reportingYmd || new Date().toLocaleDateString()}
             </Text>
           </View>
         </View>
@@ -50,6 +61,17 @@ export function DailyUpdatesSection({
             <Text style={[styles.dateChipText, dateMode === 'yesterday' && styles.dateChipTextActive]}>Yesterday</Text>
           </Pressable>
         </View>
+
+        {dailyScreenLoading ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color="#2563eb" />
+          </View>
+        ) : null}
+        {dailyScreenError ? (
+          <View style={styles.panel}>
+            <Text style={[styles.detailText, { color: '#b91c1c' }]}>{dailyScreenError}</Text>
+          </View>
+        ) : null}
 
         {user?.role === 'Employee' ? (
           <View style={styles.panel}>
@@ -64,8 +86,11 @@ export function DailyUpdatesSection({
               multiline
               textAlignVertical="top"
             />
-            <Pressable style={styles.actionBtn}>
-              <Text style={styles.actionBtnText}>Save Update</Text>
+            <Pressable
+              style={[styles.actionBtn, dailySaveBusy && styles.actionBtnDisabled]}
+              disabled={dailySaveBusy}
+              onPress={() => onSaveEmployeeUpdate?.()}>
+              <Text style={styles.actionBtnText}>{dailySaveBusy ? 'Saving…' : 'Save Update'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -96,12 +121,46 @@ export function DailyUpdatesSection({
                 ))}
               </View>
             </View>
-            {filteredTlMembers.map((m) => (
-              <View key={m.name} style={styles.rowItem}>
-                <Text style={styles.rowName}>{m.name}</Text>
-                <Text style={styles.rowStatus}>{m.status}</Text>
-              </View>
-            ))}
+            {filteredTlMembers.map((m, idx) => {
+              const key = m.memberId ? `tl-m-${m.memberId}` : `tl-n-${m.name}-${idx}`;
+              const submitted =
+                String(m.status || '').toLowerCase() === 'submitted' && String(m.updateBody || '').trim().length > 0;
+              const statusColor = submitted ? '#5b21b6' : '#64748b';
+              if (submitted) {
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setTlEmpDailyModal({ name: m.name, body: String(m.updateBody || ''), date: reportingYmd })}
+                    style={({ pressed }) => [
+                      styles.rowItem,
+                      {
+                        borderColor: '#c7d2fe',
+                        backgroundColor: pressed ? '#eef2ff' : '#fafbff',
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View daily update from ${m.name}`}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <MaterialCommunityIcons name="account-circle-outline" size={22} color="#6366f1" />
+                      <Text style={styles.rowName}>{m.name}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.rowStatus, { color: statusColor }]}>{m.status}</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
+                    </View>
+                  </Pressable>
+                );
+              }
+              return (
+                <View key={key} style={styles.rowItem}>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <MaterialCommunityIcons name="account-outline" size={22} color="#94a3b8" />
+                    <Text style={styles.rowName}>{m.name}</Text>
+                  </View>
+                  <Text style={[styles.rowStatus, { color: statusColor }]}>{m.status}</Text>
+                </View>
+              );
+            })}
             <TextInput
               value={leaderSummary}
               onChangeText={setLeaderSummary}
@@ -111,8 +170,11 @@ export function DailyUpdatesSection({
               multiline
               textAlignVertical="top"
             />
-            <Pressable style={styles.actionBtn}>
-              <Text style={styles.actionBtnText}>Save Team Summary</Text>
+            <Pressable
+              style={[styles.actionBtn, dailySaveBusy && styles.actionBtnDisabled]}
+              disabled={dailySaveBusy}
+              onPress={() => onSaveTlTeamSummary?.()}>
+              <Text style={styles.actionBtnText}>{dailySaveBusy ? 'Saving…' : 'Save Team Summary'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -149,8 +211,11 @@ export function DailyUpdatesSection({
               multiline
               textAlignVertical="top"
             />
-            <Pressable style={styles.actionBtn}>
-              <Text style={styles.actionBtnText}>Save HR Note</Text>
+            <Pressable
+              style={[styles.actionBtn, dailySaveBusy && styles.actionBtnDisabled]}
+              disabled={dailySaveBusy}
+              onPress={() => onSaveHrNote?.()}>
+              <Text style={styles.actionBtnText}>{dailySaveBusy ? 'Saving…' : 'Save HR Note'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -180,11 +245,67 @@ export function DailyUpdatesSection({
             ))}
             <View style={styles.hrNoteBox}>
               <Text style={styles.hrNoteTitle}>HR note for leadership</Text>
-              <Text style={styles.hrNoteText}>Operations are stable. No major escalations reported today.</Text>
+              <Text style={styles.hrNoteText}>{String(hrNote || '').trim() || 'No HR note for this date yet.'}</Text>
             </View>
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={tlEmpDailyModal != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTlEmpDailyModal(null)}>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setTlEmpDailyModal(null)}
+            accessibilityLabel="Dismiss dialog"
+          />
+          <View style={[styles.modalCardShell, { width: '100%', maxWidth: 400, zIndex: 1 }]} pointerEvents="box-none">
+            <View style={[styles.modalCard, { padding: 0, overflow: 'hidden' }]}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingTop: 16,
+                  paddingBottom: 10,
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#e2e8f0',
+                  backgroundColor: '#f8fafc',
+                }}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={[styles.formLabelUpper, { color: '#64748b', marginBottom: 4 }]}>Daily update</Text>
+                  <Text style={styles.detailTitle}>{tlEmpDailyModal?.name ?? ''}</Text>
+                  <Text style={styles.detailText}>
+                    {dateMode === 'today' ? 'Today' : 'Yesterday'} · {tlEmpDailyModal?.date ?? reportingYmd}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setTlEmpDailyModal(null)}
+                  hitSlop={12}
+                  style={{ padding: 4 }}
+                  accessibilityLabel="Close">
+                  <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+                </Pressable>
+              </View>
+              <ScrollView
+                style={{ maxHeight: 320 }}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 14 }}
+                showsVerticalScrollIndicator>
+                <Text style={styles.detailBody}>{String(tlEmpDailyModal?.body ?? '').trim() || '—'}</Text>
+              </ScrollView>
+              <View style={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 }}>
+                <Pressable style={styles.modalPrimaryBtn} onPress={() => setTlEmpDailyModal(null)}>
+                  <Text style={styles.actionBtnText}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

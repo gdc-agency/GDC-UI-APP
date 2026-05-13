@@ -19,7 +19,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WaveDivider } from '@/components/wave-divider';
-import { API_BASE_URL } from '@/constants/api-config';
+import { getApiBaseUrl, isLoopbackApiOnNativeDevice, isLoopbackApiOnWebDev } from '@/constants/api-config';
 import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 
@@ -97,8 +97,17 @@ export default function LoginScreen() {
             <Text style={styles.formTitle}>Sign in with email</Text>
 
             <Text style={styles.apiHint} numberOfLines={2}>
-              API: {API_BASE_URL}
+              API: {getApiBaseUrl()}
             </Text>
+            {(isLoopbackApiOnNativeDevice() || isLoopbackApiOnWebDev()) ? (
+              <View style={styles.apiWarn}>
+                <Text style={styles.apiWarnText}>
+                  {isLoopbackApiOnNativeDevice()
+                    ? 'On a real phone use your PC Wi‑Fi IP (not localhost, not 10.0.2.2). Set app.json expo.extra.apiBaseUrl to http://YOUR_IP:3000 or EXPO_PUBLIC_API_BASE_URL, same Wi‑Fi, then restart Expo.'
+                    : 'Production web needs a public or LAN API URL in app config — not localhost.'}
+                </Text>
+              </View>
+            ) : null}
 
             {error ? (
               <View style={styles.alert}>
@@ -267,8 +276,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     fontWeight: '600',
+  },
+  apiWarn: {
+    backgroundColor: '#fff7ed',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  apiWarnText: {
+    color: '#9a3412',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    textAlign: 'center',
   },
   alert: {
     backgroundColor: '#fef2f2',

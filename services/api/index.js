@@ -27,5 +27,38 @@ export {
   markNotificationRead,
   relayRealtimeNotificationEvents,
 } from '@/services/api/notifications-api';
-export { getTeams } from '@/services/api/teams-api';
+export { getMyTeamRoster, getTeams } from '@/services/api/teams-api';
+export {
+  addTaskComment,
+  approveTask,
+  createTask,
+  deleteTask,
+  forwardTaskToTeamLeader,
+  getOverdueTasksCount,
+  getPendingTasksCount,
+  getTaskAssignableUsers,
+  listTasks,
+  sendTaskToReview,
+  startTaskWork,
+  submitTask,
+  updateTask,
+} from '@/services/api/task-api';
+export {
+  getLeadershipDailyOverview,
+  getTeamLeaderDailyBundle,
+  listMyEmployeeDailyUpdates,
+  upsertHrDailySummary,
+  upsertMyEmployeeDailyUpdate,
+  upsertTeamLeaderDailySummary,
+} from '@/services/api/daily-updates-api';
+export { TaskApiError, taskApiRequest } from '@/services/api/task-http';
+export {
+  createGroupChat,
+  listChatMessages,
+  listChatThreads,
+  markChatRead,
+  openDmChat,
+  postChatMessage,
+} from '@/services/api/chat-api';
+export { ChatApiError, chatApiRequest } from '@/services/api/chat-http';
 export { apiRequest, ApiError } from '@/services/api/http';

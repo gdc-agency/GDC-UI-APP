@@ -16,28 +16,40 @@ import {
   LEAVE_REQUESTS,
   MANUAL_TIME_REQUESTS,
   MY_AVAILABILITY_LOG,
-  PROJECT_TASKS,
   TIMESHEET_LOGS,
   TIMESHEET_USERS,
-  TL_OPTIONS,
-  TL_ROWS,
 } from '@/components/dashboard/route-modules/route-detail-mock-data';
 import routeDetailStyles from '@/components/dashboard/route-modules/route-detail-styles';
-import { TeamTlSection } from '@/components/dashboard/route-modules/team-tl-section';
+import { TeamsManagementSection } from '@/components/dashboard/route-modules/teams-management-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
 import { GDC_MODULES } from '@/constants/gdc-modules';
 import { useAuth } from '@/context/auth-context';
 import {
+  approveTask as approveTaskApi,
   approveUser,
   createDepartment,
+  createTask as createTaskApi,
   deleteDepartment,
+  deleteTask as deleteTaskApi,
+  forwardTaskToTeamLeader,
   getAllUsers,
-  getAssignableUsers,
+  getLeadershipDailyOverview,
   getPendingUsersList,
+  getTaskAssignableUsers,
+  getTeamLeaderDailyBundle,
   getTeams,
   listDepartments,
+  listMyEmployeeDailyUpdates,
+  listTasks,
   rejectUser,
+  sendTaskToReview,
+  startTaskWork,
+  submitTask as submitTaskApi,
+  updateTask as updateTaskApi,
   updateUserRole,
+  upsertHrDailySummary,
+  upsertMyEmployeeDailyUpdate,
+  upsertTeamLeaderDailySummary,
 } from '@/services/api';
 import {
   isApprovedRow,
@@ -45,51 +57,25 @@ import {
   normalizeApprovedUsersList,
   normalizePendingUsersList,
 } from '@/utils/admin-api-response';
-import { apiRoleFromDisplay, mapApprovedUserRow, mapPendingUserRow } from '@/utils/admin-directory';
-import { buildTeamAssignmentRows } from '@/utils/build-team-assignments';
+import { apiRoleFromDisplay, isRolePromotionAllowed, mapApprovedUserRow, mapPendingUserRow } from '@/utils/admin-directory';
+import { buildTeamsManagementGroups } from '@/utils/build-team-assignments';
+import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
 import { isAdminOrHrRole, isAdminRole } from '@/utils/roles';
 import { normalizeTeamsList } from '@/utils/teams-api-response';
 
+/** Background refresh while Task / Daily Updates routes are open (same cadence as dashboard home). */
+const DATA_POLL_INTERVAL_MS = 45_000;
+
 // --- Mock-data helpers (temporary until backend integration) ---
-const makeMockGdcId = () => {
-  const mid = Math.floor(100000 + Math.random() * 900000);
-  const end = Math.floor(1 + Math.random() * 99)
-    .toString()
-    .padStart(2, '0');
-  return `GDC-${mid}-${end}`;
-};
 
-const DEFAULT_HR_NAME = TIMESHEET_USERS.find((u) => u.role === 'HR')?.name || 'HR';
-const DEFAULT_TL_NAME = TL_OPTIONS[0]?.name || 'Team Leader';
-
-const normalizeProjectTask = (task) => {
-  if (task.assignedRole && task.assignedToName) return task;
-  const raw = String(task.assignee || '').toLowerCase();
-  if (raw.includes('hr')) {
-    return {
-      ...task,
-      assignedRole: 'HR',
-      assignedToName: DEFAULT_HR_NAME,
-      assignee: `HR: ${DEFAULT_HR_NAME}`,
-      createdByRole: task.createdByRole || 'Admin',
-    };
-  }
-  if (raw.includes('team leader')) {
-    return {
-      ...task,
-      assignedRole: 'Team Leader',
-      assignedToName: DEFAULT_TL_NAME,
-      assignee: `TL: ${DEFAULT_TL_NAME}`,
-      createdByRole: task.createdByRole || 'Admin',
-    };
-  }
-  return {
-    ...task,
-    assignedRole: task.assignedRole || 'Employee',
-    assignedToName: task.assignedToName || task.assignee || 'Unassigned',
-    createdByRole: task.createdByRole || 'Admin',
-  };
-};
+function assignableRoleKey(roleRaw) {
+  let r = String(roleRaw || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
+  if (r === 'teamleader') r = 'team_leader';
+  return r;
+}
 
 export default function RouteDetailScreen() {
   // --- Route + auth context ---
@@ -107,42 +93,58 @@ export default function RouteDetailScreen() {
   const [employeeUpdate, setEmployeeUpdate] = useState('');
   const [leaderSummary, setLeaderSummary] = useState('');
   const [hrNote, setHrNote] = useState('');
+  const [dailyScreenLoading, setDailyScreenLoading] = useState(false);
+  const [dailyScreenError, setDailyScreenError] = useState(null);
+  const [dailyTlBundle, setDailyTlBundle] = useState(null);
+  const [dailyLeadership, setDailyLeadership] = useState(null);
+  const [dailySaveBusy, setDailySaveBusy] = useState(false);
+  const [taskSubmitNote, setTaskSubmitNote] = useState('');
+  const [taskWorkflowBusy, setTaskWorkflowBusy] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [memberStatusFilter, setMemberStatusFilter] = useState('all');
   const [summarySearch, setSummarySearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('all');
-  const [projectTasks, setProjectTasks] = useState(() => PROJECT_TASKS.map(normalizeProjectTask));
+  const [projectTasks, setProjectTasks] = useState([]);
+  const [projectTasksLoading, setProjectTasksLoading] = useState(false);
+  const [taskAssignableRaw, setTaskAssignableRaw] = useState([]);
+  const [taskAssignableLoading, setTaskAssignableLoading] = useState(false);
+  const [taskAssignableError, setTaskAssignableError] = useState(null);
   const [projectSearch, setProjectSearch] = useState('');
   const [projectStatusFilter, setProjectStatusFilter] = useState('all');
   const [projectFromDate, setProjectFromDate] = useState('');
   const [projectToDate, setProjectToDate] = useState('');
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [saveProjectTaskPhase, setSaveProjectTaskPhase] = useState('idle');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [selectedProjectTask, setSelectedProjectTask] = useState(null);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
+  const [taskAssigneeUserId, setTaskAssigneeUserId] = useState(null);
   const [taskPriority, setTaskPriority] = useState('Medium');
   const [taskStatus, setTaskStatus] = useState('Pending');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskAttachmentName, setTaskAttachmentName] = useState('');
   const [taskAttachmentUri, setTaskAttachmentUri] = useState('');
   const [forwardTlName, setForwardTlName] = useState('');
+  const [forwardTlId, setForwardTlId] = useState(null);
   const [forwardTlDropdownOpen, setForwardTlDropdownOpen] = useState(false);
   const [projectStatusMenuOpen, setProjectStatusMenuOpen] = useState(false);
-  const [teamAssignments, setTeamAssignments] = useState([]);
   const [teamAssignSearch, setTeamAssignSearch] = useState('');
   const [teamTlRosterLoading, setTeamTlRosterLoading] = useState(false);
   const [teamTlRosterError, setTeamTlRosterError] = useState(null);
+  const [teamRosterTeams, setTeamRosterTeams] = useState([]);
+  const [teamRosterUsers, setTeamRosterUsers] = useState([]);
   const [adminControlTab, setAdminControlTab] = useState('employees');
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
   const [adminRoleFilter, setAdminRoleFilter] = useState('All');
   const [adminUserSearch, setAdminUserSearch] = useState('');
   const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [adminRoleSavingTarget, setAdminRoleSavingTarget] = useState(/** @type {string | null} */ (null));
+  const [adminDirectoryActionKey, setAdminDirectoryActionKey] = useState(/** @type {string | null} */ (null));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
   const [departments, setDepartments] = useState([]);
-  const [assignablePickList, setAssignablePickList] = useState([]);
   const [newDepartment, setNewDepartment] = useState('');
   const [timesheetWindow, setTimesheetWindow] = useState('7d');
   const [tlTimesheetTab, setTlTimesheetTab] = useState('my-attendance');
@@ -243,28 +245,101 @@ export default function RouteDetailScreen() {
     fetchDepartments();
   }, [slug, adminControlTab, token, user?.role, fetchDepartments]);
 
+  const loadTaskAssignableUsers = useCallback(async () => {
+    if (!token || slug !== 'project-manager') return;
+    if (!isAdminOrHrRole(user?.role)) {
+      setTaskAssignableRaw([]);
+      setTaskAssignableError(null);
+      return;
+    }
+    setTaskAssignableLoading(true);
+    setTaskAssignableError(null);
+    try {
+      const rows = await getTaskAssignableUsers(token);
+      const list = Array.isArray(rows) ? rows : [];
+      const normalized = list
+        .map((r) => ({
+          id: Number(r.id),
+          name: String(r.name ?? r.full_name ?? r.username ?? '').trim(),
+          role: r.role,
+        }))
+        .filter((r) => Number.isFinite(r.id) && r.name);
+      setTaskAssignableRaw(normalized);
+    } catch (e) {
+      setTaskAssignableRaw([]);
+      setTaskAssignableError(e?.message ?? 'Could not load assignable users (check Task API + Auth).');
+    } finally {
+      setTaskAssignableLoading(false);
+    }
+  }, [token, slug, user?.role]);
+
+  const loadProjectTasks = useCallback(async () => {
+    if (!token || slug !== 'project-manager') return;
+    setProjectTasksLoading(true);
+    try {
+      const query = {};
+      const f = String(projectStatusFilter || 'all').toLowerCase().trim();
+      if (f === 'pending') query.status = 'pending';
+      else if (f === 'in progress') query.status = 'in_progress';
+      else if (f === 'review') query.status = 'review';
+      else if (f === 'submitted') query.status = 'submitted';
+      else if (f === 'approved') query.status = 'approved';
+      const sq = projectSearch.trim();
+      if (sq) query.q = sq;
+      const from = projectFromDate.trim();
+      const to = projectToDate.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(from)) query.from = from;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) query.to = to;
+      const rows = await listTasks(token, query);
+      setProjectTasks(rows.map(mapTaskRowToProjectTask));
+    } catch (e) {
+      Alert.alert('Tasks', e?.message ?? 'Could not load tasks');
+    } finally {
+      setProjectTasksLoading(false);
+    }
+  }, [token, slug, projectStatusFilter, projectSearch, projectFromDate, projectToDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (slug !== 'project-manager' || !token) return undefined;
+      void loadProjectTasks();
+      void loadTaskAssignableUsers();
+      return undefined;
+    }, [slug, token, loadProjectTasks, loadTaskAssignableUsers]),
+  );
+
   useEffect(() => {
-    if (slug !== 'project-manager' || !token) return;
-    if (!isAdminOrHrRole(user?.role)) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getAssignableUsers(token);
-        const rows = normalizeApprovedUsersList(res);
-        const names = rows.map((r) => r.name).filter(Boolean);
-        if (!cancelled) setAssignablePickList(names);
-      } catch {
-        if (!cancelled) setAssignablePickList([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, token, user?.role]);
+    if (slug !== 'project-manager' || !token) return undefined;
+    const id = setInterval(() => {
+      void loadProjectTasks();
+      void loadTaskAssignableUsers();
+    }, DATA_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [slug, token, loadProjectTasks, loadTaskAssignableUsers]);
+
+  useEffect(() => {
+    if (slug !== 'project-manager' || !createTaskOpen || !token || !isAdminRole(user?.role)) return;
+    void loadTaskAssignableUsers();
+  }, [createTaskOpen, slug, token, user?.role, loadTaskAssignableUsers]);
+
+  useEffect(() => {
+    if (!roleModalOpen) setAdminRoleSavingTarget(null);
+  }, [roleModalOpen]);
+
+  useEffect(() => {
+    if (!createTaskOpen) setSaveProjectTaskPhase('idle');
+  }, [createTaskOpen]);
+
+  useEffect(() => {
+    if (!selectedProjectTask) {
+      setTaskSubmitNote('');
+    }
+  }, [selectedProjectTask]);
 
   const loadTeamTlRoster = useCallback(async () => {
     if (!token || !isAdminOrHrRole(user?.role)) {
-      setTeamAssignments([]);
+      setTeamRosterTeams([]);
+      setTeamRosterUsers([]);
       setTeamTlRosterError(null);
       setTeamTlRosterLoading(false);
       return;
@@ -275,9 +350,11 @@ export default function RouteDetailScreen() {
       const [teamsRes, usersRes] = await Promise.all([getTeams(token), getAllUsers(token, { approvedOnly: true })]);
       const teams = normalizeTeamsList(teamsRes);
       const userRows = normalizeApprovedUsersList(usersRes);
-      setTeamAssignments(buildTeamAssignmentRows(teams, userRows));
+      setTeamRosterTeams(teams);
+      setTeamRosterUsers(userRows);
     } catch (e) {
-      setTeamAssignments([]);
+      setTeamRosterTeams([]);
+      setTeamRosterUsers([]);
       setTeamTlRosterError(e?.message ?? 'Could not load team roster');
     } finally {
       setTeamTlRosterLoading(false);
@@ -286,7 +363,7 @@ export default function RouteDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (slug !== 'team-tl') return;
+      if (slug !== 'team-tl' && slug !== 'team-data') return;
       void loadTeamTlRoster();
     }, [slug, loadTeamTlRoster]),
   );
@@ -314,6 +391,67 @@ export default function RouteDetailScreen() {
       setProjectStatusMenuOpen(false);
     }
   }, [params.filter, params.status, params.tab, slug]);
+  const reportingYmd = useMemo(() => {
+    const d = new Date();
+    if (dateMode === 'yesterday') d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, [dateMode]);
+
+  const loadDailyUpdatesScreen = useCallback(async () => {
+    if (!token || slug !== 'daily-updates') return;
+    setDailyScreenLoading(true);
+    setDailyScreenError(null);
+    try {
+      const role = String(user?.role || '');
+      if (role === 'Employee') {
+        const rows = await listMyEmployeeDailyUpdates(token);
+        const list = Array.isArray(rows) ? rows : [];
+        const row = list.find((r) => r && String(r.date || '').slice(0, 10) === reportingYmd);
+        setEmployeeUpdate(row && row.body != null ? String(row.body) : '');
+      } else if (role === 'Team Leader') {
+        const bundle = await getTeamLeaderDailyBundle(token, reportingYmd);
+        setDailyTlBundle(bundle && typeof bundle === 'object' ? bundle : null);
+        const sum = bundle?.team_leader_summary;
+        setLeaderSummary(sum && sum.body != null ? String(sum.body) : '');
+      } else if (role === 'HR' || isAdminRole(role)) {
+        const overview = await getLeadershipDailyOverview(token, reportingYmd);
+        setDailyLeadership(overview && typeof overview === 'object' ? overview : null);
+        const hr = overview?.hr_summary;
+        if (role === 'HR' && hr && hr.body != null) setHrNote(String(hr.body));
+        if (isAdminRole(role) && hr && hr.body != null) setHrNote(String(hr.body));
+      }
+    } catch (e) {
+      setDailyScreenError(e?.message ?? 'Could not load daily updates');
+      if (user?.role === 'Employee') setEmployeeUpdate('');
+      if (user?.role === 'Team Leader') {
+        setDailyTlBundle(null);
+        setLeaderSummary('');
+      }
+      if (user?.role === 'HR' || isAdminRole(user?.role)) {
+        setDailyLeadership(null);
+      }
+    } finally {
+      setDailyScreenLoading(false);
+    }
+  }, [token, slug, user?.role, reportingYmd]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (slug !== 'daily-updates' || !token) return undefined;
+      void loadDailyUpdatesScreen();
+      return undefined;
+    }, [slug, token, loadDailyUpdatesScreen]),
+  );
+
+  useEffect(() => {
+    if (slug !== 'daily-updates' || !token) return undefined;
+    const id = setInterval(() => void loadDailyUpdatesScreen(), DATA_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [slug, token, loadDailyUpdatesScreen]);
+
   useEffect(() => {
     Animated.timing(forwardDropdownAnim, {
       toValue: forwardTlDropdownOpen ? 1 : 0,
@@ -322,58 +460,91 @@ export default function RouteDetailScreen() {
     }).start();
   }, [forwardDropdownAnim, forwardTlDropdownOpen]);
 
-  const tlMembers = useMemo(
-    () => [
-      { name: 'Ahsan', status: 'Submitted' },
-      { name: 'Nida', status: 'Submitted' },
-      { name: 'Umair', status: 'Missing' },
-      { name: 'Rabia', status: 'Submitted' },
-    ],
-    []
-  );
+  const tlMembersFromApi = useMemo(() => {
+    if (!dailyTlBundle || typeof dailyTlBundle !== 'object') return [];
+    const members = Array.isArray(dailyTlBundle.members) ? dailyTlBundle.members : [];
+    const updates = Array.isArray(dailyTlBundle.employee_updates) ? dailyTlBundle.employee_updates : [];
+    const myUid = parseInt(String(user?.id || ''), 10);
+    const myNameNorm = String(user?.name || '')
+      .trim()
+      .toLowerCase();
+
+    return members
+      .map((m) => {
+        const midNum = m?.id != null ? parseInt(String(m.id), 10) : NaN;
+        const mid = m?.id != null ? String(m.id) : '';
+        const name = String(m.full_name ?? m.name ?? m.username ?? '').trim() || (mid ? `User ${mid}` : 'Member');
+        const u = updates.find((e) => e && String(e.userId) === mid);
+        const hasBody = u && String(u.body ?? '').trim();
+        return {
+          memberId: mid,
+          memberNumericId: Number.isFinite(midNum) ? midNum : null,
+          name,
+          status: hasBody ? 'Submitted' : 'Missing',
+          updateBody: hasBody ? String(u.body) : '',
+        };
+      })
+      .filter((row) => {
+        if (Number.isFinite(myUid) && row.memberNumericId != null && row.memberNumericId === myUid) return false;
+        if (myNameNorm && row.name.trim().toLowerCase() === myNameNorm) return false;
+        return true;
+      });
+  }, [dailyTlBundle, user?.id, user?.name]);
+
+  const leadershipRowsFromApi = useMemo(() => {
+    if (!dailyLeadership || typeof dailyLeadership !== 'object') return [];
+    const arr = Array.isArray(dailyLeadership.team_leader_summaries) ? dailyLeadership.team_leader_summaries : [];
+    return arr.map((s) => ({
+      team: String(s?.team ?? 'Team'),
+      lead: '',
+      summary: String(s?.body ?? ''),
+    }));
+  }, [dailyLeadership]);
 
   const filteredTlMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
-    let rows = tlMembers;
+    let rows = tlMembersFromApi;
     if (q) rows = rows.filter((m) => m.name.toLowerCase().includes(q));
     if (memberStatusFilter !== 'all') rows = rows.filter((m) => m.status.toLowerCase() === memberStatusFilter);
     return rows;
-  }, [tlMembers, memberSearch, memberStatusFilter]);
+  }, [tlMembersFromApi, memberSearch, memberStatusFilter]);
 
   const filteredTlRows = useMemo(() => {
     const q = summarySearch.trim().toLowerCase();
-    let rows = TL_ROWS;
+    let rows = leadershipRowsFromApi;
     if (q) rows = rows.filter((r) => `${r.team} ${r.lead} ${r.summary}`.toLowerCase().includes(q));
     return rows;
-  }, [summarySearch]);
+  }, [summarySearch, leadershipRowsFromApi]);
 
   const visibleProjectTasks = useMemo(() => {
     if (!user?.role) return projectTasks;
     if (isAdminRole(user.role)) return projectTasks;
     if (user.role === 'HR') {
-      return projectTasks.filter(
-        (task) =>
-          task.assignedRole === 'HR' ||
-          (task.forwardedBy === user.name && task.assignedRole === 'Team Leader')
-      );
+      return projectTasks;
     }
     if (user.role === 'Team Leader') {
-      return projectTasks.filter((task) => {
-        const assigneeText = String(task.assignee || '').toLowerCase();
-        // Demo-friendly TL visibility: show explicit TL tasks even if assignee name differs.
-        if (task.assignedRole === 'Team Leader' && task.assignedToName === user.name) return true;
-        if (task.assignedRole === 'Team Leader') return true;
-        if (assigneeText.includes('team leader') || assigneeText.startsWith('tl:')) return true;
-        return task.forwardedTeam && String(task.forwardedTeam).trim().length > 0;
-      });
+      return projectTasks;
     }
-    return projectTasks.filter((task) => task.assignedRole === 'Employee');
-  }, [projectTasks, user?.name, user?.role]);
+    const empUid = parseInt(String(user.id), 10);
+    if (!Number.isFinite(empUid)) return projectTasks;
+    return projectTasks.filter((task) => task.assignedToUserId === empUid);
+  }, [projectTasks, user?.id, user?.role]);
 
   const filteredProjectTasks = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
+    const f = String(projectStatusFilter || 'all').toLowerCase().trim();
     return visibleProjectTasks.filter((task) => {
-      if (projectStatusFilter !== 'all' && task.status.toLowerCase() !== projectStatusFilter) return false;
+      if (f !== 'all') {
+        if (f === 'overdue') {
+          const today = new Date().toISOString().slice(0, 10);
+          if (!task.deadline || task.deadline >= today) return false;
+          const st = String(task.status || '').toLowerCase();
+          if (!st.includes('pending') && !st.includes('progress')) return false;
+        } else if (f === 'completed') {
+          const st = String(task.status || '').toLowerCase();
+          if (!st.includes('approved') && !st.includes('submitted')) return false;
+        } else if (String(task.status || '').toLowerCase() !== f) return false;
+      }
       if (projectFromDate && task.deadline < projectFromDate) return false;
       if (projectToDate && task.deadline > projectToDate) return false;
       if (!q) return true;
@@ -391,7 +562,7 @@ export default function RouteDetailScreen() {
   const projectStatusTone = useCallback((status) => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'pending') return styles.projectStatusPending;
-    if (normalized === 'in progress') return styles.projectStatusProgress;
+    if (normalized === 'in progress' || normalized === 'working') return styles.projectStatusProgress;
     if (normalized === 'review') return styles.projectStatusReview;
     if (normalized === 'submitted') return styles.projectStatusSubmitted;
     if (normalized === 'overdue') return styles.projectStatusOverdue;
@@ -399,56 +570,76 @@ export default function RouteDetailScreen() {
     return styles.projectStatusDefault;
   }, []);
   const hrAssignableUsers = useMemo(() => {
-    if (isAdminRole(user?.role) && assignablePickList.length > 0) return assignablePickList;
-    return TIMESHEET_USERS.filter((u) => u.role === 'HR').map((u) => u.name);
-  }, [user?.role, assignablePickList]);
+    if (!isAdminRole(user?.role)) return [];
+    return taskAssignableRaw
+      .filter((u) => assignableRoleKey(u.role) === 'hr')
+      .map((u) => ({ id: u.id, name: String(u.name || '').trim() }))
+      .filter((u) => u.name);
+  }, [user?.role, taskAssignableRaw]);
 
   const tlForwardPickList = useMemo(() => {
-    if (user?.role === 'HR' && assignablePickList.length > 0) {
-      return assignablePickList.map((name) => ({ name, team: '' }));
-    }
-    return TL_OPTIONS;
-  }, [user?.role, assignablePickList]);
+    if (user?.role !== 'HR') return [];
+    return taskAssignableRaw
+      .filter((u) => assignableRoleKey(u.role) === 'team_leader')
+      .map((u) => ({
+        id: u.id,
+        name: String(u.name || '').trim(),
+        team: u.team_name != null ? String(u.team_name) : u.team != null ? String(u.team) : '',
+      }))
+      .filter((u) => u.name);
+  }, [user?.role, taskAssignableRaw]);
+
+  const myUid = parseInt(String(user?.id || ''), 10);
   const canForwardProjectTask =
-    user?.role === 'HR' && selectedProjectTask?.status === 'Pending' && selectedProjectTask?.assignedRole === 'HR';
-  const canStartProjectTask =
-    user?.role === 'Team Leader' &&
-    selectedProjectTask?.assignedRole === 'Team Leader' &&
+    user?.role === 'HR' &&
     selectedProjectTask?.status === 'Pending' &&
-    (!selectedProjectTask?.assignedToName || selectedProjectTask?.assignedToName === user?.name);
+    selectedProjectTask?.assignedRole === 'HR' &&
+    Number.isFinite(myUid) &&
+    selectedProjectTask?.assignedToUserId === myUid;
+  const canStartProjectTask =
+    (user?.role === 'Employee' || user?.role === 'Team Leader') &&
+    selectedProjectTask?.status === 'Pending' &&
+    Number.isFinite(myUid) &&
+    selectedProjectTask?.assignedToUserId === myUid;
+  const canSubmitProjectTask =
+    (user?.role === 'Employee' || user?.role === 'Team Leader') &&
+    Number.isFinite(myUid) &&
+    selectedProjectTask?.assignedToUserId === myUid &&
+    ['In Progress', 'Review'].includes(String(selectedProjectTask?.status || ''));
+  const isTlCreatedSelectedTask = selectedProjectTask?.createdByRole === 'Team Leader';
+  const isReviewerUser =
+    user?.role === 'Admin' || user?.role === 'HR' || user?.role === 'Team Leader';
+  const canReviewerActOnTlCreatedTask =
+    !isTlCreatedSelectedTask ||
+    (user?.role === 'Team Leader' && selectedProjectTask?.createdByUserId === myUid) ||
+    isAdminRole(user?.role) ||
+    user?.role === 'HR';
+  const canSendToReviewProjectTask =
+    Boolean(selectedProjectTask) &&
+    String(selectedProjectTask?.status || '') === 'Submitted' &&
+    isReviewerUser &&
+    canReviewerActOnTlCreatedTask;
+  const canApproveProjectTask =
+    Boolean(selectedProjectTask) &&
+    ['Submitted', 'Review'].includes(String(selectedProjectTask?.status || '')) &&
+    isReviewerUser &&
+    canReviewerActOnTlCreatedTask;
   const employeeNameByGdcId = useMemo(
     () => Object.fromEntries(TIMESHEET_USERS.map((entry) => [entry.gdcId, entry.name])),
     []
   );
-  const filteredTeamAssignments = useMemo(() => {
+  const teamsManagementGroups = useMemo(
+    () => buildTeamsManagementGroups(teamRosterTeams, teamRosterUsers),
+    [teamRosterTeams, teamRosterUsers],
+  );
+  const teamsFilteredByTlSearch = useMemo(() => {
     const q = teamAssignSearch.trim().toLowerCase();
-    return teamAssignments.filter((row) => {
-      if (!q) return true;
-      return `${row.employee} ${row.email ?? ''} ${row.gdcId} ${row.team} ${row.department ?? ''} ${row.role ?? ''} ${row.tl}`
-        .toLowerCase()
-        .includes(q);
+    if (!q) return teamsManagementGroups;
+    return teamsManagementGroups.filter((t) => {
+      const hay = `${t.name} ${t.leaderName} ${t.department} ${t.members.map((m) => `${m.name} ${m.email} ${m.role}`).join(' ')}`.toLowerCase();
+      return hay.includes(q);
     });
-  }, [teamAssignSearch, teamAssignments]);
-  const groupedTeamAssignments = useMemo(() => {
-    const byTl = new Map();
-    for (const row of filteredTeamAssignments) {
-      const key = row.tl || '—';
-      if (!byTl.has(key)) byTl.set(key, []);
-      byTl.get(key).push(row);
-    }
-    return [...byTl.entries()]
-      .map(([tl, members]) => {
-        const sorted = [...members].sort((a, b) => {
-          if (a.role === 'Team Leader' && b.role !== 'Team Leader') return -1;
-          if (a.role !== 'Team Leader' && b.role === 'Team Leader') return 1;
-          return String(a.employee || '').localeCompare(String(b.employee || ''));
-        });
-        const teamNames = [...new Set(sorted.map((m) => m.team))];
-        return { tl, members: sorted, teamNames };
-      })
-      .filter((g) => g.members.length > 0)
-      .sort((a, b) => a.tl.localeCompare(b.tl));
-  }, [filteredTeamAssignments]);
+  }, [teamsManagementGroups, teamAssignSearch]);
 
   const timesheetDays = useMemo(() => {
     const days = [];
@@ -855,6 +1046,7 @@ export default function RouteDetailScreen() {
   };
 
   const applyAdminRole = async (nextRoleDisplay) => {
+    if (adminRoleSavingTarget) return;
     const member = adminUsers.find((m) => m.id != null && Number(m.id) === Number(selectedAdminUserId));
     if (!member || !token) return;
     const numericId = Number(member.id);
@@ -862,11 +1054,15 @@ export default function RouteDetailScreen() {
       Alert.alert('Not allowed', 'You cannot change your own role.');
       return;
     }
-    if (member.role === 'Team Leader' && nextRoleDisplay === 'Employee') {
-      Alert.alert('Not allowed', 'A team leader cannot be assigned the Employee role.');
+    if (!isRolePromotionAllowed(member.role, nextRoleDisplay)) {
+      Alert.alert(
+        'Not allowed',
+        'Roles can only move up the ladder (Employee → Team Leader → HR). Demoting HR or Team Leader is not allowed.',
+      );
       return;
     }
     const apiRole = apiRoleFromDisplay(nextRoleDisplay);
+    setAdminRoleSavingTarget(nextRoleDisplay);
     try {
       if (member.accountStatus === 'Pending') {
         await approveUser(token, { userId: numericId, role: apiRole });
@@ -878,6 +1074,8 @@ export default function RouteDetailScreen() {
       await fetchAdminDirectory();
     } catch (e) {
       Alert.alert('Role update failed', e?.message ?? 'Could not update role');
+    } finally {
+      setAdminRoleSavingTarget(null);
     }
   };
 
@@ -895,12 +1093,16 @@ export default function RouteDetailScreen() {
         style: 'destructive',
         onPress: () => {
           void (async () => {
+            const key = `reject-${String(member.id)}`;
+            setAdminDirectoryActionKey(key);
             try {
               await rejectUser(token, { userId: Number(member.id) });
               await fetchAdminDirectory();
             } catch (e) {
               const detail = e?.name === 'ApiError' && e?.status ? `${e.message} (HTTP ${e.status})` : e?.message;
               Alert.alert('Reject failed', detail ?? 'Could not reject user');
+            } finally {
+              setAdminDirectoryActionKey((cur) => (cur === key ? null : cur));
             }
           })();
         },
@@ -946,6 +1148,8 @@ export default function RouteDetailScreen() {
 
     const runDelete = () => {
       void (async () => {
+        const key = `delete-${String(member.id)}`;
+        setAdminDirectoryActionKey(key);
         try {
           await rejectUser(token, { userId: Number(member.id) });
           await fetchAdminDirectory();
@@ -957,6 +1161,8 @@ export default function RouteDetailScreen() {
           } else {
             Alert.alert('Delete failed', line);
           }
+        } finally {
+          setAdminDirectoryActionKey((cur) => (cur === key ? null : cur));
         }
       })();
     };
@@ -1010,12 +1216,14 @@ export default function RouteDetailScreen() {
     setTaskTitle('');
     setTaskDescription('');
     setTaskAssignee('');
+    setTaskAssigneeUserId(null);
     setTaskPriority('Medium');
     setTaskStatus('Pending');
     setTaskDeadline('');
     setTaskAttachmentName('');
     setTaskAttachmentUri('');
     setForwardTlName('');
+    setForwardTlId(null);
     setEditingTaskId(null);
   };
 
@@ -1031,56 +1239,88 @@ export default function RouteDetailScreen() {
     setTaskAttachmentUri(selected.uri || '');
   };
 
-  const handleCreateProjectTask = () => {
+  const handleCreateProjectTask = async () => {
+    if (!token) return;
     const title = taskTitle.trim();
-    const assignee = taskAssignee.trim();
     const deadline = taskDeadline.trim();
-    if (!title || !assignee || !deadline) return;
-    if (editingTaskId) {
-      setProjectTasks((prev) =>
-        prev.map((task) =>
-          task.id === editingTaskId
-            ? {
-                ...task,
-                title,
-                description: taskDescription.trim() || 'No details provided.',
-                assignee: `HR: ${assignee}`,
-                assignedRole: 'HR',
-                assignedToName: assignee,
-                priority: taskPriority,
-                status: taskStatus,
-                deadline,
-                attachmentName: taskAttachmentName,
-                attachmentUri: taskAttachmentUri,
-                gdcId: task.gdcId || makeMockGdcId(),
-                createdByRole: task.createdByRole || 'Admin',
-              }
-            : task
-        )
-      );
-    } else {
-      setProjectTasks((prev) => [
-        {
-          id: `PM-${1000 + prev.length + 1}`,
-          title,
-          description: taskDescription.trim() || 'No details provided.',
-          assignee: `HR: ${assignee}`,
-          assignedRole: 'HR',
-          assignedToName: assignee,
-          priority: taskPriority,
-          status: taskStatus,
-          deadline,
-          createdAt: new Date().toISOString().slice(0, 10),
-          attachmentName: taskAttachmentName,
-          attachmentUri: taskAttachmentUri,
-          gdcId: makeMockGdcId(),
-          createdByRole: 'Admin',
-        },
-        ...prev,
-      ]);
+    if (!title || !deadline) {
+      Alert.alert('Validation', 'Title and deadline are required.');
+      return;
     }
-    setCreateTaskOpen(false);
-    resetProjectForm();
+
+    const resolveHrAssigneeId = () => {
+      if (taskAssigneeUserId != null && Number.isFinite(Number(taskAssigneeUserId))) return Number(taskAssigneeUserId);
+      const trimmed = taskAssignee.trim().toLowerCase();
+      const row = hrAssignableUsers.find((u) => String(u.name || '').trim().toLowerCase() === trimmed);
+      return row && row.id != null ? Number(row.id) : null;
+    };
+
+    if (editingTaskId) {
+      const existing = projectTasks.find((t) => t.id === editingTaskId);
+      const apiId = existing?.apiNumericId;
+      if (!Number.isFinite(apiId)) {
+        Alert.alert('Tasks', 'Cannot update this task (missing server id).');
+        return;
+      }
+      setSaveProjectTaskPhase('saving');
+      try {
+        const patch = {
+          title,
+          deadline,
+          description: taskDescription.trim() || '',
+        };
+        if (isAdminRole(user?.role)) {
+          const hid = resolveHrAssigneeId();
+          if (hid) patch.assigned_to = hid;
+        }
+        if (taskAttachmentUri) {
+          patch.attachmentUri = taskAttachmentUri;
+          patch.attachmentName = taskAttachmentName;
+        }
+        await updateTaskApi(token, apiId, patch);
+        await loadProjectTasks();
+        setSaveProjectTaskPhase('success');
+        await new Promise((r) => setTimeout(r, 480));
+        setCreateTaskOpen(false);
+        resetProjectForm();
+      } catch (e) {
+        Alert.alert('Tasks', e?.message ?? 'Update failed');
+      } finally {
+        setSaveProjectTaskPhase('idle');
+      }
+      return;
+    }
+
+    if (!isAdminRole(user?.role)) {
+      Alert.alert('Tasks', 'Only administrators can create tasks here.');
+      return;
+    }
+    const assignedTo = resolveHrAssigneeId();
+    if (!Number.isFinite(assignedTo)) {
+      Alert.alert('Assign HR', 'Choose an HR user from the Assign to HR dropdown.');
+      return;
+    }
+    setSaveProjectTaskPhase('saving');
+    try {
+      await createTaskApi(token, {
+        title,
+        assigned_to: assignedTo,
+        deadline,
+        description: taskDescription.trim() || undefined,
+        attachmentUri: taskAttachmentUri || undefined,
+        attachmentName: taskAttachmentName || undefined,
+      });
+      await loadProjectTasks();
+      setSaveProjectTaskPhase('success');
+      await new Promise((r) => setTimeout(r, 480));
+      setProjectStatusFilter('pending');
+      setCreateTaskOpen(false);
+      resetProjectForm();
+    } catch (e) {
+      Alert.alert('Tasks', e?.message ?? 'Could not create task');
+    } finally {
+      setSaveProjectTaskPhase('idle');
+    }
   };
 
   const handleEditProjectTask = (task) => {
@@ -1088,75 +1328,174 @@ export default function RouteDetailScreen() {
     setTaskTitle(task.title);
     setTaskDescription(task.description);
     setTaskAssignee(task.assignedToName || task.assignee || '');
+    setTaskAssigneeUserId(task.assignedToUserId ?? null);
     setTaskPriority(task.priority || 'Medium');
     setTaskStatus(task.status || 'Pending');
     setTaskDeadline(task.deadline);
     setTaskAttachmentName(task.attachmentName || '');
-    setTaskAttachmentUri(task.attachmentUri || '');
+    setTaskAttachmentUri('');
     setCreateTaskOpen(true);
   };
 
   const handleDeleteProjectTask = (taskId) => {
-    setProjectTasks((prev) => prev.filter((task) => task.id !== taskId));
-  };
-  const handleForwardProjectToTl = () => {
-    if (!selectedProjectTask || !forwardTlName || !canForwardProjectTask) return;
-    const selectedTl = TL_OPTIONS.find((entry) => entry.name === forwardTlName);
-    setProjectTasks((prev) =>
-      prev.map((task) =>
-        task.id === selectedProjectTask.id
-          ? {
-              ...task,
-              assignedRole: 'Team Leader',
-              assignedToName: forwardTlName,
-              assignee: `TL: ${forwardTlName}`,
-              forwardedBy: user?.name || 'HR',
-              forwardedAt: new Date().toISOString(),
-              forwardedTeam: selectedTl?.team || '',
+    if (!token) return;
+    const task = projectTasks.find((t) => t.id === taskId);
+    const apiId = task?.apiNumericId;
+    if (!Number.isFinite(apiId)) {
+      Alert.alert('Tasks', 'Cannot delete this task.');
+      return;
+    }
+    Alert.alert('Delete task', 'Remove this task permanently?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await deleteTaskApi(token, apiId);
+              await loadProjectTasks();
+              setSelectedProjectTask(null);
+            } catch (e) {
+              Alert.alert('Tasks', e?.message ?? 'Delete failed');
             }
-          : task
-      )
-    );
-    setSelectedProjectTask((prev) =>
-      prev
-        ? {
-            ...prev,
-            assignedRole: 'Team Leader',
-            assignedToName: forwardTlName,
-            assignee: `TL: ${forwardTlName}`,
-            forwardedBy: user?.name || 'HR',
-            forwardedAt: new Date().toISOString(),
-            forwardedTeam: selectedTl?.team || '',
-          }
-        : prev
-    );
-    setForwardTlName('');
-    setForwardTlDropdownOpen(false);
+          })();
+        },
+      },
+    ]);
   };
-  const handleStartProjectTask = () => {
-    if (!selectedProjectTask || !canStartProjectTask) return;
-    setProjectTasks((prev) =>
-      prev.map((task) =>
-        task.id === selectedProjectTask.id
-          ? {
-              ...task,
-              status: 'In Progress',
-              startedBy: user?.name || 'Team Leader',
-              startedAt: new Date().toISOString(),
-            }
-          : task
-      )
-    );
-    setSelectedProjectTask((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: 'In Progress',
-            startedBy: user?.name || 'Team Leader',
-            startedAt: new Date().toISOString(),
-          }
-        : prev
-    );
+
+  const handleForwardProjectToTl = async () => {
+    if (!token || !selectedProjectTask || !forwardTlId || !canForwardProjectTask) return;
+    const apiId = selectedProjectTask.apiNumericId;
+    if (!Number.isFinite(apiId)) return;
+    try {
+      await forwardTaskToTeamLeader(token, apiId, forwardTlId);
+      await loadProjectTasks();
+      setForwardTlName('');
+      setForwardTlId(null);
+      setForwardTlDropdownOpen(false);
+      setSelectedProjectTask(null);
+    } catch (e) {
+      Alert.alert('Forward task', e?.message ?? 'Could not forward');
+    }
+  };
+
+  const handleStartProjectTask = async () => {
+    if (!token || !selectedProjectTask || !canStartProjectTask) return;
+    const apiId = selectedProjectTask.apiNumericId;
+    if (!Number.isFinite(apiId)) return;
+    try {
+      setTaskWorkflowBusy(true);
+      const res = await startTaskWork(token, apiId);
+      await loadProjectTasks();
+      const raw = res && typeof res === 'object' && 'data' in res ? /** @type {{ data?: unknown }} */ (res).data : null;
+      if (raw && typeof raw === 'object') {
+        setSelectedProjectTask(mapTaskRowToProjectTask(/** @type {Record<string, unknown>} */ (raw)));
+        setTaskSubmitNote('');
+      } else {
+        setSelectedProjectTask(null);
+      }
+    } catch (e) {
+      Alert.alert('Start work', e?.message ?? 'Could not start task');
+    } finally {
+      setTaskWorkflowBusy(false);
+    }
+  };
+
+  const handleSubmitProjectTask = async () => {
+    if (!token || !selectedProjectTask || !canSubmitProjectTask) return;
+    const apiId = selectedProjectTask.apiNumericId;
+    if (!Number.isFinite(apiId)) return;
+    const note = taskSubmitNote.trim();
+    if (!note) {
+      Alert.alert('Submit task', 'Please enter a submission note.');
+      return;
+    }
+    try {
+      setTaskWorkflowBusy(true);
+      await submitTaskApi(token, apiId, note);
+      await loadProjectTasks();
+      setSelectedProjectTask(null);
+    } catch (e) {
+      Alert.alert('Submit task', e?.message ?? 'Submit failed');
+    } finally {
+      setTaskWorkflowBusy(false);
+    }
+  };
+
+  const handleSendToReviewProjectTask = async () => {
+    if (!token || !selectedProjectTask || !canSendToReviewProjectTask) return;
+    const apiId = selectedProjectTask.apiNumericId;
+    if (!Number.isFinite(apiId)) return;
+    try {
+      setTaskWorkflowBusy(true);
+      await sendTaskToReview(token, apiId);
+      await loadProjectTasks();
+      setSelectedProjectTask(null);
+    } catch (e) {
+      Alert.alert('Send to review', e?.message ?? 'Request failed');
+    } finally {
+      setTaskWorkflowBusy(false);
+    }
+  };
+
+  const handleApproveProjectTask = async () => {
+    if (!token || !selectedProjectTask || !canApproveProjectTask) return;
+    const apiId = selectedProjectTask.apiNumericId;
+    if (!Number.isFinite(apiId)) return;
+    try {
+      setTaskWorkflowBusy(true);
+      await approveTaskApi(token, apiId);
+      await loadProjectTasks();
+      setSelectedProjectTask(null);
+    } catch (e) {
+      Alert.alert('Approve task', e?.message ?? 'Approve failed');
+    } finally {
+      setTaskWorkflowBusy(false);
+    }
+  };
+
+  const handleSaveEmployeeDailyUpdate = async () => {
+    if (!token || user?.role !== 'Employee') return;
+    setDailySaveBusy(true);
+    try {
+      await upsertMyEmployeeDailyUpdate(token, { date: reportingYmd, body: employeeUpdate });
+      await loadDailyUpdatesScreen();
+      Alert.alert('Saved', 'Your daily update was saved.');
+    } catch (e) {
+      Alert.alert('Daily update', e?.message ?? 'Save failed');
+    } finally {
+      setDailySaveBusy(false);
+    }
+  };
+
+  const handleSaveTlDailySummary = async () => {
+    if (!token || user?.role !== 'Team Leader') return;
+    setDailySaveBusy(true);
+    try {
+      await upsertTeamLeaderDailySummary(token, { date: reportingYmd, body: leaderSummary });
+      await loadDailyUpdatesScreen();
+      Alert.alert('Saved', 'Team summary saved.');
+    } catch (e) {
+      Alert.alert('Team summary', e?.message ?? 'Save failed');
+    } finally {
+      setDailySaveBusy(false);
+    }
+  };
+
+  const handleSaveHrDailySummary = async () => {
+    if (!token || user?.role !== 'HR') return;
+    setDailySaveBusy(true);
+    try {
+      await upsertHrDailySummary(token, { date: reportingYmd, body: hrNote });
+      await loadDailyUpdatesScreen();
+      Alert.alert('Saved', 'HR note saved.');
+    } catch (e) {
+      Alert.alert('HR note', e?.message ?? 'Save failed');
+    } finally {
+      setDailySaveBusy(false);
+    }
   };
   const myAvailabilitySummary = useMemo(() => {
     let present = 0;
@@ -1199,6 +1538,10 @@ export default function RouteDetailScreen() {
         dateMode={dateMode}
         setDateMode={setDateMode}
         user={user}
+        reportingYmd={reportingYmd}
+        dailyScreenLoading={dailyScreenLoading}
+        dailyScreenError={dailyScreenError}
+        dailySaveBusy={dailySaveBusy}
         employeeUpdate={employeeUpdate}
         setEmployeeUpdate={setEmployeeUpdate}
         leaderSummary={leaderSummary}
@@ -1213,6 +1556,9 @@ export default function RouteDetailScreen() {
         summarySearch={summarySearch}
         setSummarySearch={setSummarySearch}
         filteredTlRows={filteredTlRows}
+        onSaveEmployeeUpdate={handleSaveEmployeeDailyUpdate}
+        onSaveTlTeamSummary={handleSaveTlDailySummary}
+        onSaveHrNote={handleSaveHrDailySummary}
       />
     );
   }
@@ -1234,6 +1580,7 @@ export default function RouteDetailScreen() {
         projectToDate={projectToDate}
         setProjectToDate={setProjectToDate}
         setCreateTaskOpen={setCreateTaskOpen}
+        projectTasksLoading={projectTasksLoading}
         filteredProjectTasks={filteredProjectTasks}
         setSelectedProjectTask={setSelectedProjectTask}
         handleEditProjectTask={handleEditProjectTask}
@@ -1247,6 +1594,8 @@ export default function RouteDetailScreen() {
         setTaskTitle={setTaskTitle}
         taskAssignee={taskAssignee}
         setTaskAssignee={setTaskAssignee}
+        taskAssigneeUserId={taskAssigneeUserId}
+        setTaskAssigneeUserId={setTaskAssigneeUserId}
         hrAssignableUsers={hrAssignableUsers}
         taskDeadline={taskDeadline}
         setTaskDeadline={setTaskDeadline}
@@ -1259,6 +1608,8 @@ export default function RouteDetailScreen() {
         canForwardProjectTask={canForwardProjectTask}
         forwardTlName={forwardTlName}
         setForwardTlName={setForwardTlName}
+        forwardTlId={forwardTlId}
+        setForwardTlId={setForwardTlId}
         forwardTlDropdownOpen={forwardTlDropdownOpen}
         setForwardTlDropdownOpen={setForwardTlDropdownOpen}
         forwardDropdownAnim={forwardDropdownAnim}
@@ -1266,6 +1617,18 @@ export default function RouteDetailScreen() {
         handleForwardProjectToTl={handleForwardProjectToTl}
         canStartProjectTask={canStartProjectTask}
         handleStartProjectTask={handleStartProjectTask}
+        taskSubmitNote={taskSubmitNote}
+        setTaskSubmitNote={setTaskSubmitNote}
+        canSubmitProjectTask={canSubmitProjectTask}
+        handleSubmitProjectTask={handleSubmitProjectTask}
+        canSendToReviewProjectTask={canSendToReviewProjectTask}
+        handleSendToReviewProjectTask={handleSendToReviewProjectTask}
+        canApproveProjectTask={canApproveProjectTask}
+        handleApproveProjectTask={handleApproveProjectTask}
+        taskWorkflowBusy={taskWorkflowBusy}
+        taskAssignableLoading={taskAssignableLoading}
+        taskAssignableError={taskAssignableError}
+        saveProjectTaskPhase={saveProjectTaskPhase}
       />
     );
   }
@@ -1353,6 +1716,7 @@ export default function RouteDetailScreen() {
       <AdminSection
         styles={styles}
         ctx={{
+          isCompactMobile,
           adminControlTab,
           setAdminControlTab,
           adminRoleFilter,
@@ -1383,6 +1747,8 @@ export default function RouteDetailScreen() {
           setSelectedAdminUserId,
           selectedAdminUser,
           applyAdminRole,
+          adminRoleSavingTarget,
+          adminDirectoryActionKey,
         }}
       />
     );
@@ -1411,8 +1777,6 @@ export default function RouteDetailScreen() {
           setRequestStatusMenuOpen,
           filteredMyManualRequests,
           filteredMyLeaveRequests,
-          setManualModalOpen,
-          setLeaveModalOpen,
           leaveModalOpen,
           setLeaveModalOpen,
           leaveType,
@@ -1447,19 +1811,30 @@ export default function RouteDetailScreen() {
     );
   }
 
+  if (slug === 'team-data') {
+    return (
+      <TeamsManagementSection
+        teams={teamsFilteredByTlSearch}
+        loading={teamTlRosterLoading}
+        error={teamTlRosterError}
+        onRetry={loadTeamTlRoster}
+        canView={isAdminOrHrRole(user?.role)}
+        searchQuery={teamAssignSearch}
+        onSearchChange={setTeamAssignSearch}
+      />
+    );
+  }
+
   if (slug === 'team-tl') {
     return (
-      <TeamTlSection
-        styles={styles}
-        teamAssignSearch={teamAssignSearch}
-        setTeamAssignSearch={setTeamAssignSearch}
-        groupedTeamAssignments={groupedTeamAssignments}
-        filteredTeamAssignments={filteredTeamAssignments}
-        teamRosterTotal={teamAssignments.length}
-        canViewTeamRoster={isAdminOrHrRole(user?.role)}
-        rosterLoading={teamTlRosterLoading}
-        rosterError={teamTlRosterError}
-        onRetryRoster={loadTeamTlRoster}
+      <TeamsManagementSection
+        teams={teamsFilteredByTlSearch}
+        loading={teamTlRosterLoading}
+        error={teamTlRosterError}
+        onRetry={loadTeamTlRoster}
+        canView={isAdminOrHrRole(user?.role)}
+        searchQuery={teamAssignSearch}
+        onSearchChange={setTeamAssignSearch}
       />
     );
   }

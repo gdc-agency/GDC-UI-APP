@@ -1,16 +1,18 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, usePathname } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 import { listNotifications } from '@/services/api';
-import { subscribeNotificationInbox } from '@/utils/notification-invalidate';
 import { mapNotificationRow, normalizeNotificationsList } from '@/utils/notification-helpers';
+import { subscribeNotificationInbox } from '@/utils/notification-invalidate';
 
 /** Content row above home indicator; total bar height = this + insets.bottom */
 const TAB_BAR_BASE_HEIGHT = 70;
@@ -49,14 +51,56 @@ function RouteSkeletonOverlay({ shimmerX, overlayStyle, cardCount }) {
 }
 
 function TabBarBackground() {
+  const ambientShift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ambientShift, {
+          toValue: 1,
+          duration: 9900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ambientShift, {
+          toValue: 0,
+          duration: 9200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [ambientShift]);
+
+  const glowOpacity = ambientShift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.22, 0.38],
+  });
+
   return (
-    <LinearGradient
-      colors={[BrandColors.splashTop, BrandColors.primary, '#0d5cbe']}
-      locations={[0, 0.45, 1]}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
-      style={styles.tabBarGradientFill}
-    />
+    <View style={styles.tabBarBgRoot} pointerEvents="none">
+      <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFillObject} />
+
+      <LinearGradient
+        colors={[BrandColors.splashTop, BrandColors.primary, '#0d5cbe']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.tabBarGradientFill}
+      />
+
+      <Animated.View style={[styles.tabBarGlowWash, { opacity: glowOpacity }]}>
+        <LinearGradient
+          colors={['rgba(53,164,255,0.40)', 'rgba(18,96,200,0.16)', 'rgba(255,255,255,0.06)']}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -67,9 +111,9 @@ function TabPillIcon({ icon, label, color, focused }) {
     Animated.spring(progress, {
       toValue: focused ? 1 : 0,
       useNativeDriver: true,
-      stiffness: 300,
-      damping: 22,
-      mass: 0.85,
+      stiffness: 900,
+      damping: 39,
+      mass: 1.45,
     }).start();
   }, [focused, progress]);
 
@@ -240,6 +284,8 @@ export default function DashboardTabsLayout() {
         />
       </Tabs>
 
+      <FloatingParticles density={1} twinkles={false} style={styles.globalParticles} />
+
       {isRouteLoading ? (
         <RouteSkeletonOverlay
           shimmerX={shimmerX}
@@ -257,6 +303,11 @@ export default function DashboardTabsLayout() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  globalParticles: {
+    zIndex: 999,
+    elevation: 999,
+    opacity: 0.9,
+  },
   skeletonOverlay: {
     position: 'absolute',
     top: 0,
@@ -319,10 +370,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.7)',
     opacity: 0.82,
   },
+  tabBarBgRoot: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: 'hidden',
+  },
   tabBarGradientFill: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
+  },
+  tabBarGlowWash: {
+    ...StyleSheet.absoluteFillObject,
   },
   tabBar: {
     position: 'absolute',

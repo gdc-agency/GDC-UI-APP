@@ -1,12 +1,26 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  LayoutAnimation,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { displayRoleOptionsForPromotion } from '@/utils/admin-directory';
 
 export function AdminSection({ styles, ctx }) {
   const {
+    isCompactMobile = false,
     adminControlTab,
     setAdminControlTab,
     adminRoleFilter,
@@ -37,16 +51,15 @@ export function AdminSection({ styles, ctx }) {
     setSelectedAdminUserId,
     selectedAdminUser,
     applyAdminRole,
+    adminRoleSavingTarget,
+    adminDirectoryActionKey,
   } = ctx;
 
-  /** Employee → can be set to Employee / TL / HR. TL → cannot be demoted to Employee (matches backend rule). */
-  const promoteRoleOptions = React.useMemo(() => {
-    const base = ['Employee', 'Team Leader', 'HR'];
-    if (selectedAdminUser?.role === 'Team Leader') {
-      return base.filter((r) => r !== 'Employee');
-    }
-    return base;
-  }, [selectedAdminUser?.role]);
+  /** Employee → TL → HR allowed; HR or TL cannot be demoted to lower roles. */
+  const promoteRoleOptions = React.useMemo(
+    () => displayRoleOptionsForPromotion(selectedAdminUser?.role),
+    [selectedAdminUser?.role],
+  );
 
   const adminTabs = [
     { id: 'employees', title: 'Employees management', icon: 'account-group-outline', color: '#4f46e5', note: 'Create employees, edit profiles, and assign roles.' },
@@ -54,6 +67,19 @@ export function AdminSection({ styles, ctx }) {
     { id: 'departments', title: 'Departments control', icon: 'office-building-outline', color: '#0d9488', note: 'Manage departments, hierarchy, and reporting lines.' },
   ];
   const activeAdminTab = adminTabs.find((tab) => tab.id === adminControlTab) ?? adminTabs[0];
+
+  React.useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  function onSelectAdminTab(tabId) {
+    if (isCompactMobile) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setAdminControlTab(tabId);
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -70,22 +96,51 @@ export function AdminSection({ styles, ctx }) {
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Admin Panels</Text>
-          <View style={styles.adminGrid}>
-            {adminTabs.map((tab) => (
-              <Pressable key={tab.id} onPress={() => setAdminControlTab(tab.id)} style={[styles.adminCard, adminControlTab === tab.id && styles.adminCardActive]}>
-                <View style={[styles.adminIconWrap, { backgroundColor: `${tab.color}22` }]}>
-                  <MaterialCommunityIcons name={tab.icon} size={20} color={tab.color} />
-                </View>
-                <Text style={styles.adminCardTitle}>{tab.title}</Text>
-                <MaterialCommunityIcons
-                  name={adminControlTab === tab.id ? 'check-circle' : 'chevron-right-circle-outline'}
-                  size={20}
-                  color={adminControlTab === tab.id ? '#2563eb' : '#94a3b8'}
-                  style={styles.adminCardStatusIcon}
-                />
-              </Pressable>
-            ))}
-          </View>
+          {isCompactMobile ? (
+            <View style={styles.adminTabBar}>
+              <View style={styles.adminTabRow}>
+                {adminTabs.map((tab) => {
+                  const active = adminControlTab === tab.id;
+                  return (
+                    <Pressable
+                      key={tab.id}
+                      onPress={() => onSelectAdminTab(tab.id)}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: active }}
+                      style={[styles.adminTabIconCell, active && styles.adminTabIconCellActive]}>
+                      <View style={[styles.adminTabIconCircle, { backgroundColor: `${tab.color}22` }]}>
+                        <MaterialCommunityIcons name={tab.icon} size={22} color={tab.color} />
+                      </View>
+                      {active ? <View style={styles.adminTabUnderline} /> : <View style={styles.adminTabUnderlineSpacer} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.adminTabActiveLabel} numberOfLines={1}>
+                {activeAdminTab.title}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.adminGrid}>
+              {adminTabs.map((tab) => (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => onSelectAdminTab(tab.id)}
+                  style={[styles.adminCard, adminControlTab === tab.id && styles.adminCardActive]}>
+                  <View style={[styles.adminIconWrap, { backgroundColor: `${tab.color}22` }]}>
+                    <MaterialCommunityIcons name={tab.icon} size={20} color={tab.color} />
+                  </View>
+                  <Text style={styles.adminCardTitle}>{tab.title}</Text>
+                  <MaterialCommunityIcons
+                    name={adminControlTab === tab.id ? 'check-circle' : 'chevron-right-circle-outline'}
+                    size={20}
+                    color={adminControlTab === tab.id ? '#2563eb' : '#94a3b8'}
+                    style={styles.adminCardStatusIcon}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         {activeAdminTab.id === 'employees' ? (
@@ -144,24 +199,41 @@ export function AdminSection({ styles, ctx }) {
                 <Text style={styles.adminMemberMeta}>{member.team || 'No team assigned'}</Text>
                 {member.accountStatus === 'Pending' ? <Text style={styles.adminAwaitingText}>Awaiting approval</Text> : null}
                 <View style={styles.adminActionRow}>
-                  <Pressable style={[styles.adminPromoteBtn, { flex: 1 }]} onPress={() => openRoleModal(member)}>
+                  <Pressable
+                    style={styles.adminPromoteBtn}
+                    disabled={Boolean(adminDirectoryActionKey)}
+                    onPress={() => openRoleModal(member)}>
                     <MaterialCommunityIcons name="account-arrow-up-outline" size={14} color="#fff" />
                     <Text style={styles.adminPromoteText}>Promote / Role</Text>
                   </Pressable>
                   {member.accountStatus === 'Pending' ? (
-                    <Pressable style={styles.adminRejectBtn} onPress={() => rejectAdminUser(member)}>
-                      <MaterialCommunityIcons name="close-circle-outline" size={16} color="#dc2626" />
-                      <Text style={styles.adminRejectText}>Reject</Text>
+                    <Pressable
+                      style={styles.adminRejectBtn}
+                      disabled={Boolean(adminDirectoryActionKey)}
+                      onPress={() => rejectAdminUser(member)}>
+                      {adminDirectoryActionKey === `reject-${String(member.id)}` ? (
+                        <ActivityIndicator size="small" color="#dc2626" />
+                      ) : (
+                        <>
+                          <MaterialCommunityIcons name="close-circle-outline" size={16} color="#dc2626" />
+                          <Text style={styles.adminRejectText}>Reject</Text>
+                        </>
+                      )}
                     </Pressable>
                   ) : (
                     <TouchableOpacity
                       style={[styles.adminDeleteBtn, Platform.OS === 'web' ? { cursor: 'pointer' } : undefined]}
                       activeOpacity={0.75}
+                      disabled={Boolean(adminDirectoryActionKey)}
                       hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                       accessibilityRole="button"
                       accessibilityLabel="Delete user"
                       onPress={() => deleteApprovedDirectoryUser(member)}>
-                      <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
+                      {adminDirectoryActionKey === `delete-${String(member.id)}` ? (
+                        <ActivityIndicator size="small" color="#ef4444" />
+                      ) : (
+                        <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -268,6 +340,7 @@ export function AdminSection({ styles, ctx }) {
         transparent
         animationType="fade"
         onRequestClose={() => {
+          if (adminRoleSavingTarget) return;
           setRoleModalOpen(false);
           setSelectedAdminUserId(null);
         }}>
@@ -279,9 +352,11 @@ export function AdminSection({ styles, ctx }) {
               </View>
               <Pressable
                 onPress={() => {
+                  if (adminRoleSavingTarget) return;
                   setRoleModalOpen(false);
                   setSelectedAdminUserId(null);
-                }}>
+                }}
+                disabled={Boolean(adminRoleSavingTarget)}>
                 <MaterialCommunityIcons name="close" size={20} color="#94a3b8" />
               </Pressable>
             </View>
@@ -290,8 +365,23 @@ export function AdminSection({ styles, ctx }) {
             <Text style={styles.adminRoleUserId}>{selectedAdminUser?.gdcId ?? ''}</Text>
             <View style={{ marginTop: 10, gap: 8 }}>
               {promoteRoleOptions.map((roleOption) => (
-                <Pressable key={roleOption} style={styles.adminRoleOption} onPress={() => applyAdminRole(roleOption)}>
-                  <Text style={styles.adminRoleOptionText}>{roleOption}</Text>
+                <Pressable
+                  key={roleOption}
+                  style={[styles.adminRoleOption, adminRoleSavingTarget === roleOption && { opacity: 0.92 }]}
+                  disabled={Boolean(adminRoleSavingTarget)}
+                  onPress={() => applyAdminRole(roleOption)}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    {adminRoleSavingTarget === roleOption ? (
+                      <ActivityIndicator size="small" color="#2563eb" />
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.adminRoleOptionText,
+                        adminRoleSavingTarget && adminRoleSavingTarget !== roleOption ? { opacity: 0.4 } : undefined,
+                      ]}>
+                      {roleOption}
+                    </Text>
+                  </View>
                 </Pressable>
               ))}
             </View>

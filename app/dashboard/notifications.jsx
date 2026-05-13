@@ -1,4 +1,4 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandColors } from '@/constants/brand';
+import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
 import {
   clearAllNotifications,
@@ -230,9 +231,13 @@ export default function NotificationsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={BrandColors.primaryMid} />
-        </View>
+        <SkeletonGroup speedMs={1650} delayMs={160}>
+          <View style={styles.skeletonWrap}>
+            {Array.from({ length: 8 }, (_, i) => (
+              <SkeletonListRow key={`n-skel-${i}`} />
+            ))}
+          </View>
+        </SkeletonGroup>
       ) : (
         <FlatList
           data={items}
@@ -311,6 +316,7 @@ const styles = StyleSheet.create({
   toolbarLinkDisabled: { opacity: 0.4 },
   list: { paddingVertical: 8, paddingHorizontal: 12, paddingBottom: 100 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  skeletonWrap: { paddingBottom: 100 },
   empty: { textAlign: 'center', marginTop: 40, color: BrandColors.textMuted, fontSize: 15, paddingHorizontal: 24 },
   row: {
     flexDirection: 'row',
