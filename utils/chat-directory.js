@@ -39,6 +39,22 @@ export function mapDirectoryUser(id, u) {
   return { id: sid, displayName, roleLabel, avatarUrl };
 }
 
+// NEW CODE ADDED FOR CHAT LIST NAME LOADING — prefer directory name over "Chat" placeholder
+/** Prefer directory peer name when thread still has the "Chat" placeholder. */
+export function resolveChatPeerDisplayName(thread, peer) {
+  const stored = String(thread?.headerName || thread?.listTitle || thread?.name || '').trim();
+  const peerName = String(peer?.displayName || '').trim();
+  if (stored && stored !== 'Chat') return stored;
+  return peerName || '';
+}
+
+// NEW CODE ADDED FOR CHAT LIST NAME LOADING — text fallback instead of skeleton bar
+/** @param {string} name @param {string | undefined} peerId */
+export function isChatDisplayNamePending(name, peerId) {
+  const n = String(name || '').trim();
+  return (!n || n === 'Chat') && !!peerId;
+}
+
 /**
  * @param {number} bytes
  */

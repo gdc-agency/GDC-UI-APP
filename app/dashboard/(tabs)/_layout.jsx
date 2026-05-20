@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HapticTab } from '@/components/haptic-tab';
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
+import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
 import { useAuth } from '@/context/auth-context';
 import { listNotifications } from '@/services/api';
 import { mapNotificationRow, normalizeNotificationsList } from '@/utils/notification-helpers';
@@ -154,8 +155,9 @@ function TabPillIcon({ icon, label, color, focused }) {
   );
 }
 
-export default function DashboardTabsLayout() {
+function DashboardTabsLayoutInner() {
   const pathname = usePathname();
+  const { inConversation } = useChatChrome();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
@@ -284,7 +286,7 @@ export default function DashboardTabsLayout() {
         />
       </Tabs>
 
-      <FloatingParticles density={1} twinkles={false} style={styles.globalParticles} />
+      {!inConversation ? <FloatingParticles density={1} twinkles={false} style={styles.globalParticles} /> : null}
 
       {isRouteLoading ? (
         <RouteSkeletonOverlay
@@ -298,6 +300,14 @@ export default function DashboardTabsLayout() {
         />
       ) : null}
     </View>
+  );
+}
+
+export default function DashboardTabsLayout() {
+  return (
+    <ChatChromeProvider>
+      <DashboardTabsLayoutInner />
+    </ChatChromeProvider>
   );
 }
 

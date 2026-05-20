@@ -28,6 +28,10 @@ export function ensureGdcSocketConnected(token, userId) {
     socket.on('connect', () => {
       socket?.emit('register', { userId: uid });
     });
+    // NEW CODE ADDED FOR REAL-TIME MESSAGE RENDERING — re-register after reconnect (production-safe)
+    socket.on('reconnect', () => {
+      socket?.emit('register', { userId: uid });
+    });
   } else {
     socket.auth = token ? { token } : {};
     if (socket.connected) {

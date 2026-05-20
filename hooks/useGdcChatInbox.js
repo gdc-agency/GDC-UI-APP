@@ -22,6 +22,33 @@ import { readLocalUriAsDataUrl } from '@/utils/chat-attachment-read';
 
 const HIDDEN_CHAT_IDS_PREFIX = 'gdc_chat_hidden_threads:';
 const HIDDEN_MESSAGE_IDS_PREFIX = 'gdc_chat_hidden_messages:';
+const DIRECTORY_CACHE_PREFIX = 'gdc_chat_directory_cache:';
+
+function isTempMessageId(id) {
+  return String(id || '').startsWith('temp-');
+}
+
+/** Keep optimistic/pending messages when merging server history. */
+function mergeMessagesWithLocal(serverMessages, localMessages) {
+  const byId = new Map();
+  for (const m of serverMessages) byId.set(String(m.id), m);
+  for (const m of localMessages) {
+    const id = String(m.id);
+    if (isTempMessageId(id)) {
+      byId.set(id, m);
+      continue;
+    }
+    if (!byId.has(id)) byId.set(id, m);
+  }
+  return sortChatMessages([...byId.values()]);
+}
+
+function reconcileOutgoingMessage(messages, tempId, confirmedUi) {
+  const filtered = messages.filter(
+    (m) => m.id !== tempId && m.id !== confirmedUi.id && !(isTempMessageId(m.id) && m.me),
+  );
+  return mergeMessageList(filtered, confirmedUi);
+}
 
 function normalizeRoleKey(role) {
   return String(role || '')
@@ -78,7 +105,7 @@ function formatMsgTime(iso) {
   try {
     const d = new Date(String(iso));
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
   } catch {
     return '';
   }
@@ -110,7 +137,7 @@ function mapApiMessageToUi(m, myUserId) {
   const authorId = String(m.authorId ?? '');
   const readBy = Array.isArray(m.readByUserIds) ? m.readByUserIds.map(String) : [];
   const othersRead = readBy.some((id) => id && id !== String(myUserId));
-  const myMessageStatus = othersRead ? 'seen' : 'delivered';
+  const myMessageStatus = othersRead ? 'seen' : 'delivered'; // loaded history: delivered until read
   const attachment = m.attachment && typeof m.attachment === 'object' ? m.attachment : null;
   const mime = attachment && typeof attachment.mimeType === 'string' ? attachment.mimeType : '';
   const isImage = mime.startsWith('image/') && attachment && typeof attachment.dataUrl === 'string';
@@ -140,6 +167,7 @@ function mapApiMessageToUi(m, myUserId) {
       replyToId: m.replyToId ? String(m.replyToId) : '',
       forwardedFrom: m.forwardedFrom && typeof m.forwardedFrom === 'object' ? m.forwardedFrom : null,
       status: authorId === String(myUserId) ? myMessageStatus : undefined,
+      readByUserIds: readBy,
     };
   }
   if (attachment && fileName) {
@@ -159,6 +187,7 @@ function mapApiMessageToUi(m, myUserId) {
       replyToId: m.replyToId ? String(m.replyToId) : '',
       forwardedFrom: m.forwardedFrom && typeof m.forwardedFrom === 'object' ? m.forwardedFrom : null,
       status: authorId === String(myUserId) ? myMessageStatus : undefined,
+      readByUserIds: readBy,
     };
   }
   return {
@@ -173,6 +202,7 @@ function mapApiMessageToUi(m, myUserId) {
     replyToId: m.replyToId ? String(m.replyToId) : '',
     forwardedFrom: m.forwardedFrom && typeof m.forwardedFrom === 'object' ? m.forwardedFrom : null,
     status: authorId === String(myUserId) ? myMessageStatus : undefined,
+    readByUserIds: readBy,
   };
 }
 
@@ -200,12 +230,12 @@ function buildThreadDisplay(server, myId, directory) {
   const members = Array.isArray(server.memberIds) ? server.memberIds.map(String) : [];
   const otherId = members.find((id) => id && id !== String(myId)) || '';
   const dir = otherId ? directory[otherId] : null;
-  const displayName = dir?.displayName || namePreset.trim() || 'Chat';
+  // NEW CODE ADDED FOR CHAT LIST NAME LOADING — avoid sticky "Chat" placeholder for DMs
+  const displayName = dir?.displayName || namePreset.trim() || '';
   const roleLabel = dir?.roleLabel || '';
-  const listTitle = roleLabel ? `${displayName} (${roleLabel})` : displayName;
   return {
-    listTitle,
-    headerName: displayName,
+    listTitle: displayName || (otherId ? '' : 'Chat'),
+    headerName: displayName || (otherId ? '' : 'Chat'),
     headerRole: roleLabel,
     listAvatarUrl: dir?.avatarUrl || null,
       peerId: otherId,
@@ -231,9 +261,17 @@ export function useGdcChatInbox({ token, user }) {
     /** @type {Record<string, Set<string>>} */ ({}),
   );
   const [inboxLoading, setInboxLoading] = useState(false);
+  const [directoryHydrated, setDirectoryHydrated] = useState(false);
   const [inboxError, setInboxError] = useState(/** @type {string | null} */ (null));
   const silentRefreshTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
   const typingClearTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const readAckTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const lastReadAckChatRef = useRef('');
+  const scheduleMarkChatReadRef = useRef(/** @type {((chatId: string) => void) | null} */ (null));
+  const flushMarkChatReadRef = useRef(/** @type {(chatId: string) => Promise<void>} */ (async () => {}));
+  const applySeenToThreadRef = useRef(/** @type {(thread: Record<string, unknown>, readerId?: string) => Record<string, unknown>} */ ((t) => t));
+  const typingEmitTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const lastTypingEmitRef = useRef(/** @type {{ chatId: string; typing: boolean } | null} */ (null));
   const [typingPeerId, setTypingPeerId] = useState(/** @type {string | null} */ (null));
   const hiddenChatIdsRef = useRef(hiddenChatIds);
   const hiddenMessageIdsByChatRef = useRef(hiddenMessageIdsByChat);
@@ -255,6 +293,29 @@ export function useGdcChatInbox({ token, user }) {
     if (hiddenChatIds.size === 0) return;
     setThreads((prev) => prev.filter((t) => !hiddenChatIds.has(String(t.id))));
   }, [hiddenChatIds]);
+
+  // NEW CODE ADDED FOR CHAT LIST NAME LOADING — hydrate directory from cache before network
+  useEffect(() => {
+    if (!myId) {
+      setDirectoryHydrated(false);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(storageKey(DIRECTORY_CACHE_PREFIX, myId));
+        const parsed = cached ? JSON.parse(cached) : [];
+        if (cancelled || !Array.isArray(parsed) || !parsed.length) return;
+        setDirectoryRows(parsed);
+        setDirectoryHydrated(true);
+      } catch {
+        /* cache optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,9 +377,23 @@ export function useGdcChatInbox({ token, user }) {
     if (!token || !user) {
       setContacts([]);
       setDirectoryRows([]);
+      setDirectoryHydrated(false);
       return;
     }
     try {
+      if (myId) {
+        try {
+          const cached = await AsyncStorage.getItem(storageKey(DIRECTORY_CACHE_PREFIX, myId));
+          const parsed = cached ? JSON.parse(cached) : [];
+          if (Array.isArray(parsed) && parsed.length) {
+            setDirectoryRows(parsed);
+            setContacts(parsed);
+            setDirectoryHydrated(true);
+          }
+        } catch {
+          /* cache optional */
+        }
+      }
       const mapRows = (items) =>
         (Array.isArray(items) ? items : [])
           .map((u) => {
@@ -366,11 +441,19 @@ export function useGdcChatInbox({ token, user }) {
       const mergedDirectory = new Map();
       for (const row of allDirectoryRows) mergedDirectory.set(row.id, row);
       for (const row of rows) mergedDirectory.set(row.id, row);
-      setDirectoryRows([...mergedDirectory.values()]);
+      const mergedList = [...mergedDirectory.values()];
+      setDirectoryRows(mergedList);
       setContacts(rows);
+      setDirectoryHydrated(true);
+      if (myId) {
+        void AsyncStorage.setItem(storageKey(DIRECTORY_CACHE_PREFIX, myId), JSON.stringify(mergedList)).catch(
+          () => {},
+        );
+      }
     } catch {
       setContacts([]);
       setDirectoryRows([]);
+      setDirectoryHydrated(true);
     }
   }, [token, user, myId]);
 
@@ -530,7 +613,9 @@ export function useGdcChatInbox({ token, user }) {
             const merged = sortChatMessages([...existing, ...ui.filter((n) => !existing.some((e) => e.id === n.id))]);
             return { ...t, messages: merged, messagesHasMore: hasMore, messagesLoadingOlder: false };
           }
-          return { ...t, messages: ui, messagesHasMore: hasMore, messagesLoadingOlder: false };
+          const existing = Array.isArray(t.messages) ? t.messages : [];
+          const merged = mergeMessagesWithLocal(ui, existing);
+          return { ...t, messages: merged, messagesHasMore: hasMore, messagesLoadingOlder: false };
         }),
       );
     },
@@ -556,18 +641,108 @@ export function useGdcChatInbox({ token, user }) {
     [token, loadMessagesForChat],
   );
 
+  const patchThreadDisplayFromDirectory = useCallback(
+    (chatId) => {
+      const id = String(chatId || '').trim();
+      if (!id) return;
+      setThreads((prev) =>
+        prev.map((t) => {
+          if (String(t.id) !== id) return t;
+          const server = t.server && typeof t.server === 'object' ? t.server : {};
+          const display = buildThreadDisplay(server, myId, userDirectoryById);
+          return {
+            ...t,
+            name: display.listTitle,
+            listTitle: display.listTitle,
+            headerName: display.headerName,
+            headerRole: display.headerRole,
+            listAvatarUrl: display.listAvatarUrl,
+            peerId: display.peerId || t.peerId || '',
+            isOnline: display.peerId ? onlineUserIds.has(display.peerId) : t.isOnline,
+          };
+        }),
+      );
+    },
+    [myId, onlineUserIds, userDirectoryById],
+  );
+
+  const applySeenToThread = useCallback((thread, readerId) => {
+    const reader = String(readerId || '').trim();
+    const messages = (Array.isArray(thread.messages) ? thread.messages : []).map((m) => {
+      if (!m.me || m.status === 'seen') return m;
+      const readBy = Array.isArray(m.readByUserIds) ? [...m.readByUserIds] : [];
+      if (reader && !readBy.includes(reader)) readBy.push(reader);
+      return { ...m, status: 'seen', readByUserIds: readBy };
+    });
+    const preview =
+      thread.threadPreview?.me && thread.threadPreview.status !== 'seen'
+        ? { ...thread.threadPreview, status: 'seen' }
+        : thread.threadPreview;
+    return { ...thread, messages, threadPreview: preview };
+  }, []);
+
+  // NEW CODE ADDED FOR REAL-TIME SEEN TICK FIX — socket fallback when HTTP relay is unavailable
+  const emitMessageSeenSocket = useCallback(
+    (chatId) => {
+      const id = String(chatId || '').trim();
+      if (!id || !myId) return;
+      const sock = getGdcSocket();
+      if (!sock?.connected) return;
+      const body = { chatId: id, readerId: String(myId), at: Date.now() };
+      sock.emit('message_seen', body);
+    },
+    [myId],
+  );
+
+  const flushMarkChatRead = useCallback(
+    async (chatId) => {
+      const id = String(chatId || '').trim();
+      if (!token || !id || selectedChatIdRef.current !== id) return;
+      try {
+        await markChatRead(token, id);
+        emitMessageSeenSocket(id);
+      } catch {
+        emitMessageSeenSocket(id);
+      }
+    },
+    [token, emitMessageSeenSocket],
+  );
+
+  useEffect(() => {
+    applySeenToThreadRef.current = applySeenToThread;
+  }, [applySeenToThread]);
+
+  useEffect(() => {
+    flushMarkChatReadRef.current = flushMarkChatRead;
+  }, [flushMarkChatRead]);
+
+  // NEW CODE ADDED FOR REAL-TIME SEEN TICK FIX — debounced read ack while receiver has chat open
+  scheduleMarkChatReadRef.current = (chatId) => {
+    const id = String(chatId || '').trim();
+    if (!token || !id || selectedChatIdRef.current !== id) return;
+    if (readAckTimerRef.current) clearTimeout(readAckTimerRef.current);
+    readAckTimerRef.current = setTimeout(() => {
+      readAckTimerRef.current = null;
+      lastReadAckChatRef.current = id;
+      void flushMarkChatReadRef.current(id);
+    }, 200);
+  };
+
   const openChat = useCallback(
     async (chatId) => {
       if (!token || !chatId) return;
       selectedChatIdRef.current = chatId;
       setTypingPeerId(null);
+      patchThreadDisplayFromDirectory(chatId);
       const sock = ensureGdcSocketConnected(token, myId);
       sock?.emit('joinRoom', chatId);
-      void markChatRead(token, chatId).catch(() => {});
+      lastReadAckChatRef.current = '';
+      await flushMarkChatReadRef.current(chatId);
       await loadMessagesForChat(chatId);
+      patchThreadDisplayFromDirectory(chatId);
       setThreads((prev) => prev.map((t) => (t.id === chatId ? { ...t, unread: 0 } : t)));
     },
-    [token, myId, loadMessagesForChat],
+    [token, myId, loadMessagesForChat, patchThreadDisplayFromDirectory],
   );
 
   const startDm = useCallback(
@@ -639,15 +814,12 @@ export function useGdcChatInbox({ token, user }) {
         });
         if (!msg || typeof msg !== 'object') return;
         getGdcSocket()?.emit('sendMessage', { chatId, message: msg });
-        const ui = mapApiMessageToUi(msg, myId);
+        const ui = { ...mapApiMessageToUi(msg, myId), status: 'sent' };
         setThreads((prev) =>
           prev.map((t) => {
             if (t.id !== chatId) return t;
             const msgs = Array.isArray(t.messages) ? t.messages : [];
-            const next = mergeMessageList(
-              msgs.filter((m) => m.id !== tempId && m.id !== ui.id),
-              ui,
-            );
+            const next = reconcileOutgoingMessage(msgs, tempId, ui);
             return { ...t, messages: next, threadPreview: ui };
           }),
         );
@@ -655,7 +827,12 @@ export function useGdcChatInbox({ token, user }) {
         setThreads((prev) =>
           prev.map((t) =>
             t.id === chatId
-              ? { ...t, messages: (Array.isArray(t.messages) ? t.messages : []).filter((m) => m.id !== tempId) }
+              ? {
+                  ...t,
+                  messages: (Array.isArray(t.messages) ? t.messages : []).map((m) =>
+                    m.id === tempId ? { ...m, status: 'failed' } : m,
+                  ),
+                }
               : t,
           ),
         );
@@ -666,35 +843,31 @@ export function useGdcChatInbox({ token, user }) {
   );
 
   const sendAttachment = useCallback(
-    async (chatId, { uri, mimeType, fileName }, opts = {}) => {
+    async (chatId, { uri, mimeType, fileName, sizeBytes: hintedSize }, opts = {}) => {
       const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
       if (!token || !chatId || !uri) throw new Error('Missing attachment data');
-      onProgress(0.08);
-      const { dataUrl, byteLength } = await readLocalUriAsDataUrl(uri, mimeType, fileName);
-      onProgress(0.45);
       const safeName = fileName && String(fileName).trim() ? String(fileName).trim() : 'file';
       const mime = mimeType && String(mimeType).trim() ? String(mimeType).trim() : 'application/octet-stream';
-      const attachment = {
-        mimeType: mime,
-        fileName: safeName,
-        dataUrl,
-        sizeBytes: byteLength,
-      };
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const nowIso = new Date().toISOString();
       const nowMs = Date.now();
       const isImg = mime.startsWith('image/');
+      const sizeHint =
+        typeof hintedSize === 'number' && Number.isFinite(hintedSize) && hintedSize >= 0
+          ? formatFileSize(hintedSize)
+          : '';
+      // NEW CODE ADDED FOR ATTACHMENT UI — show final image/file bubble immediately (no loading placeholder)
       const optimisticUi = isImg
         ? {
             id: tempId,
             me: true,
             type: 'image',
             text: 'Photo',
-            uri: dataUrl,
+            uri: String(uri),
             time: formatMsgTime(nowIso),
             createdAtIso: nowIso,
             createdAtMs: nowMs,
-            status: 'sending',
+            status: 'sent',
           }
         : {
             id: tempId,
@@ -702,12 +875,12 @@ export function useGdcChatInbox({ token, user }) {
             type: 'file',
             text: 'Document',
             fileName: safeName,
-            fileSizeLabel: formatFileSize(byteLength),
-            uri: dataUrl,
+            fileSizeLabel: sizeHint,
+            uri: String(uri),
             time: formatMsgTime(nowIso),
             createdAtIso: nowIso,
             createdAtMs: nowMs,
-            status: 'sending',
+            status: 'sent',
           };
       setThreads((prev) =>
         prev.map((t) =>
@@ -720,20 +893,25 @@ export function useGdcChatInbox({ token, user }) {
             : t,
         ),
       );
-      onProgress(0.72);
+      onProgress(0.08);
+      const { dataUrl, byteLength } = await readLocalUriAsDataUrl(uri, mimeType, fileName);
+      onProgress(0.45);
+      const attachment = {
+        mimeType: mime,
+        fileName: safeName,
+        dataUrl,
+        sizeBytes: byteLength,
+      };
       try {
         const msg = await postChatMessage(token, chatId, { body: '', attachment });
         if (!msg || typeof msg !== 'object') return;
         getGdcSocket()?.emit('sendMessage', { chatId, message: msg });
-        const ui = mapApiMessageToUi(msg, myId);
+        const ui = { ...mapApiMessageToUi(msg, myId), status: 'sent' };
         setThreads((prev) =>
           prev.map((t) => {
             if (t.id !== chatId) return t;
             const msgs = Array.isArray(t.messages) ? t.messages : [];
-            const next = mergeMessageList(
-              msgs.filter((m) => m.id !== tempId && m.id !== ui.id),
-              ui,
-            );
+            const next = reconcileOutgoingMessage(msgs, tempId, ui);
             return { ...t, messages: next, threadPreview: ui };
           }),
         );
@@ -755,7 +933,40 @@ export function useGdcChatInbox({ token, user }) {
   const emitChatTyping = useCallback((chatId, typing) => {
     const id = chatId != null ? String(chatId).trim() : '';
     if (!id) return;
-    getGdcSocket()?.emit('chatTyping', { chatId: id, typing: !!typing });
+    const next = { chatId: id, typing: !!typing };
+    const prev = lastTypingEmitRef.current;
+    if (prev && prev.chatId === next.chatId && prev.typing === next.typing) return;
+
+    const fire = () => {
+      lastTypingEmitRef.current = next;
+      getGdcSocket()?.emit('chatTyping', next);
+    };
+
+    if (typingEmitTimerRef.current) clearTimeout(typingEmitTimerRef.current);
+    if (!next.typing) {
+      fire();
+      return;
+    }
+    typingEmitTimerRef.current = setTimeout(() => {
+      typingEmitTimerRef.current = null;
+      fire();
+    }, 280);
+  }, []);
+
+  const upgradeOwnMessageDelivery = useCallback((thread, messageId) => {
+    const messages = (Array.isArray(thread.messages) ? thread.messages : []).map((m) => {
+      if (!m.me || String(m.id) !== String(messageId)) return m;
+      if (m.status === 'seen') return m;
+      return { ...m, status: m.status === 'sent' ? 'delivered' : m.status };
+    });
+    const preview =
+      thread.threadPreview?.me && String(thread.threadPreview.id) === String(messageId)
+        ? {
+            ...thread.threadPreview,
+            status: thread.threadPreview.status === 'seen' ? 'seen' : 'delivered',
+          }
+        : thread.threadPreview;
+    return { ...thread, messages, threadPreview: preview };
   }, []);
 
   useEffect(() => {
@@ -789,12 +1000,32 @@ export function useGdcChatInbox({ token, user }) {
           if (t.id !== chatId) return t;
           const msgs = Array.isArray(t.messages) ? t.messages : [];
           if (hiddenMessageIdsByChatRef.current[chatId]?.has(String(ui.id))) return t;
-          const nextMsgs = isOpen ? mergeMessageList(msgs, ui) : msgs;
+          let nextMsgs = msgs;
+          if (isOpen) {
+            if (authorId === String(myId)) {
+              const base = msgs.filter((m) => !(m.me && isTempMessageId(m.id)));
+              nextMsgs = mergeMessageList(base, ui);
+            } else {
+              nextMsgs = mergeMessageList(msgs, ui);
+            }
+          } else {
+            // NEW CODE ADDED FOR REAL-TIME MESSAGE RENDERING — buffer messages while chat is closed
+            nextMsgs = mergeMessageList(msgs, ui).slice(-80);
+          }
           let unread = Number(t.unread) || 0;
           if (!isOpen && authorId && authorId !== String(myId)) unread += 1;
-          return { ...t, messages: nextMsgs, unread, threadPreview: ui };
+          if (isOpen) unread = 0;
+
+          let row = { ...t, messages: nextMsgs, unread, threadPreview: ui };
+          if (authorId === String(myId)) row = upgradeOwnMessageDelivery(row, ui.id);
+          return row;
         }),
       );
+
+      if (isOpen && authorId && authorId !== String(myId)) {
+        lastReadAckChatRef.current = '';
+        scheduleMarkChatReadRef.current?.(chatId);
+      }
     };
 
     const onThreadUpdated = () => {
@@ -819,20 +1050,14 @@ export function useGdcChatInbox({ token, user }) {
       }
     };
 
+    // NEW CODE ADDED FOR REAL-TIME SEEN TICK FIX — chat.read + message_seen (HTTP relay + socket)
     const onChatRead = (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
       const chatId = p.chatId != null ? String(p.chatId) : '';
       const readerId = p.readerId != null ? String(p.readerId) : '';
       if (!chatId || !readerId || readerId === String(myId)) return;
       setThreads((prev) =>
-        prev.map((t) => {
-          if (String(t.id) !== chatId) return t;
-          const messages = (Array.isArray(t.messages) ? t.messages : []).map((m) =>
-            m.me && m.status !== 'seen' ? { ...m, status: 'seen' } : m,
-          );
-          const preview = t.threadPreview?.me ? { ...t.threadPreview, status: 'seen' } : t.threadPreview;
-          return { ...t, messages, threadPreview: preview };
-        }),
+        prev.map((t) => (String(t.id) === chatId ? applySeenToThreadRef.current(t, readerId) : t)),
       );
     };
 
@@ -858,6 +1083,7 @@ export function useGdcChatInbox({ token, user }) {
     s.on('chat.thread.updated', onThreadUpdated);
     s.on('chatTyping', onChatTyping);
     s.on('chat.read', onChatRead);
+    s.on('message_seen', onChatRead);
     s.on('chat.message.deleted', onMessageDeleted);
     const onPresenceUpdate = (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
@@ -885,19 +1111,48 @@ export function useGdcChatInbox({ token, user }) {
       s.off('chat.thread.updated', onThreadUpdated);
       s.off('chatTyping', onChatTyping);
       s.off('chat.read', onChatRead);
+      s.off('message_seen', onChatRead);
       s.off('chat.message.deleted', onMessageDeleted);
       s.off('presence:update', onPresenceUpdate);
       s.off('presence:snapshot', onPresenceSnapshot);
     };
-  }, [token, myId]);
+  }, [token, myId, upgradeOwnMessageDelivery]);
 
   const closeChat = useCallback(() => {
     const id = selectedChatIdRef.current;
     selectedChatIdRef.current = null;
     setTypingPeerId(null);
+    lastReadAckChatRef.current = '';
+    if (readAckTimerRef.current) {
+      clearTimeout(readAckTimerRef.current);
+      readAckTimerRef.current = null;
+    }
+    if (typingEmitTimerRef.current) {
+      clearTimeout(typingEmitTimerRef.current);
+      typingEmitTimerRef.current = null;
+    }
     emitChatTyping(id, false);
     if (id) getGdcSocket()?.emit('leaveRoom', id);
   }, [emitChatTyping]);
+
+  const acknowledgeChatRead = useCallback(
+    (chatId) => {
+      const id = String(chatId || '').trim();
+      if (!id) return;
+      lastReadAckChatRef.current = '';
+      scheduleMarkChatReadRef.current?.(id);
+    },
+    [],
+  );
+
+  const resolvePeerProfile = useCallback(
+    (peerId) => {
+      const id = String(peerId || '').trim();
+      if (!id) return null;
+      return userDirectoryById[id] || null;
+    },
+    [userDirectoryById],
+  );
 
   const groupScopeForRole = useCallback(() => {
     const r = user?.role;
@@ -907,11 +1162,7 @@ export function useGdcChatInbox({ token, user }) {
     return 'group';
   }, [user?.role]);
 
-  const typingPeerLabel = useMemo(() => {
-    if (!typingPeerId) return '';
-    const row = userDirectoryById[typingPeerId];
-    return row?.displayName || 'Someone';
-  }, [typingPeerId, userDirectoryById]);
+  const isPeerTyping = !!typingPeerId;
 
   const hideChatForMe = useCallback(
     async (chatId) => {
@@ -979,6 +1230,7 @@ export function useGdcChatInbox({ token, user }) {
     setThreads,
     contacts,
     inboxLoading,
+    directoryHydrated,
     inboxError,
     refreshThreads,
     loadMessagesForChat,
@@ -993,9 +1245,12 @@ export function useGdcChatInbox({ token, user }) {
     closeChat,
     emitChatTyping,
     typingPeerId,
-    typingPeerLabel,
+    isPeerTyping,
+    resolvePeerProfile,
+    patchThreadDisplayFromDirectory,
     hideChatForMe,
     hideMessageForMe,
     deleteMessageForEveryone,
+    acknowledgeChatRead,
   };
 }

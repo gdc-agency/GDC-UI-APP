@@ -12,6 +12,7 @@ import {
   Animated,
   Alert,
   FlatList,
+  InteractionManager,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,12 +25,20 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatImagePreview } from '@/components/chat/chat-image-preview';
+import { MessageActionMenu } from '@/components/chat/message-action-menu';
+import { TypingDots } from '@/components/chat/typing-dots';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { BrandColors } from '@/constants/brand';
+import { useChatChrome } from '@/context/chat-chrome-context';
 import { useAuth } from '@/context/auth-context';
 import { useGdcChatInbox } from '@/hooks/useGdcChatInbox';
 import { isAdminRole } from '@/utils/roles';
-import { formatFileSize } from '@/utils/chat-directory';
+import {
+  formatFileSize,
+  isChatDisplayNamePending,
+  resolveChatPeerDisplayName,
+} from '@/utils/chat-directory';
 
 const HOME_TAB_BAR_STYLE = {
   position: 'absolute',
@@ -60,23 +69,95 @@ const currentTime = () =>
     hour12: true,
   });
 
+// NEW CODE ADDED FOR TIMESTAMP FORMATTING FIX — ISO + 24h strings → local 12h display
 const normalizeTime = (timeValue) => {
   if (!timeValue) return currentTime();
   if (typeof timeValue !== 'string') return String(timeValue);
-  if (timeValue.toLowerCase().includes('am') || timeValue.toLowerCase().includes('pm')) return timeValue;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(timeValue)) {
+    try {
+      const d = new Date(timeValue);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (/am|pm/i.test(timeValue)) return timeValue;
   const match = timeValue.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return timeValue;
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   const date = new Date();
   date.setHours(hours, minutes, 0, 0);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
 };
 
+// NEW UI FIX FOR DOCUMENT MESSAGE BUBBLE — colored ext badge (reference design)
 const getFileMeta = (fileName = '') => {
-  const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
-  return { ext };
+  const ext = (fileName.split('.').pop() || 'FILE').toUpperCase();
+  const badgeByExt = {
+    PDF: { color: '#e74c3c', label: 'PDF' },
+    DOC: { color: '#2b579a', label: 'DOC' },
+    DOCX: { color: '#2b579a', label: 'DOC' },
+    XLS: { color: '#1d7a46', label: 'XLS' },
+    XLSX: { color: '#1d7a46', label: 'XLS' },
+    JPG: { color: '#0ea5e9', label: 'JPG' },
+    JPEG: { color: '#0ea5e9', label: 'JPG' },
+    PNG: { color: '#0ea5e9', label: 'PNG' },
+    ZIP: { color: '#f59e0b', label: 'ZIP' },
+    RAR: { color: '#f59e0b', label: 'RAR' },
+    MP3: { color: '#8b5cf6', label: 'MP3' },
+    WAV: { color: '#8b5cf6', label: 'WAV' },
+    MP4: { color: '#0ea5e9', label: 'MP4' },
+    MOV: { color: '#0ea5e9', label: 'MOV' },
+  };
+  const badge = badgeByExt[ext] || { color: '#64748b', label: ext.slice(0, 4) };
+  return { ext, badgeColor: badge.color, badgeLabel: badge.label };
 };
+
+function FileDocumentCard({ item, isActionTarget, tickColor, onDownload, compact }) {
+  const fileMeta = getFileMeta(item.fileName);
+  const metaLine = [item.fileSizeLabel, fileMeta.ext].filter(Boolean).join(' • ');
+  const showFooter = !compact && (item.time || item.me);
+  return (
+    <View style={[styles.fileCard, isActionTarget && styles.fileCardSelected]}>
+      <View style={styles.fileCardRow}>
+        <View style={[styles.fileBadge, { backgroundColor: fileMeta.badgeColor }]}>
+          <View style={styles.fileBadgeFold} />
+          <Text style={styles.fileBadgeExt}>{fileMeta.badgeLabel}</Text>
+        </View>
+        <View style={styles.fileTextWrap}>
+          <Text numberOfLines={2} style={[styles.fileName, isActionTarget && styles.fileNameSelected]}>
+            {item.fileName || 'Document'}
+          </Text>
+          {metaLine ? (
+            <Text style={styles.fileMetaText} numberOfLines={1}>
+              {metaLine}
+            </Text>
+          ) : null}
+        </View>
+        {!compact ? (
+          <Pressable style={styles.fileDownloadBtn} hitSlop={8} onPress={onDownload}>
+            <MaterialCommunityIcons name="download" size={22} color="#94a3b8" />
+          </Pressable>
+        ) : null}
+      </View>
+      {showFooter ? (
+        <View style={styles.fileCardFooter}>
+          {item.time ? <Text style={styles.fileCardTime}>{normalizeTime(item.time)}</Text> : <View />}
+          {item.me ? (
+            <MaterialCommunityIcons
+              name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
+              size={14}
+              color={tickColor}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 const startOfLocalDay = (date) => {
   const d = new Date(date);
@@ -121,9 +202,9 @@ const statusIconName = (status) => {
 
 const statusIconColor = (status) => {
   if (status === 'seen') return '#34B7F1';
-  if (status === 'delivered') return '#cbd5e1';
+  if (status === 'delivered') return '#94a3b8';
   if (status === 'sending') return '#94a3b8';
-  return '#cbd5e1';
+  return '#94a3b8';
 };
 
 function initials(name) {
@@ -135,29 +216,43 @@ function initials(name) {
   return parts.slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 }
 
-const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide }) {
+const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, resolvePeerProfile }) {
   const msgs = Array.isArray(item.messages) ? item.messages : [];
   const last = msgs.length ? msgs[msgs.length - 1] : item.threadPreview;
-  const title = item.listTitle || item.name || 'Chat';
+  const peer = item.peerId && resolvePeerProfile ? resolvePeerProfile(item.peerId) : null;
+  // NEW CODE ADDED FOR CHAT LIST NAME LOADING — show real name, not grey skeleton bar
+  const displayName = resolveChatPeerDisplayName(item, peer);
+  const nameLoading = isChatDisplayNamePending(displayName, item.peerId);
+  const avatarLetter = (displayName || peer?.displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
 
   return (
     <Pressable style={styles.chatCard} onPress={() => onOpen(item.id)} onLongPress={() => onHide(item.id)}>
       <View>
-        {item.listAvatarUrl ? (
-          <Image source={{ uri: item.listAvatarUrl }} style={styles.avatarImg} contentFit="cover" />
+        {item.listAvatarUrl || peer?.avatarUrl ? (
+          <Image
+            source={{ uri: item.listAvatarUrl || peer?.avatarUrl }}
+            style={styles.avatarImg}
+            contentFit="cover"
+          />
         ) : (
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{String(title).slice(0, 1)}</Text>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
           </View>
         )}
         {item.peerId ? <View style={[styles.presenceDot, item.isOnline && styles.presenceDotOnline]} /> : null}
       </View>
       <View style={styles.chatBody}>
         <View style={styles.chatTop}>
-          <Text numberOfLines={1} style={styles.chatCardName}>
-            {title}
-          </Text>
-          {item.headerRole ? <Text style={styles.roleBadge}>{roleBadgeLabel(item.headerRole)}</Text> : null}
+          <View style={styles.chatCardTitleRow}>
+            <Text
+              numberOfLines={1}
+              style={[styles.chatCardName, nameLoading && styles.chatCardNamePending]}>
+              {displayName || '…'}
+            </Text>
+            {(item.headerRole || peer?.roleLabel) ? (
+              <Text style={styles.roleBadge}>{roleBadgeLabel(item.headerRole || peer?.roleLabel)}</Text>
+            ) : null}
+          </View>
           <Text style={styles.chatCardTime}>{normalizeTime(last?.time)}</Text>
         </View>
         <Text style={styles.chatCardMsg} numberOfLines={1}>
@@ -177,14 +272,171 @@ const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide }
   );
 });
 
+const ChatMessageRow = React.memo(function ChatMessageRow({
+  row,
+  selectedMessageById,
+  peerName,
+  actionTargetId,
+  onLongPress,
+  onOpenMedia,
+}) {
+  if (row.kind === 'date') {
+    return (
+      <View style={styles.dateSeparatorWrap}>
+        <Text style={styles.dateSeparatorText}>{row.label}</Text>
+      </View>
+    );
+  }
+  const item = row.message;
+  const reply = item.replyToId ? selectedMessageById.get(String(item.replyToId)) : null;
+  // NEW UI FIX FOR MESSAGE ACTION UI — invert bubble colors when message is selected (ref image)
+  const isActionTarget = actionTargetId != null && String(item.id) === String(actionTargetId);
+  const tickColor =
+    isActionTarget && item.me
+      ? item.status === 'seen'
+        ? BrandColors.primaryMid
+        : '#64748b'
+      : statusIconColor(item.status);
+  return (
+    <View
+      style={[
+        styles.msgRow,
+        item.me ? styles.msgRowMe : styles.msgRowOther,
+        isActionTarget && styles.msgRowActionTarget,
+      ]}>
+      <Pressable
+        style={[
+          styles.bubble,
+          item.me ? styles.bubbleMe : styles.bubbleOther,
+          isActionTarget && item.me && styles.bubbleMeSelected,
+          isActionTarget && !item.me && styles.bubbleOtherSelected,
+          (item.type === 'image' || item.type === 'file') && styles.bubbleAttachment,
+          item.type === 'image' && styles.imageBubble,
+          item.type === 'file' && styles.bubbleFileDoc,
+          isActionTarget && (item.type === 'image' || item.type === 'file') && styles.bubbleAttachmentSelected,
+        ]}
+        onLongPress={() => onLongPress(item)}
+        onPress={() => {
+          if (item.type === 'image' || item.type === 'file') onOpenMedia(item);
+        }}>
+        {item.forwardedFrom ? (
+          <View style={[styles.messageFlag, item.me && styles.messageFlagMe]}>
+            <MaterialCommunityIcons
+              name="share-outline"
+              size={12}
+              color={isActionTarget ? BrandColors.primaryMid : item.me ? '#dbeafe' : '#64748b'}
+            />
+            <Text
+              style={[
+                styles.messageFlagText,
+                item.me && styles.messageFlagTextMe,
+                isActionTarget && styles.messageFlagTextSelected,
+              ]}>
+              Forwarded
+            </Text>
+          </View>
+        ) : null}
+        {reply ? (
+          <View
+            style={[
+              styles.replyQuote,
+              item.me && styles.replyQuoteMe,
+              isActionTarget && styles.replyQuoteSelected,
+              isActionTarget && item.me && styles.replyQuoteMeSelected,
+            ]}>
+            <Text
+              style={[
+                styles.replyQuoteTitle,
+                item.me && styles.replyQuoteTitleMe,
+                isActionTarget && styles.replyQuoteTitleSelected,
+              ]}
+              numberOfLines={1}>
+              {reply.me ? 'You' : peerName || 'Contact'}
+            </Text>
+            <Text
+              style={[
+                styles.replyQuoteText,
+                item.me && styles.replyQuoteTextMe,
+                isActionTarget && styles.replyQuoteTextSelected,
+              ]}
+              numberOfLines={1}>
+              {messagePlainText(reply) || 'Message'}
+            </Text>
+          </View>
+        ) : null}
+        {item.type === 'image' && item.uri ? (
+          <View style={[styles.imageFrame, isActionTarget && styles.imageFrameSelected]}>
+            <Image source={{ uri: item.uri }} style={styles.attachmentImage} contentFit="cover" transition={200} />
+            <View style={styles.imageOverlayBar}>
+              <Text style={styles.imageTimeText}>{normalizeTime(item.time)}</Text>
+              {item.me ? (
+                <MaterialCommunityIcons
+                  name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
+                  size={13}
+                  color={tickColor}
+                />
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+        {item.type === 'file' ? (
+          <FileDocumentCard
+            item={item}
+            isActionTarget={isActionTarget}
+            tickColor={tickColor}
+            onDownload={() => {
+              if (item.uri) void Linking.openURL(item.uri);
+            }}
+          />
+        ) : null}
+        {item.type !== 'file' && item.type !== 'image' ? (
+          <Text
+            style={[
+              styles.bubbleText,
+              item.me && !isActionTarget && styles.bubbleTextMe,
+              isActionTarget && styles.bubbleTextSelected,
+            ]}>
+            {item.text}
+          </Text>
+        ) : null}
+        <View
+          style={[
+            styles.msgMetaRow,
+            item.me && styles.msgMetaRowMe,
+            (item.type === 'image' || item.type === 'file') && styles.msgMetaHidden,
+          ]}>
+          <Text
+            style={[
+              styles.msgTime,
+              item.me && !isActionTarget && styles.msgTimeMe,
+              !item.me && styles.msgTimeOther,
+              isActionTarget && styles.msgTimeSelected,
+            ]}>
+            {normalizeTime(item.time)}
+          </Text>
+          {item.me ? (
+            <MaterialCommunityIcons
+              name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
+              size={14}
+              color={tickColor}
+            />
+          ) : null}
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
 export default function MessagesScreen() {
   const navigation = useNavigation();
+  const { setInConversation } = useChatChrome();
   const { user, token } = useAuth();
   const inbox = useGdcChatInbox({ token, user });
   const {
     threads,
     contacts,
     inboxLoading,
+    directoryHydrated,
     inboxError,
     openChat,
     closeChat,
@@ -195,10 +447,12 @@ export default function MessagesScreen() {
     loadOlderMessages,
     groupScopeForRole,
     emitChatTyping,
-    typingPeerLabel,
+    isPeerTyping,
+    resolvePeerProfile,
     hideChatForMe,
     hideMessageForMe,
     deleteMessageForEveryone,
+    acknowledgeChatRead,
   } = inbox;
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
@@ -209,7 +463,7 @@ export default function MessagesScreen() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
-  const [previewItem, setPreviewItem] = useState(null);
+  const [previewItem, setPreviewItem] = useState(/** @type {Record<string, unknown> | null} */ (null));
   const [groupOpen, setGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -217,10 +471,10 @@ export default function MessagesScreen() {
   const [groupAdmin, setGroupAdmin] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
   const [pendingSend, setPendingSend] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [sendingAttach, setSendingAttach] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [messageActionItem, setMessageActionItem] = useState(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState(/** @type {Set<string>} */ (new Set()));
   const [forwardItem, setForwardItem] = useState(null);
   const [groupCreating, setGroupCreating] = useState(false);
   const [groupCreated, setGroupCreated] = useState(false);
@@ -228,7 +482,18 @@ export default function MessagesScreen() {
   const msgListRef = useRef(null);
   const typingStopTimerRef = useRef(null);
   const olderLoadAtRef = useRef(0);
-  const typingAnim = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
+  const isNearBottomRef = useRef(true);
+  const lastMsgTrackRef = useRef({ id: '', me: false });
+  const headerStatusFade = useRef(new Animated.Value(1)).current;
+
+  // NEW CODE ADDED FOR AUTO SCROLL ISSUE — wait for layout after new messages / keyboard
+  const scrollToLatest = useCallback((animated = true) => {
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        msgListRef.current?.scrollToEnd({ animated });
+      });
+    });
+  }, []);
 
   const roleTitle = useMemo(() => {
     if (isAdminRole(user?.role)) return 'Admin';
@@ -238,6 +503,19 @@ export default function MessagesScreen() {
   }, [user?.role]);
 
   const selected = useMemo(() => threads.find((thread) => thread.id === selectedId) ?? null, [threads, selectedId]);
+
+  const headerProfile = useMemo(() => {
+    if (!selected) return { loading: false, name: '', avatarUrl: null, role: '' };
+    const peer = selected.peerId ? resolvePeerProfile(selected.peerId) : null;
+    const name = resolveChatPeerDisplayName(selected, peer);
+    const loading = isChatDisplayNamePending(name, selected.peerId);
+    return {
+      loading,
+      name: name || '…',
+      avatarUrl: selected.listAvatarUrl || peer?.avatarUrl || null,
+      role: selected.headerRole || peer?.roleLabel || '',
+    };
+  }, [resolvePeerProfile, selected]);
 
   const selectedMessageById = useMemo(() => {
     const map = new Map();
@@ -268,7 +546,8 @@ export default function MessagesScreen() {
       if (listFilter === 'groups' && thread?.server?.kind !== 'group') return false;
       if (!q) return true;
       const title = String(thread.listTitle || thread.name || '').toLowerCase();
-      return title.includes(q);
+      const role = String(thread.headerRole || '').toLowerCase();
+      return title.includes(q) || role.includes(q);
     });
   }, [threads, listFilter, listSearch]);
 
@@ -282,19 +561,27 @@ export default function MessagesScreen() {
     });
   }, [contacts, contactSearch]);
 
-  const openThread = useCallback((threadId) => {
-    setSelectedId(threadId);
-    void openChat(threadId);
-  }, [openChat]);
+  const openThread = useCallback(
+    (threadId) => {
+      setInConversation(true);
+      setSelectedId(threadId);
+      void openChat(threadId);
+    },
+    [openChat, setInConversation],
+  );
 
   const sendMessage = async () => {
     const text = draft.trim();
     if (!text || !selectedId) return;
+    isNearBottomRef.current = true;
+    const reply = replyTarget;
+    setDraft('');
+    setReplyTarget(null);
+    emitChatTyping(selectedId, false);
+    scrollToLatest(false);
     try {
-      emitChatTyping(selectedId, false);
-      await sendText(selectedId, text, replyTarget ? { replyToId: replyTarget.id } : {});
-      setDraft('');
-      setReplyTarget(null);
+      await sendText(selectedId, text, reply ? { replyToId: reply.id } : {});
+      scrollToLatest(true);
     } catch (e) {
       Alert.alert('Message', e?.message ?? 'Send failed');
     }
@@ -337,26 +624,23 @@ export default function MessagesScreen() {
 
   const confirmPendingSend = async () => {
     if (!pendingSend || !selectedId) return;
-    setSendingAttach(true);
-    setUploadProgress(0);
+    const payload = { ...pendingSend };
+    setPendingSend(null);
+    isNearBottomRef.current = true;
     try {
       await sendAttachment(
         selectedId,
         {
-          uri: pendingSend.uri,
-          mimeType: pendingSend.mimeType,
-          fileName: pendingSend.fileName,
+          uri: payload.uri,
+          mimeType: payload.mimeType,
+          fileName: payload.fileName,
+          sizeBytes: payload.size,
         },
-        {
-          onProgress: (p) => setUploadProgress(typeof p === 'number' ? p : 0),
-        },
+        { onProgress: () => {} },
       );
-      setPendingSend(null);
-      setUploadProgress(0);
+      scrollToLatest(true);
     } catch (e) {
       Alert.alert('Send', e?.message ?? 'Upload failed');
-    } finally {
-      setSendingAttach(false);
     }
   };
 
@@ -378,57 +662,81 @@ export default function MessagesScreen() {
     [],
   );
 
-  const prevLastMsgIdRef = useRef('');
+  // NEW SOCKET LISTENER ADDED FOR TYPING STATUS — stop typing when leaving conversation
   useEffect(() => {
-    prevLastMsgIdRef.current = '';
+    if (!selectedId) return undefined;
+    const chatId = selectedId;
+    return () => {
+      emitChatTyping(chatId, false);
+    };
+  }, [selectedId, emitChatTyping]);
+
+  useEffect(() => {
+    isNearBottomRef.current = true;
+    lastMsgTrackRef.current = { id: '', me: false };
     setReplyTarget(null);
     setMessageActionItem(null);
+    setMultiSelectMode(false);
+    setSelectedMessageIds(new Set());
   }, [selectedId]);
 
-  const lastMsgId = useMemo(() => {
+  useEffect(() => {
+    setInConversation(!!selectedId);
+    return () => setInConversation(false);
+  }, [selectedId, setInConversation]);
+
+  useEffect(() => {
+    if (!selectedId) return undefined;
+    const t = setTimeout(() => scrollToLatest(false), 120);
+    return () => clearTimeout(t);
+  }, [selectedId, scrollToLatest]);
+
+  useEffect(() => {
     const msgs = Array.isArray(selected?.messages) ? selected.messages : [];
-    if (!msgs.length) return '';
-    return String(msgs[msgs.length - 1].id);
-  }, [selected?.messages]);
-
-  useEffect(() => {
-    if (!selectedId || !lastMsgId) return;
-    if (lastMsgId === prevLastMsgIdRef.current) return;
-    prevLastMsgIdRef.current = lastMsgId;
-    requestAnimationFrame(() => {
-      msgListRef.current?.scrollToEnd({ animated: true });
-    });
-  }, [selectedId, lastMsgId]);
-
-  useEffect(() => {
-    if (!typingPeerLabel) {
-      typingAnim.forEach((v) => v.stopAnimation(() => v.setValue(0)));
-      return undefined;
+    if (!selectedId || !msgs.length) return;
+    const last = msgs[msgs.length - 1];
+    const id = String(last.id);
+    const me = !!last.me;
+    const prev = lastMsgTrackRef.current;
+    if (id === prev.id) return;
+    lastMsgTrackRef.current = { id, me };
+    const isIncoming = !me;
+    if (isIncoming) {
+      isNearBottomRef.current = true;
+      scrollToLatest(true);
+      acknowledgeChatRead(selectedId);
+    } else if (isNearBottomRef.current) {
+      scrollToLatest(true);
     }
-    const animations = typingAnim.map((value, index) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(index * 120),
-          Animated.timing(value, { toValue: 1, duration: 220, useNativeDriver: true }),
-          Animated.timing(value, { toValue: 0, duration: 220, useNativeDriver: true }),
-          Animated.delay(260),
-        ]),
-      ),
-    );
-    animations.forEach((anim) => anim.start());
-    return () => animations.forEach((anim) => anim.stop());
-  }, [typingAnim, typingPeerLabel]);
+  }, [acknowledgeChatRead, scrollToLatest, selected?.messages, selectedId]);
 
   const handleChatScroll = useCallback(
     (e) => {
-      const y = e.nativeEvent.contentOffset.y;
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+      isNearBottomRef.current = distanceFromBottom < 100;
+      const y = contentOffset.y;
       if (y > 24) return;
       const now = Date.now();
       if (now - olderLoadAtRef.current < 900) return;
       olderLoadAtRef.current = now;
       if (selectedId) void loadOlderMessages(selectedId);
     },
-    [selectedId, loadOlderMessages],
+    [loadOlderMessages, selectedId],
+  );
+
+  const renderMessageRow = useCallback(
+    ({ item: row }) => (
+      <ChatMessageRow
+        row={row}
+        selectedMessageById={selectedMessageById}
+        peerName={headerProfile.name}
+        actionTargetId={messageActionItem?.id != null ? String(messageActionItem.id) : null}
+        onLongPress={setMessageActionItem}
+        onOpenMedia={setPreviewItem}
+      />
+    ),
+    [headerProfile.name, messageActionItem?.id, selectedMessageById],
   );
 
   const startNewChat = async (contact) => {
@@ -455,6 +763,7 @@ export default function MessagesScreen() {
             if (threadId === selectedId) {
               closeChat();
               setSelectedId(null);
+              setInConversation(false);
             }
           },
         },
@@ -464,11 +773,13 @@ export default function MessagesScreen() {
   );
 
   const renderThreadItem = useCallback(
-    ({ item }) => <ChatThreadRow item={item} onOpen={openThread} onHide={confirmHideChat} />,
-    [confirmHideChat, openThread],
+    ({ item }) => (
+      <ChatThreadRow item={item} onOpen={openThread} onHide={confirmHideChat} resolvePeerProfile={resolvePeerProfile} />
+    ),
+    [confirmHideChat, openThread, resolvePeerProfile],
   );
 
-  const copyMessage = async (item) => {
+  const copyMessage = useCallback(async (item) => {
     const text = messagePlainText(item);
     if (!text) {
       Alert.alert('Copy', 'Nothing to copy for this message.');
@@ -476,7 +787,40 @@ export default function MessagesScreen() {
     }
     await Clipboard.setStringAsync(text);
     setMessageActionItem(null);
-  };
+  }, []);
+
+  const handleMessageAction = useCallback(
+    (actionKey, item) => {
+      if (!item) return;
+      if (actionKey === 'reply') {
+        setReplyTarget(item);
+        return;
+      }
+      if (actionKey === 'forward') {
+        setForwardItem(item);
+        return;
+      }
+      if (actionKey === 'copy') {
+        void copyMessage(item);
+        return;
+      }
+      if (actionKey === 'select') {
+        setMultiSelectMode(true);
+        setSelectedMessageIds(new Set([String(item.id)]));
+        return;
+      }
+      if (actionKey === 'hide') {
+        if (selectedId && item.id) void hideMessageForMe(selectedId, item.id);
+        return;
+      }
+      // NEW UI FIX FOR MESSAGE ACTION UI — delete sheet handles confirm (no extra alert)
+      if (actionKey === 'everyone') {
+        if (selectedId && item.id) void deleteMessageForEveryone(selectedId, item.id);
+        return;
+      }
+    },
+    [copyMessage, deleteMessageForEveryone, hideMessageForMe, selectedId],
+  );
 
   const forwardMessageTo = async (contact) => {
     if (!forwardItem) return;
@@ -547,9 +891,19 @@ export default function MessagesScreen() {
   };
 
   useEffect(() => {
-    navigation.setOptions({
-      tabBarStyle: selected ? { display: 'none' } : HOME_TAB_BAR_STYLE,
-    });
+    const parent = navigation.getParent();
+    const hiddenStyle = { display: 'none', height: 0, overflow: 'hidden' };
+    if (selected) {
+      parent?.setOptions({ tabBarStyle: hiddenStyle });
+      navigation.setOptions({ tabBarStyle: hiddenStyle });
+    } else {
+      parent?.setOptions({ tabBarStyle: undefined });
+      navigation.setOptions({ tabBarStyle: HOME_TAB_BAR_STYLE });
+    }
+    return () => {
+      parent?.setOptions({ tabBarStyle: undefined });
+      navigation.setOptions({ tabBarStyle: HOME_TAB_BAR_STYLE });
+    };
   }, [navigation, selected]);
 
   return (
@@ -560,7 +914,8 @@ export default function MessagesScreen() {
           // iOS: padding feels most natural. Android: use "height" (not padding) to avoid
           // sticky bottom gaps while still lifting the composer above the keyboard.
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
+          keyboardShouldPersistTaps="handled">
           <View style={styles.chatHeader}>
             <Pressable
               style={styles.backBtn}
@@ -568,29 +923,42 @@ export default function MessagesScreen() {
                 if (selectedId) emitChatTyping(selectedId, false);
                 closeChat();
                 setSelectedId(null);
+                setInConversation(false);
               }}>
               <MaterialCommunityIcons name="arrow-left" size={22} color={BrandColors.text} />
             </Pressable>
-            {selected.listAvatarUrl ? (
-              <Image source={{ uri: selected.listAvatarUrl }} style={styles.headerAvatarImg} contentFit="cover" />
+            {headerProfile.avatarUrl ? (
+              <Image source={{ uri: headerProfile.avatarUrl }} style={styles.headerAvatarImg} contentFit="cover" />
             ) : (
               <View style={styles.avatarSm}>
-                <Text style={styles.avatarText}>{String(selected.headerName || selected.name || '?').slice(0, 1)}</Text>
+                <Text style={styles.avatarText}>{String(headerProfile.name || '?').slice(0, 1)}</Text>
               </View>
             )}
             <View style={styles.headerMeta}>
               <View style={styles.headerTitleRow}>
-                <Text style={styles.chatName} numberOfLines={1}>
-                  {selected.headerName || selected.name}
+                <Text
+                  style={[styles.chatName, headerProfile.loading && styles.chatCardNamePending]}
+                  numberOfLines={1}>
+                  {headerProfile.name}
                 </Text>
-                {selected.headerRole ? <Text style={styles.roleBadge}>{roleBadgeLabel(selected.headerRole)}</Text> : null}
-                {selected.peerId ? <View style={[styles.headerPresenceDot, selected.isOnline && styles.presenceDotOnline]} /> : null}
+                {headerProfile.role ? (
+                  <Text style={styles.roleBadge}>{roleBadgeLabel(headerProfile.role)}</Text>
+                ) : null}
               </View>
-              {typingPeerLabel ? (
-                <Text style={styles.typingHint} numberOfLines={1}>
-                  {typingPeerLabel}
-                </Text>
-              ) : null}
+              <Animated.View style={{ opacity: headerStatusFade }}>
+                {isPeerTyping ? (
+                  <View style={styles.headerStatusRow}>
+                    <TypingDots color="#22c55e" size={4} />
+                    <Text style={styles.typingHint} numberOfLines={1}>
+                      typing…
+                    </Text>
+                  </View>
+                ) : selected.peerId && selected.isOnline ? (
+                  <Text style={styles.onlineStatus} numberOfLines={1}>
+                    online
+                  </Text>
+                ) : null}
+              </Animated.View>
             </View>
             <Pressable style={styles.headerActionBtn} onPress={() => confirmHideChat(selected.id)}>
               <MaterialCommunityIcons name="trash-can-outline" size={19} color="#ef4444" />
@@ -603,8 +971,17 @@ export default function MessagesScreen() {
             keyExtractor={(item) => item.id}
             style={styles.messagesList}
             contentContainerStyle={[styles.msgList, { paddingBottom: 16 }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             onScroll={handleChatScroll}
-            scrollEventThrottle={400}
+            scrollEventThrottle={16}
+            removeClippedSubviews={Platform.OS === 'android'}
+            initialNumToRender={18}
+            maxToRenderPerBatch={12}
+            windowSize={9}
+            maintainVisibleContentPosition={
+              Platform.OS === 'ios' ? { minIndexForVisible: 0, autoscrollToTopThreshold: 28 } : undefined
+            }
             ListEmptyComponent={
               <View style={styles.emptyChatState}>
                 <View style={styles.emptyChatIcon}>
@@ -616,138 +993,15 @@ export default function MessagesScreen() {
                 </Text>
               </View>
             }
-            ListFooterComponent={
-              typingPeerLabel ? (
-                <View style={[styles.msgRow, styles.msgRowOther]}>
-                  <View style={styles.typingBubble}>
-                    {typingAnim.map((value, index) => (
-                      <Animated.View
-                        key={index}
-                        style={[
-                          styles.typingDot,
-                          {
-                            opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
-                            transform: [
-                              {
-                                translateY: value.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
-                              },
-                            ],
-                          },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ) : null
-            }
-            renderItem={({ item: row }) => {
-              if (row.kind === 'date') {
-                return (
-                  <View style={styles.dateSeparatorWrap}>
-                    <Text style={styles.dateSeparatorText}>{row.label}</Text>
-                  </View>
-                );
-              }
-              const item = row.message;
-              const reply = item.replyToId ? selectedMessageById.get(String(item.replyToId)) : null;
-              return (
-              <View style={[styles.msgRow, item.me ? styles.msgRowMe : styles.msgRowOther]}>
-                <Pressable
-                  style={[
-                    styles.bubble,
-                    item.me ? styles.bubbleMe : styles.bubbleOther,
-                    (item.type === 'image' || item.type === 'file') && styles.bubbleAttachment,
-                    item.type === 'image' && styles.imageBubble,
-                  ]}
-                  onLongPress={() => setMessageActionItem(item)}
-                  onPress={() => {
-                    if (item.type === 'image' || item.type === 'file') setPreviewItem(item);
-                  }}>
-                  {item.forwardedFrom ? (
-                    <View style={[styles.messageFlag, item.me && styles.messageFlagMe]}>
-                      <MaterialCommunityIcons name="share-outline" size={12} color={item.me ? '#dbeafe' : '#64748b'} />
-                      <Text style={[styles.messageFlagText, item.me && styles.messageFlagTextMe]}>Forwarded</Text>
-                    </View>
-                  ) : null}
-                  {reply ? (
-                    <View style={[styles.replyQuote, item.me && styles.replyQuoteMe]}>
-                      <Text style={[styles.replyQuoteTitle, item.me && styles.replyQuoteTitleMe]} numberOfLines={1}>
-                        {reply.me ? 'You' : selected.headerName || 'Contact'}
-                      </Text>
-                      <Text style={[styles.replyQuoteText, item.me && styles.replyQuoteTextMe]} numberOfLines={1}>
-                        {messagePlainText(reply) || 'Message'}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {item.type === 'image' && item.uri ? (
-                    <View style={styles.imageFrame}>
-                      <Image source={{ uri: item.uri }} style={styles.attachmentImage} contentFit="cover" />
-                      <View style={styles.imageTimeBadge}>
-                        <Text style={styles.imageTimeText}>{normalizeTime(item.time)}</Text>
-                      </View>
-                    </View>
-                  ) : null}
-                  {item.type === 'file' ? (
-                    <View style={styles.fileCard}>
-                      <View style={styles.filePreviewArea} />
-                      <View style={styles.fileInfoRow}>
-                        <View style={styles.fileExtBadge}>
-                          <Text style={styles.fileExtText}>{getFileMeta(item.fileName).ext}</Text>
-                        </View>
-                        <View style={styles.fileTextWrap}>
-                          <Text numberOfLines={1} style={[styles.fileName, item.me && styles.fileNameMe]}>
-                            {item.fileName ?? 'Document'}
-                          </Text>
-                          <Text style={[styles.fileMetaText, item.me && styles.fileMetaTextMe]}>
-                            {item.fileSizeLabel ? `${item.fileSizeLabel} · ` : ''}
-                            {getFileMeta(item.fileName).ext}
-                          </Text>
-                        </View>
-                        <View style={styles.fileTimeWrap}>
-                          <Text style={[styles.fileTimeText, item.me && styles.fileTimeTextMe]}>{normalizeTime(item.time)}</Text>
-                          {item.me ? (
-                            <MaterialCommunityIcons
-                              name={statusIconName(item.status)}
-                              size={14}
-                              color={statusIconColor(item.status)}
-                            />
-                          ) : null}
-                        </View>
-                      </View>
-                      <View style={styles.fileActionsRow}>
-                        <Pressable
-                          style={[styles.fileActionBtn, { flex: 1 }]}
-                          onPress={() => {
-                            if (item.uri) Linking.openURL(item.uri);
-                          }}>
-                          <Text style={styles.fileActionText}>Open</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-                  {item.type !== 'file' && item.type !== 'image' ? (
-                    <Text style={[styles.bubbleText, item.me && styles.bubbleTextMe]}>{item.text}</Text>
-                  ) : null}
-                  <View style={[styles.msgMetaRow, item.me && styles.msgMetaRowMe, (item.type === 'image' || item.type === 'file') && styles.msgMetaHidden]}>
-                    <Text style={[styles.msgTime, item.me ? styles.msgTimeMe : styles.msgTimeOther]}>{normalizeTime(item.time)}</Text>
-                    {item.me ? (
-                      <MaterialCommunityIcons
-                        name={statusIconName(item.status)}
-                        size={14}
-                        color={statusIconColor(item.status)}
-                      />
-                    ) : null}
-                  </View>
-                </Pressable>
-              </View>
-              );
-            }}
+            renderItem={renderMessageRow}
           />
 
           {replyTarget ? (
             <View style={styles.replyComposer}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.replyComposerTitle}>Replying to {replyTarget.me ? 'your message' : selected.headerName || 'message'}</Text>
+                <Text style={styles.replyComposerTitle}>
+                  Replying to {replyTarget.me ? 'your message' : headerProfile.name || 'message'}
+                </Text>
                 <Text style={styles.replyComposerText} numberOfLines={1}>
                   {messagePlainText(replyTarget) || 'Message'}
                 </Text>
@@ -758,39 +1012,36 @@ export default function MessagesScreen() {
             </View>
           ) : null}
 
-          <View
-            style={[
-              styles.composer,
-              {
-                paddingBottom: Math.max(insets.bottom, 8),
-                marginBottom: 0,
-              },
-            ]}>
+          {/* NEW UI FIX FOR MESSAGE COMPOSER — pill input + attach + camera + send */}
+          <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <Pressable style={styles.composerEmojiBtn} onPress={() => {}}>
+              <MaterialCommunityIcons name="emoticon-outline" size={24} color="#94a3b8" />
+            </Pressable>
             <View style={styles.inputWrap}>
               <TextInput
                 value={draft}
                 onChangeText={handleDraftChange}
                 onSubmitEditing={sendMessage}
-                placeholder="Write a message…"
+                placeholder="Write a message..."
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 returnKeyType="default"
                 multiline
                 maxLength={8000}
               />
-              <Pressable style={styles.inputIconBtn} onPress={() => setAttachOpen(true)} disabled={sendingAttach}>
-                <MaterialCommunityIcons name="paperclip" size={20} color="#64748b" />
+              <Pressable style={styles.inputIconBtn} onPress={() => setAttachOpen(true)} hitSlop={6}>
+                <MaterialCommunityIcons name="paperclip" size={22} color="#94a3b8" />
+              </Pressable>
+              <Pressable style={styles.inputIconBtn} onPress={() => void pickAndSendAttachment('image')} hitSlop={6}>
+                <MaterialCommunityIcons name="camera-outline" size={22} color="#94a3b8" />
               </Pressable>
             </View>
-            {sendingAttach ? (
-              <View style={styles.uploadRing}>
-                <ActivityIndicator color={BrandColors.primaryMid} />
-              </View>
-            ) : (
-              <Pressable style={styles.sendBtn} onPress={sendMessage}>
-                <MaterialCommunityIcons name="send" size={18} color="#fff" />
-              </Pressable>
-            )}
+            <Pressable
+              style={[styles.sendBtn, !!draft.trim() && styles.sendBtnActive]}
+              onPress={sendMessage}
+              disabled={!draft.trim()}>
+              <MaterialCommunityIcons name="send" size={20} color="#fff" />
+            </Pressable>
           </View>
         </KeyboardAvoidingView>
       ) : (
@@ -834,7 +1085,7 @@ export default function MessagesScreen() {
           {inboxError ? (
             <Text style={[styles.emptyText, { paddingHorizontal: 16, marginBottom: 8 }]}>{inboxError}</Text>
           ) : null}
-          {inboxLoading && threads.length === 0 ? (
+          {(inboxLoading && threads.length === 0) || (!directoryHydrated && threads.length === 0) ? (
             <SkeletonGroup>
               <View style={{ paddingHorizontal: 4, gap: 4 }}>
                 {[0, 1, 2, 3, 4, 5].map((k) => (
@@ -909,7 +1160,7 @@ export default function MessagesScreen() {
                       )}
                       <View style={[styles.contactPresenceDot, item.online && styles.presenceDotOnline]} />
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={[styles.chatCardTitleRow, { flex: 1, minWidth: 0 }]}>
                       <Text style={styles.contactName} numberOfLines={1}>
                         {line}
                       </Text>
@@ -1101,68 +1352,13 @@ export default function MessagesScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!messageActionItem} transparent animationType="fade" onRequestClose={() => setMessageActionItem(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setMessageActionItem(null)}>
-          <View style={styles.actionSheet}>
-            <Pressable
-              style={styles.actionRow}
-              onPress={() => {
-                setReplyTarget(messageActionItem);
-                setMessageActionItem(null);
-              }}>
-              <MaterialCommunityIcons name="reply-outline" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.actionText}>Reply</Text>
-            </Pressable>
-            <Pressable
-              style={styles.actionRow}
-              onPress={() => {
-                setForwardItem(messageActionItem);
-                setMessageActionItem(null);
-              }}>
-              <MaterialCommunityIcons name="share-outline" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.actionText}>Forward</Text>
-            </Pressable>
-            <Pressable style={styles.actionRow} onPress={() => copyMessage(messageActionItem)}>
-              <MaterialCommunityIcons name="content-copy" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.actionText}>Copy</Text>
-            </Pressable>
-            <Pressable
-              style={styles.actionRow}
-              onPress={async () => {
-                if (selectedId && messageActionItem?.id) {
-                  await hideMessageForMe(selectedId, messageActionItem.id);
-                }
-                setMessageActionItem(null);
-              }}>
-              <MaterialCommunityIcons name="delete-outline" size={18} color="#ef4444" />
-              <Text style={[styles.actionText, { color: '#ef4444' }]}>Delete for Me</Text>
-            </Pressable>
-            {messageActionItem?.me ? (
-              <Pressable
-                style={styles.actionRow}
-                onPress={() => {
-                  const item = messageActionItem;
-                  setMessageActionItem(null);
-                  Alert.alert('Delete for everyone?', 'This permanently removes the message from the database and all chats.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: async () => {
-                        if (selectedId && item?.id) {
-                          await deleteMessageForEveryone(selectedId, item.id);
-                        }
-                      },
-                    },
-                  ]);
-                }}>
-                <MaterialCommunityIcons name="delete-forever-outline" size={18} color="#b91c1c" />
-                <Text style={[styles.actionText, { color: '#b91c1c' }]}>Delete for Everyone</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
+      <MessageActionMenu
+        visible={!!messageActionItem}
+        message={messageActionItem}
+        canDeleteForEveryone={!!messageActionItem?.me}
+        onClose={() => setMessageActionItem(null)}
+        onAction={handleMessageAction}
+      />
 
       <Modal visible={!!forwardItem} transparent animationType="fade" onRequestClose={() => setForwardItem(null)}>
         <View style={styles.modalOverlay}>
@@ -1190,10 +1386,13 @@ export default function MessagesScreen() {
                       <Text style={styles.avatarText}>{String(item.displayName || item.name || '?').slice(0, 1)}</Text>
                     </View>
                   )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contactName} numberOfLines={1}>
-                      {item.roleLabel ? `${item.displayName || item.name} (${item.roleLabel})` : item.displayName || item.name}
-                    </Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.chatCardTitleRow}>
+                      <Text style={styles.contactName} numberOfLines={1}>
+                        {item.displayName || item.name}
+                      </Text>
+                      {item.roleLabel ? <Text style={styles.roleBadge}>{roleBadgeLabel(item.roleLabel)}</Text> : null}
+                    </View>
                     <Text style={styles.contactStatus}>{item.online ? 'Online' : 'Offline'}</Text>
                   </View>
                   <MaterialCommunityIcons name="send" size={18} color={BrandColors.primaryMid} />
@@ -1219,70 +1418,81 @@ export default function MessagesScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={!!previewItem} transparent animationType="fade" onRequestClose={() => setPreviewItem(null)}>
+      <ChatImagePreview
+        visible={!!previewItem && previewItem.type === 'image' && !!previewItem.uri}
+        uri={previewItem?.uri ? String(previewItem.uri) : ''}
+        onClose={() => setPreviewItem(null)}
+      />
+
+      <Modal
+        visible={!!previewItem && previewItem?.type === 'file'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewItem(null)}>
         <View style={styles.previewOverlay}>
           <View style={styles.previewCard}>
             <View style={styles.previewHead}>
-              <Text style={styles.previewTitle}>{previewItem?.type === 'image' ? 'Image Preview' : 'Document Preview'}</Text>
+              <Text style={styles.previewTitle}>Document Preview</Text>
               <Pressable onPress={() => setPreviewItem(null)}>
                 <MaterialCommunityIcons name="close" size={20} color="#e2e8f0" />
               </Pressable>
             </View>
-            {previewItem?.type === 'image' && previewItem?.uri ? (
-              <Image source={{ uri: previewItem.uri }} style={styles.previewImage} contentFit="contain" />
-            ) : (
-              <View style={styles.previewDocCard}>
-                <MaterialCommunityIcons name="file-document-outline" size={28} color="#93c5fd" />
-                <Text style={styles.previewDocName}>{previewItem?.fileName ?? 'Document'}</Text>
-                <Pressable style={styles.previewOpenBtn} onPress={() => previewItem?.uri && Linking.openURL(previewItem.uri)}>
-                  <Text style={styles.previewOpenBtnText}>Open File</Text>
-                </Pressable>
-              </View>
-            )}
+            <FileDocumentCard
+              compact
+              item={{
+                fileName: previewItem?.fileName,
+                fileSizeLabel: previewItem?.fileSizeLabel ? String(previewItem.fileSizeLabel) : '',
+                time: '',
+                me: false,
+                status: 'sent',
+              }}
+              isActionTarget={false}
+              tickColor="#94a3b8"
+              onDownload={() => previewItem?.uri && void Linking.openURL(String(previewItem.uri))}
+            />
+            <Pressable
+              style={styles.previewOpenBtn}
+              onPress={() => previewItem?.uri && Linking.openURL(String(previewItem.uri))}>
+              <Text style={styles.previewOpenBtnText}>Open File</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
 
-      <Modal
-        visible={!!pendingSend}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (!sendingAttach) setPendingSend(null);
-        }}>
+      <Modal visible={!!pendingSend} transparent animationType="fade" onRequestClose={() => setPendingSend(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>Review attachment</Text>
-              <Pressable onPress={() => !sendingAttach && setPendingSend(null)} disabled={sendingAttach}>
+              <Pressable onPress={() => setPendingSend(null)}>
                 <MaterialCommunityIcons name="close" size={20} color="#334155" />
               </Pressable>
             </View>
             {pendingSend?.kind === 'image' && pendingSend.uri ? (
               <Image source={{ uri: pendingSend.uri }} style={styles.pendingPreviewImg} contentFit="contain" />
-            ) : (
-              <View style={styles.pendingDocRow}>
-                <MaterialCommunityIcons name="file-document-outline" size={40} color={BrandColors.primaryMid} />
-                <Text style={styles.pendingFileTitle} numberOfLines={2}>
-                  {pendingSend?.fileName ?? 'File'}
-                </Text>
-                {pendingSend?.size != null ? <Text style={styles.pendingMeta}>{formatFileSize(pendingSend.size)}</Text> : null}
-              </View>
-            )}
-            {sendingAttach ? (
-              <View style={styles.pendingProgressWrap}>
-                <Text style={styles.pendingMeta}>Uploading… {Math.round(uploadProgress * 100)}%</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(4, Math.round(uploadProgress * 100)))}%` }]} />
-                </View>
-                <ActivityIndicator style={{ marginTop: 10 }} color={BrandColors.primaryMid} />
+            ) : pendingSend ? (
+              <View style={styles.pendingFileCardWrap}>
+                <FileDocumentCard
+                  compact
+                  item={{
+                    fileName: pendingSend.fileName,
+                    fileSizeLabel:
+                      pendingSend.size != null ? formatFileSize(pendingSend.size) : '',
+                    time: '',
+                    me: false,
+                    status: 'sent',
+                  }}
+                  isActionTarget={false}
+                  tickColor="#94a3b8"
+                  onDownload={() => {}}
+                />
               </View>
             ) : null}
             <View style={styles.pendingActions}>
-              <Pressable style={styles.pendingCancelBtn} onPress={() => setPendingSend(null)} disabled={sendingAttach}>
+              <Pressable style={styles.pendingCancelBtn} onPress={() => setPendingSend(null)}>
                 <Text style={styles.pendingCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.pendingSendBtn} onPress={confirmPendingSend} disabled={sendingAttach}>
+              <Pressable style={styles.pendingSendBtn} onPress={confirmPendingSend}>
                 <Text style={styles.pendingSendText}>Send</Text>
               </Pressable>
             </View>
@@ -1347,7 +1557,9 @@ const styles = StyleSheet.create({
   avatarText: { color: '#1d4ed8', fontSize: 16, fontWeight: '800' },
   chatBody: { flex: 1 },
   chatTop: { flexDirection: 'row', alignItems: 'center' },
-  chatCardName: { flex: 1, fontSize: 15, fontWeight: '700', color: BrandColors.text, marginRight: 8 },
+  chatCardTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0, marginRight: 8 },
+  chatCardName: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: BrandColors.text },
+  chatCardNamePending: { color: '#94a3b8' },
   chatCardTime: { fontSize: 10, color: '#94a3b8', minWidth: 54, textAlign: 'right', fontWeight: '700' },
   chatCardMsg: { marginTop: 3, color: '#64748b', fontSize: 12, fontWeight: '500' },
   chatCardStatus: { marginTop: 1, color: '#94a3b8', fontSize: 11 },
@@ -1375,9 +1587,12 @@ const styles = StyleSheet.create({
   headerActionBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 1 },
   chatRoleInline: { fontSize: 15, fontWeight: '600', color: '#64748b' },
-  typingHint: { marginTop: 2, fontSize: 12, color: '#64748b', fontStyle: 'italic' },
+  headerStatusRow: { marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  typingHint: { fontSize: 12, color: '#22c55e', fontWeight: '600' },
+  onlineStatus: { marginTop: 2, fontSize: 12, color: '#22c55e', fontWeight: '600', textTransform: 'lowercase' },
+  headerNameSkeleton: { width: 120, height: 14, borderRadius: 7, backgroundColor: '#e2e8f0' },
+  headerAvatarSkeleton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e2e8f0' },
   roleBadge: {
-    alignSelf: 'flex-start',
     marginLeft: 6,
     borderRadius: 999,
     backgroundColor: '#eaf2ff',
@@ -1387,13 +1602,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     overflow: 'hidden',
-  },
-  headerPresenceDot: {
-    marginLeft: 6,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: '#94a3b8',
+    flexShrink: 0,
   },
   avatarImg: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#e2e8f0' },
   contactAvatarImg: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e2e8f0' },
@@ -1450,6 +1659,30 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
   bubbleMe: { backgroundColor: '#1266f1', borderBottomRightRadius: 7 },
   bubbleOther: { backgroundColor: '#fff', borderWidth: 0, borderColor: '#eef2ff', borderBottomLeftRadius: 7 },
+  // NEW UI FIX FOR MESSAGE ACTION UI — selected message highlight (light bg + blue text)
+  msgRowActionTarget: { zIndex: 2 },
+  bubbleMeSelected: {
+    backgroundColor: '#eef4ff',
+    borderWidth: 1,
+    borderColor: '#c7dcff',
+    borderBottomRightRadius: 7,
+  },
+  bubbleOtherSelected: {
+    backgroundColor: '#eef4ff',
+    borderWidth: 1,
+    borderColor: '#c7dcff',
+    borderBottomLeftRadius: 7,
+  },
+  bubbleAttachmentSelected: { backgroundColor: '#eef4ff', padding: 4, borderRadius: 12 },
+  bubbleTextSelected: { color: BrandColors.primaryMid },
+  msgTimeSelected: { color: BrandColors.primaryMid },
+  messageFlagTextSelected: { color: BrandColors.primaryMid },
+  replyQuoteSelected: { backgroundColor: '#dbeafe', borderLeftColor: BrandColors.primaryMid },
+  replyQuoteMeSelected: { backgroundColor: '#dbeafe' },
+  replyQuoteTitleSelected: { color: BrandColors.primaryMid },
+  replyQuoteTextSelected: { color: '#334155' },
+  fileNameSelected: { color: BrandColors.primaryMid },
+  fileMetaTextSelected: { color: '#64748b' },
   bubbleAttachment: { borderWidth: 0, paddingHorizontal: 0, paddingVertical: 0, backgroundColor: 'transparent' },
   imageBubble: { borderRadius: 10, overflow: 'hidden' },
   bubbleText: { fontSize: 14, color: '#334155', lineHeight: 20 },
@@ -1484,94 +1717,120 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#fff',
   },
-  imageTimeBadge: {
+  imageFrameSelected: { borderColor: '#c7dcff', borderWidth: 2 },
+  imageOverlayBar: {
     position: 'absolute',
-    right: 8,
-    bottom: 8,
-    backgroundColor: 'rgba(11,77,166,0.85)',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(15,23,42,0.5)',
   },
   imageTimeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
+  bubbleFileDoc: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    maxWidth: '90%',
+  },
   fileCard: {
-    width: 260,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
+    minWidth: 248,
+    maxWidth: 300,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  fileCardSelected: { borderWidth: 1, borderColor: '#c7dcff' },
+  fileCardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fileBadge: {
+    width: 44,
+    height: 50,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 6,
     overflow: 'hidden',
   },
-  filePreviewArea: {
-    height: 44,
-    backgroundColor: '#eaf2ff',
+  fileBadgeFold: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderBottomLeftRadius: 6,
   },
-  fileInfoRow: {
+  fileBadgeExt: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  fileTextWrap: { flex: 1, minWidth: 0, paddingRight: 4 },
+  fileName: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
+  fileMetaText: { marginTop: 3, color: '#94a3b8', fontSize: 13, fontWeight: '500' },
+  fileDownloadBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  fileCardFooter: {
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 8,
+    justifyContent: 'flex-end',
+    gap: 4,
+    minHeight: 16,
   },
-  fileExtBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 7,
-    backgroundColor: BrandColors.primaryMid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fileExtText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  fileTextWrap: { flex: 1, minWidth: 0 },
-  fileName: { color: BrandColors.primaryMid, fontSize: 13, fontWeight: '700' },
-  fileNameMe: { color: BrandColors.primaryMid },
-  fileMetaText: { marginTop: 1, color: '#64748b', fontSize: 12 },
-  fileMetaTextMe: { color: '#64748b' },
-  fileTimeWrap: { marginLeft: 8, minWidth: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
-  fileTimeText: { textAlign: 'right', color: '#475569', fontSize: 11, fontWeight: '700' },
-  fileTimeTextMe: { color: '#475569' },
-  fileActionsRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    flexDirection: 'row',
-  },
-  fileActionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
-  fileActionText: { color: BrandColors.primaryMid, fontSize: 14, fontWeight: '700' },
+  fileCardTime: { color: '#94a3b8', fontSize: 11, fontWeight: '500' },
   msgMetaRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
   msgMetaRowMe: { alignSelf: 'flex-end' },
   msgMetaHidden: { display: 'none' },
-  msgTime: { fontSize: 10 },
-  msgTimeMe: { color: '#dbeafe', textAlign: 'right' },
+  msgTime: { fontSize: 11, fontWeight: '500', minWidth: 52, textAlign: 'right' },
+  msgTimeMe: { color: '#dbeafe' },
   msgTimeOther: { color: '#64748b' },
   composer: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, borderTopWidth: 0, borderTopColor: '#dbe4fb', backgroundColor: '#f8fbff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    backgroundColor: '#f0f4f8',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e2e8f0',
   },
+  composerEmojiBtn: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1,
     color: BrandColors.text,
     fontSize: 15,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 10,
+    paddingLeft: 4,
+    paddingRight: 4,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    minHeight: 44,
+    maxHeight: 100,
+    textAlignVertical: 'center',
   },
   inputWrap: {
     flex: 1,
-    borderWidth: 0,
-    borderColor: '#dbe4fb',
-    borderRadius: 999,
-    backgroundColor: '#eef4ff',
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48,
+    maxHeight: 120,
+    paddingLeft: 14,
+    paddingRight: 6,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  inputIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 4,
-  },
+  inputIconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   attachCard: {
     marginTop: 'auto',
     marginBottom: 110,
@@ -1594,23 +1853,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1266f1',
+    backgroundColor: '#b8c9e8',
   },
-  uploadRing: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
-  },
+  sendBtnActive: { backgroundColor: '#1266f1' },
+  pendingFileCardWrap: { marginVertical: 8 },
   pendingPreviewImg: { width: '100%', height: 220, borderRadius: 12, backgroundColor: '#f8fafc' },
   pendingDocRow: { alignItems: 'center', paddingVertical: 12, gap: 8 },
   pendingFileTitle: { fontSize: 15, fontWeight: '700', color: BrandColors.text, textAlign: 'center', paddingHorizontal: 8 },
@@ -1895,7 +2146,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#edf2ff',
   },
-  contactName: { fontSize: 14, fontWeight: '700', color: BrandColors.text },
+  contactName: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: BrandColors.text },
   contactStatus: { marginTop: 2, fontSize: 12, color: '#64748b' },
   presenceDot: {
     position: 'absolute',
