@@ -19,7 +19,14 @@ const DELETE_ACTIONS = [
 
 const SHEET_SLIDE_DISTANCE = 420;
 
-export function MessageActionMenu({ visible, message, canDeleteForEveryone, onClose, onAction }) {
+export function MessageActionMenu({
+  visible,
+  message,
+  canDeleteForEveryone,
+  allowReply = true,
+  onClose,
+  onAction,
+}) {
   const insets = useSafeAreaInsets();
   const backdrop = useRef(new Animated.Value(0)).current;
   const anim = useRef(new Animated.Value(0)).current;
@@ -78,6 +85,7 @@ export function MessageActionMenu({ visible, message, canDeleteForEveryone, onCl
   };
 
   const deleteRows = DELETE_ACTIONS.filter((r) => r.key !== 'everyone' || canDeleteForEveryone);
+  const contextActions = allowReply ? CONTEXT_ACTIONS : CONTEXT_ACTIONS.filter((r) => r.key !== 'reply');
   const alignMe = !!message?.me;
 
   return (
@@ -101,12 +109,12 @@ export function MessageActionMenu({ visible, message, canDeleteForEveryone, onCl
             ]}>
             <Pressable onPress={(e) => e.stopPropagation()}>
               <View style={styles.contextCard}>
-                {CONTEXT_ACTIONS.map((row, index) => (
+                {contextActions.map((row, index) => (
                   <Pressable
                     key={row.key}
                     style={({ pressed }) => [
                       styles.contextRow,
-                      index < CONTEXT_ACTIONS.length - 1 && styles.contextRowBorder,
+                      index < contextActions.length - 1 && styles.contextRowBorder,
                       pressed && styles.rowPressed,
                     ]}
                     onPress={() => runAction(row.key)}>

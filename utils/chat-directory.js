@@ -22,6 +22,9 @@ export function resolveProfileImageUri(raw) {
   const s = String(raw || '').trim();
   if (!s) return null;
   if (/^https?:\/\//i.test(s)) return s;
+  /** Group avatars / uploads may be stored as data URLs in Chat DB — must not prefix API host. */
+  if (/^data:image\//i.test(s)) return s;
+  if (/^(blob:|file:)/i.test(s)) return s;
   const base = getApiBaseUrl().replace(/\/+$/, '');
   if (s.startsWith('/')) return `${base}${s}`;
   return `${base}/${s.replace(/^\//, '')}`;

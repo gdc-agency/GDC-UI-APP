@@ -46,6 +46,7 @@ export function normalizeNotificationsList(res) {
     if (Array.isArray(o.data)) return /** @type {Array<Record<string, unknown>>} */ (o.data);
     if (Array.isArray(o.notifications)) return /** @type {Array<Record<string, unknown>>} */ (o.notifications);
     if (Array.isArray(o.rows)) return /** @type {Array<Record<string, unknown>>} */ (o.rows);
+    if (o.success === true && Array.isArray(o.data)) return /** @type {Array<Record<string, unknown>>} */ (o.data);
   }
   return [];
 }

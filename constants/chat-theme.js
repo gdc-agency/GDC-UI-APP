@@ -1,0 +1,23 @@
+/** WhatsApp-inspired chat palette (aligned with reference screenshots). */
+export const ChatTheme = {
+  wallpaper: '#e5e7eb',
+  bubbleOut: '#1686f7',
+  bubbleIn: '#ffffff',
+  bubbleOutText: '#ffffff',
+  bubbleInText: '#111b21',
+  groupSenderName: '#1e88e5',
+  metaMuted: '#667781',
+  replyBar: '#1e88e5',
+  replyBg: '#f0f7ff',
+  composerBar: '#ffffff',
+  chromeBg: '#ffffff',
+  inputBg: '#ffffff',
+  inputPlaceholder: '#8696a0',
+  inputIcon: '#8696a0',
+  sendBtn: '#1285f7',
+  sendBtnDisabled: '#a0c4f5',
+  datePillBg: '#ffffff',
+  datePillText: '#54656f',
+  tickRead: '#53bdeb',
+  link: '#027eb5',
+};

@@ -64,6 +64,21 @@ export async function getProfile(token) {
  * @param {Record<string, string>} fields
  * @param {{ uri: string; name?: string; type?: string } | null | undefined} [image] - picked asset (expo-image-picker)
  */
+/**
+ * POST /api/profile/chat-participants — profile snapshots for chat peers (incl. updated avatars).
+ * @param {string} token
+ * @param {Array<string | number>} userIds
+ */
+export async function fetchChatParticipantSnapshots(token, userIds) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id).trim()).filter(Boolean))];
+  if (!ids.length) return { data: [] };
+  return apiRequest('/api/profile/chat-participants', {
+    method: 'POST',
+    token,
+    body: { userIds: ids },
+  });
+}
+
 export async function updateProfile(token, fields, image) {
   if (image?.uri) {
     const form = new FormData();

@@ -37,6 +37,86 @@ export async function createGroupChat(token, body) {
 /**
  * @param {string} token
  * @param {string} chatId
+ * @param {{ name?: string; avatarUrl?: string | null; privacyLockedInvites?: boolean; adminsOnlyMessages?: boolean }} body
+ */
+export async function updateGroupChat(token, chatId, body) {
+  const res = await chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}`, {
+    method: 'PATCH',
+    token,
+    body,
+  });
+  return extractData(res);
+}
+
+/** @param {string} token @param {string} chatId */
+export async function deleteGroupChat(token, chatId) {
+  return chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE', token });
+}
+
+/**
+ * @param {string} token
+ * @param {string} chatId
+ * @param {{ memberIds: string[] }} body
+ */
+export async function addGroupMembers(token, chatId, body) {
+  const res = await chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}/members:add`, {
+    method: 'POST',
+    token,
+    body,
+  });
+  return extractData(res);
+}
+
+/**
+ * @param {string} token
+ * @param {string} chatId
+ * @param {{ memberIds: string[] }} body
+ */
+export async function removeGroupMembers(token, chatId, body) {
+  const res = await chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}/members:remove`, {
+    method: 'DELETE',
+    token,
+    body,
+  });
+  return extractData(res);
+}
+
+/** @param {string} token @param {string} chatId */
+export async function leaveGroupChat(token, chatId) {
+  const res = await chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}/leave`, {
+    method: 'POST',
+    token,
+    body: {},
+  });
+  return extractData(res);
+}
+
+/**
+ * @param {string} token
+ * @param {string} chatId
+ * @param {{ memberId: string }} body
+ */
+export async function promoteGroupAdmin(token, chatId, body) {
+  const res = await chatApiRequest(`/api/chats/${encodeURIComponent(chatId)}/admins:add`, {
+    method: 'POST',
+    token,
+    body,
+  });
+  return extractData(res);
+}
+
+/** @param {string} token @param {string} chatId @param {string} memberId */
+export async function demoteGroupAdmin(token, chatId, memberId) {
+  const res = await chatApiRequest(
+    `/api/chats/${encodeURIComponent(chatId)}/admins:remove/${encodeURIComponent(memberId)}`,
+    { method: 'DELETE', token },
+  );
+  return extractData(res);
+}
+
+/**
+ * @param {string} token
+ * @param {string} chatId
  * @param {{ limit?: number; before?: string }} [query]
  */
 export async function listChatMessages(token, chatId, query = {}) {

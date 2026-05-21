@@ -8,10 +8,10 @@ export function TypingDots({ color = '#64748b', size = 5 }) {
     const animations = dots.map((value, index) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(index * 140),
-          Animated.timing(value, { toValue: 1, duration: 240, useNativeDriver: true }),
-          Animated.timing(value, { toValue: 0, duration: 240, useNativeDriver: true }),
-          Animated.delay(280),
+          Animated.delay(index * 90),
+          Animated.timing(value, { toValue: 1, duration: 180, useNativeDriver: true }),
+          Animated.timing(value, { toValue: 0, duration: 180, useNativeDriver: true }),
+          Animated.delay(160),
         ]),
       ),
     );

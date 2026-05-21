@@ -10,10 +10,9 @@ import { HapticTab } from '@/components/haptic-tab';
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
-import { useAuth } from '@/context/auth-context';
-import { listNotifications } from '@/services/api';
-import { mapNotificationRow, normalizeNotificationsList } from '@/utils/notification-helpers';
-import { subscribeNotificationInbox } from '@/utils/notification-invalidate';
+import { useGdcNotificationRealtime } from '@/hooks/useGdcNotificationRealtime';
+import { formatTabBadgeCount } from '@/utils/compute-total-chat-unread';
+import { subscribeChatUnreadTotal } from '@/utils/chat-unread-bus';
 
 /** Content row above home indicator; total bar height = this + insets.bottom */
 const TAB_BAR_BASE_HEIGHT = 70;
@@ -159,17 +158,16 @@ function DashboardTabsLayoutInner() {
   const pathname = usePathname();
   const { inConversation } = useChatChrome();
   const insets = useSafeAreaInsets();
-  const { token } = useAuth();
   const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
   const [isRouteLoading, setIsRouteLoading] = useState(false);
-  const [notificationTabBadge, setNotificationTabBadge] = useState(undefined);
-  const [notificationInboxEpoch, setNotificationInboxEpoch] = useState(0);
+  const [messagesTabBadge, setMessagesTabBadge] = useState(undefined);
+  const { badge: notificationTabBadge } = useGdcNotificationRealtime();
   const shimmerX = useRef(new Animated.Value(-140)).current;
   const skeletonCardCount = skeletonCardCountForPath(pathname);
 
   useEffect(() => {
-    return subscribeNotificationInbox(() => {
-      setNotificationInboxEpoch((n) => n + 1);
+    return subscribeChatUnreadTotal((total) => {
+      setMessagesTabBadge(formatTabBadgeCount(total));
     });
   }, []);
 
@@ -178,30 +176,6 @@ function DashboardTabsLayoutInner() {
     const hideTimer = setTimeout(() => setIsRouteLoading(false), 430);
     return () => clearTimeout(hideTimer);
   }, [pathname]);
-
-  useEffect(() => {
-    if (!token) {
-      setNotificationTabBadge(undefined);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await listNotifications(token, 100);
-        const rows = normalizeNotificationsList(res).map(mapNotificationRow);
-        const n = rows.filter((r) => !r.read).length;
-        if (cancelled) return;
-        if (n <= 0) setNotificationTabBadge(undefined);
-        else if (n > 99) setNotificationTabBadge('99+');
-        else setNotificationTabBadge(n);
-      } catch {
-        if (!cancelled) setNotificationTabBadge(undefined);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, pathname, notificationInboxEpoch]);
 
   useEffect(() => {
     if (!isRouteLoading) return undefined;
@@ -252,6 +226,7 @@ function DashboardTabsLayoutInner() {
           name="messages"
           options={{
             title: 'Chat',
+            tabBarBadge: messagesTabBadge,
             tabBarIcon: ({ color, focused }) => (
               <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
             ),

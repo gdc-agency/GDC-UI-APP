@@ -4,8 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import * as Linking from 'expo-linking';
-import { useNavigation } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +16,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,20 +25,32 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatAttachmentSheet } from '@/components/chat/chat-attachment-sheet';
 import { ChatImagePreview } from '@/components/chat/chat-image-preview';
+import { ChatImageSendPreview } from '@/components/chat/chat-image-send-preview';
+import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banner';
+import { CreateGroupFlow } from '@/components/chat/create-group-flow';
+import { NewChatPicker } from '@/components/chat/new-chat-picker';
+import { groupSenderColor } from '@/utils/group-sender-style';
+import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
+import { ChatWallpaper } from '@/components/chat/chat-wallpaper';
+import { ChatTheme } from '@/constants/chat-theme';
+import { DocumentMessageCard } from '@/components/chat/document-message-card';
 import { MessageActionMenu } from '@/components/chat/message-action-menu';
 import { TypingDots } from '@/components/chat/typing-dots';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { BrandColors } from '@/constants/brand';
 import { useChatChrome } from '@/context/chat-chrome-context';
 import { useAuth } from '@/context/auth-context';
-import { useGdcChatInbox } from '@/hooks/useGdcChatInbox';
+import { useGdcInbox } from '@/context/gdc-inbox-context';
 import { isAdminRole } from '@/utils/roles';
 import {
   formatFileSize,
   isChatDisplayNamePending,
   resolveChatPeerDisplayName,
 } from '@/utils/chat-directory';
+import { statusIconColor, statusIconName } from '@/utils/chat-message-status';
+import { canComposeInChat } from '@/utils/group-compose-permissions';
 
 const HOME_TAB_BAR_STYLE = {
   position: 'absolute',
@@ -93,72 +105,6 @@ const normalizeTime = (timeValue) => {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
 };
 
-// NEW UI FIX FOR DOCUMENT MESSAGE BUBBLE — colored ext badge (reference design)
-const getFileMeta = (fileName = '') => {
-  const ext = (fileName.split('.').pop() || 'FILE').toUpperCase();
-  const badgeByExt = {
-    PDF: { color: '#e74c3c', label: 'PDF' },
-    DOC: { color: '#2b579a', label: 'DOC' },
-    DOCX: { color: '#2b579a', label: 'DOC' },
-    XLS: { color: '#1d7a46', label: 'XLS' },
-    XLSX: { color: '#1d7a46', label: 'XLS' },
-    JPG: { color: '#0ea5e9', label: 'JPG' },
-    JPEG: { color: '#0ea5e9', label: 'JPG' },
-    PNG: { color: '#0ea5e9', label: 'PNG' },
-    ZIP: { color: '#f59e0b', label: 'ZIP' },
-    RAR: { color: '#f59e0b', label: 'RAR' },
-    MP3: { color: '#8b5cf6', label: 'MP3' },
-    WAV: { color: '#8b5cf6', label: 'WAV' },
-    MP4: { color: '#0ea5e9', label: 'MP4' },
-    MOV: { color: '#0ea5e9', label: 'MOV' },
-  };
-  const badge = badgeByExt[ext] || { color: '#64748b', label: ext.slice(0, 4) };
-  return { ext, badgeColor: badge.color, badgeLabel: badge.label };
-};
-
-function FileDocumentCard({ item, isActionTarget, tickColor, onDownload, compact }) {
-  const fileMeta = getFileMeta(item.fileName);
-  const metaLine = [item.fileSizeLabel, fileMeta.ext].filter(Boolean).join(' • ');
-  const showFooter = !compact && (item.time || item.me);
-  return (
-    <View style={[styles.fileCard, isActionTarget && styles.fileCardSelected]}>
-      <View style={styles.fileCardRow}>
-        <View style={[styles.fileBadge, { backgroundColor: fileMeta.badgeColor }]}>
-          <View style={styles.fileBadgeFold} />
-          <Text style={styles.fileBadgeExt}>{fileMeta.badgeLabel}</Text>
-        </View>
-        <View style={styles.fileTextWrap}>
-          <Text numberOfLines={2} style={[styles.fileName, isActionTarget && styles.fileNameSelected]}>
-            {item.fileName || 'Document'}
-          </Text>
-          {metaLine ? (
-            <Text style={styles.fileMetaText} numberOfLines={1}>
-              {metaLine}
-            </Text>
-          ) : null}
-        </View>
-        {!compact ? (
-          <Pressable style={styles.fileDownloadBtn} hitSlop={8} onPress={onDownload}>
-            <MaterialCommunityIcons name="download" size={22} color="#94a3b8" />
-          </Pressable>
-        ) : null}
-      </View>
-      {showFooter ? (
-        <View style={styles.fileCardFooter}>
-          {item.time ? <Text style={styles.fileCardTime}>{normalizeTime(item.time)}</Text> : <View />}
-          {item.me ? (
-            <MaterialCommunityIcons
-              name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
-              size={14}
-              color={tickColor}
-            />
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 const startOfLocalDay = (date) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -193,20 +139,6 @@ const roleBadgeLabel = (role) => {
   return String(role || '').slice(0, 3).toUpperCase();
 };
 
-const statusIconName = (status) => {
-  if (status === 'seen') return 'check-all';
-  if (status === 'delivered') return 'check-all';
-  if (status === 'sending') return 'clock-outline';
-  return 'check';
-};
-
-const statusIconColor = (status) => {
-  if (status === 'seen') return '#34B7F1';
-  if (status === 'delivered') return '#94a3b8';
-  if (status === 'sending') return '#94a3b8';
-  return '#94a3b8';
-};
-
 function initials(name) {
   const parts = String(name || '')
     .trim()
@@ -224,13 +156,23 @@ const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, 
   const displayName = resolveChatPeerDisplayName(item, peer);
   const nameLoading = isChatDisplayNamePending(displayName, item.peerId);
   const avatarLetter = (displayName || peer?.displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
+  const unreadCount = Number(item.unread) || 0;
+  const hasUnread = unreadCount > 0;
+  const previewText =
+    last?.type === 'image'
+      ? 'Photo'
+      : last?.type === 'file'
+        ? last.fileName
+          ? `📎 ${last.fileName}`
+          : 'Document'
+        : last?.text ?? 'Start a conversation';
 
   return (
     <Pressable style={styles.chatCard} onPress={() => onOpen(item.id)} onLongPress={() => onHide(item.id)}>
       <View>
-        {item.listAvatarUrl || peer?.avatarUrl ? (
+        {peer?.avatarUrl || item.listAvatarUrl ? (
           <Image
-            source={{ uri: item.listAvatarUrl || peer?.avatarUrl }}
+            source={{ uri: peer?.avatarUrl || item.listAvatarUrl }}
             style={styles.avatarImg}
             contentFit="cover"
           />
@@ -253,21 +195,19 @@ const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, 
               <Text style={styles.roleBadge}>{roleBadgeLabel(item.headerRole || peer?.roleLabel)}</Text>
             ) : null}
           </View>
-          <Text style={styles.chatCardTime}>{normalizeTime(last?.time)}</Text>
+          <Text style={[styles.chatCardTime, hasUnread && styles.chatCardTimeUnread]}>
+            {normalizeTime(last?.time)}
+          </Text>
         </View>
-        <Text style={styles.chatCardMsg} numberOfLines={1}>
-          {last?.type === 'image'
-            ? 'Photo'
-            : last?.type === 'file'
-              ? `Document: ${last.fileName ?? ''}`
-              : last?.text ?? 'Start a conversation'}
+        <Text style={[styles.chatCardMsg, hasUnread && styles.chatCardMsgUnread]} numberOfLines={1}>
+          {previewText}
         </Text>
       </View>
-      {!!item.unread && (
+      {hasUnread ? (
         <View style={styles.unreadBadge}>
-          <Text style={styles.unreadText}>{item.unread}</Text>
+          <Text style={styles.unreadText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
         </View>
-      )}
+      ) : null}
     </Pressable>
   );
 });
@@ -279,15 +219,35 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
   actionTargetId,
   onLongPress,
   onOpenMedia,
+  isGroupChat = false,
+  showSenderHeader = false,
+  senderName = '',
+  senderAvatarUrl = null,
+  senderColor = '#1266f1',
 }) {
   if (row.kind === 'date') {
     return (
       <View style={styles.dateSeparatorWrap}>
-        <Text style={styles.dateSeparatorText}>{row.label}</Text>
+        <View style={styles.dateSeparatorPill}>
+          <Text style={styles.dateSeparatorText}>{row.label}</Text>
+        </View>
       </View>
     );
   }
   const item = row.message;
+
+  if (item.deleted) {
+    const deletedLabel = item.me ? DELETED_BY_ME_TEXT : DELETED_MESSAGE_TEXT;
+    return (
+      <View style={[styles.msgRow, item.me ? styles.msgRowMe : styles.msgRowOther]}>
+        <View style={styles.deletedBubble}>
+          <MaterialCommunityIcons name="cancel" size={15} color="#8696a0" style={{ marginRight: 6 }} />
+          <Text style={styles.deletedBubbleText}>{deletedLabel}</Text>
+        </View>
+      </View>
+    );
+  }
+
   const reply = item.replyToId ? selectedMessageById.get(String(item.replyToId)) : null;
   // NEW UI FIX FOR MESSAGE ACTION UI — invert bubble colors when message is selected (ref image)
   const isActionTarget = actionTargetId != null && String(item.id) === String(actionTargetId);
@@ -296,29 +256,30 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
       ? item.status === 'seen'
         ? BrandColors.primaryMid
         : '#64748b'
-      : statusIconColor(item.status);
-  return (
-    <View
-      style={[
-        styles.msgRow,
-        item.me ? styles.msgRowMe : styles.msgRowOther,
-        isActionTarget && styles.msgRowActionTarget,
-      ]}>
-      <Pressable
-        style={[
-          styles.bubble,
-          item.me ? styles.bubbleMe : styles.bubbleOther,
-          isActionTarget && item.me && styles.bubbleMeSelected,
-          isActionTarget && !item.me && styles.bubbleOtherSelected,
-          (item.type === 'image' || item.type === 'file') && styles.bubbleAttachment,
-          item.type === 'image' && styles.imageBubble,
-          item.type === 'file' && styles.bubbleFileDoc,
-          isActionTarget && (item.type === 'image' || item.type === 'file') && styles.bubbleAttachmentSelected,
-        ]}
-        onLongPress={() => onLongPress(item)}
-        onPress={() => {
-          if (item.type === 'image' || item.type === 'file') onOpenMedia(item);
-        }}>
+      : statusIconColor(item.status, !!item.me && !isActionTarget);
+  const isGroupIncoming = isGroupChat && !item.me;
+  const isImageBubble = item.type === 'image' && !!item.uri;
+  const bubbleStyle = [
+    styles.bubble,
+    styles.bubbleFitContent,
+    item.me ? styles.bubbleMe : styles.bubbleOther,
+    isGroupIncoming && !isImageBubble && showSenderHeader && styles.bubbleGroupFirst,
+    isGroupIncoming && !isImageBubble && !showSenderHeader && styles.bubbleGroupStack,
+    isImageBubble && styles.bubbleImageOuter,
+    isImageBubble && (item.me ? styles.bubbleImageMe : styles.bubbleImageOther),
+    isImageBubble && isGroupIncoming && showSenderHeader && styles.bubbleImageGroupFirst,
+    isImageBubble && isGroupIncoming && !showSenderHeader && styles.bubbleImageGroupStack,
+    item.type === 'file' && styles.bubbleFileOuter,
+    isActionTarget && item.me && styles.bubbleMeSelected,
+    isActionTarget && !item.me && styles.bubbleOtherSelected,
+    item.type === 'image' && styles.bubbleAttachment,
+    item.type === 'image' && styles.imageBubble,
+    isActionTarget && item.type === 'image' && styles.bubbleAttachmentSelected,
+    isActionTarget && item.type === 'file' && styles.bubbleFileSelected,
+  ];
+  const isFileBubble = item.type === 'file';
+  const bubbleContent = (
+    <>
         {item.forwardedFrom ? (
           <View style={[styles.messageFlag, item.me && styles.messageFlagMe]}>
             <MaterialCommunityIcons
@@ -341,6 +302,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             style={[
               styles.replyQuote,
               item.me && styles.replyQuoteMe,
+              isGroupIncoming && styles.replyQuoteGroup,
               isActionTarget && styles.replyQuoteSelected,
               isActionTarget && item.me && styles.replyQuoteMeSelected,
             ]}>
@@ -348,45 +310,64 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
               style={[
                 styles.replyQuoteTitle,
                 item.me && styles.replyQuoteTitleMe,
+                isGroupIncoming && styles.replyQuoteTitleGroup,
                 isActionTarget && styles.replyQuoteTitleSelected,
               ]}
               numberOfLines={1}>
-              {reply.me ? 'You' : peerName || 'Contact'}
+              {reply.me ? 'You' : reply.authorName || peerName || senderName || 'Contact'}
             </Text>
             <Text
               style={[
                 styles.replyQuoteText,
                 item.me && styles.replyQuoteTextMe,
+                isGroupIncoming && styles.replyQuoteTextGroup,
                 isActionTarget && styles.replyQuoteTextSelected,
               ]}
-              numberOfLines={1}>
+              numberOfLines={2}>
               {messagePlainText(reply) || 'Message'}
             </Text>
           </View>
         ) : null}
-        {item.type === 'image' && item.uri ? (
-          <View style={[styles.imageFrame, isActionTarget && styles.imageFrameSelected]}>
-            <Image source={{ uri: item.uri }} style={styles.attachmentImage} contentFit="cover" transition={200} />
+        {isGroupIncoming && showSenderHeader ? (
+          <Text style={[styles.groupNameInBubble, { color: senderColor || ChatTheme.groupSenderName }]} numberOfLines={1}>
+            {senderName || 'Member'}
+          </Text>
+        ) : null}
+        {isImageBubble ? (
+          <View
+            style={[
+              styles.imageBubbleWrap,
+              item.me ? styles.imageBubbleWrapMe : styles.imageBubbleWrapOther,
+              isGroupIncoming && showSenderHeader && styles.imageBubbleWrapGroupFirst,
+              isGroupIncoming && !showSenderHeader && styles.imageBubbleWrapGroupStack,
+              isActionTarget && styles.imageFrameSelected,
+            ]}>
+            <Image
+              source={{ uri: item.uri }}
+              style={styles.attachmentImage}
+              contentFit="cover"
+              transition={200}
+              placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            />
             <View style={styles.imageOverlayBar}>
               <Text style={styles.imageTimeText}>{normalizeTime(item.time)}</Text>
               {item.me ? (
                 <MaterialCommunityIcons
                   name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
                   size={13}
-                  color={tickColor}
+                  color={statusIconColor(item.status, true)}
                 />
               ) : null}
             </View>
           </View>
         ) : null}
         {item.type === 'file' ? (
-          <FileDocumentCard
+          <DocumentMessageCard
             item={item}
             isActionTarget={isActionTarget}
             tickColor={tickColor}
-            onDownload={() => {
-              if (item.uri) void Linking.openURL(item.uri);
-            }}
+            normalizeTime={normalizeTime}
+            onLongPress={() => onLongPress(item)}
           />
         ) : null}
         {item.type !== 'file' && item.type !== 'image' ? (
@@ -422,7 +403,56 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             />
           ) : null}
         </View>
-      </Pressable>
+    </>
+  );
+  const bubbleBlock = isFileBubble ? (
+    <View style={bubbleStyle}>{bubbleContent}</View>
+  ) : (
+    <Pressable
+      style={bubbleStyle}
+      onLongPress={() => onLongPress(item)}
+      onPress={() => {
+        if (item.type === 'image') onOpenMedia(item);
+      }}>
+      {bubbleContent}
+    </Pressable>
+  );
+
+  if (isGroupIncoming) {
+    return (
+      <View
+        style={[
+          styles.msgRow,
+          styles.msgRowGroupOther,
+          showSenderHeader && styles.msgRowGroupBlockStart,
+          isActionTarget && styles.msgRowActionTarget,
+        ]}>
+        <View style={styles.groupAvatarCol}>
+          {showSenderHeader ? (
+            senderAvatarUrl ? (
+              <Image source={{ uri: senderAvatarUrl }} style={styles.groupSideAvatar} contentFit="cover" />
+            ) : (
+              <View style={styles.groupSideAvatarFb}>
+                <Text style={styles.groupSideAvatarLetter}>{String(senderName || '?').slice(0, 1)}</Text>
+              </View>
+            )
+          ) : (
+            <View style={styles.groupSideAvatarGhost} />
+          )}
+        </View>
+        <View style={styles.groupBubbleWrap}>{bubbleBlock}</View>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.msgRow,
+        item.me ? styles.msgRowMe : styles.msgRowOther,
+        isActionTarget && styles.msgRowActionTarget,
+      ]}>
+      {bubbleBlock}
     </View>
   );
 });
@@ -430,18 +460,29 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
 export default function MessagesScreen() {
   const navigation = useNavigation();
   const { setInConversation } = useChatChrome();
-  const { user, token } = useAuth();
-  const inbox = useGdcChatInbox({ token, user });
+  const { user } = useAuth();
+  const inbox = useGdcInbox();
   const {
     threads,
     contacts,
+    groupContacts,
     inboxLoading,
     directoryHydrated,
     inboxError,
+    refreshThreads,
     openChat,
     closeChat,
     startDm,
+    ensureDmChat,
+    reloadContacts,
     createGroup: submitGroupToApi,
+    patchGroupFromServer,
+    addGroupMembersToChat,
+    removeGroupMembersFromChat,
+    leaveGroup,
+    deleteGroup,
+    promoteGroupMemberAdmin,
+    myUserId,
     sendText,
     sendAttachment,
     loadOlderMessages,
@@ -453,10 +494,14 @@ export default function MessagesScreen() {
     hideMessageForMe,
     deleteMessageForEveryone,
     acknowledgeChatRead,
+    setActiveChatId,
+    loadMessagesForChat,
   } = inbox;
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const [selectedId, setSelectedId] = useState(null);
+  const [listRefreshing, setListRefreshing] = useState(false);
+  const reloadEmptyChatRef = useRef('');
   const [listSearch, setListSearch] = useState('');
   const [listFilter, setListFilter] = useState('all');
   const [draft, setDraft] = useState('');
@@ -465,18 +510,13 @@ export default function MessagesScreen() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState(/** @type {Record<string, unknown> | null} */ (null));
   const [groupOpen, setGroupOpen] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [groupDescription, setGroupDescription] = useState('');
-  const [groupPrivacy, setGroupPrivacy] = useState('private');
-  const [groupAdmin, setGroupAdmin] = useState('');
-  const [groupMembers, setGroupMembers] = useState([]);
   const [pendingSend, setPendingSend] = useState(null);
+  const [pendingSending, setPendingSending] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [messageActionItem, setMessageActionItem] = useState(null);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState(/** @type {Set<string>} */ (new Set()));
   const [forwardItem, setForwardItem] = useState(null);
-  const [groupCreating, setGroupCreating] = useState(false);
   const [groupCreated, setGroupCreated] = useState(false);
   const [createdGroupSummary, setCreatedGroupSummary] = useState(null);
   const msgListRef = useRef(null);
@@ -504,15 +544,64 @@ export default function MessagesScreen() {
 
   const selected = useMemo(() => threads.find((thread) => thread.id === selectedId) ?? null, [threads, selectedId]);
 
+  /** DB/admin deletes remove threads server-side — close stale open chat without manual refresh. */
+  useEffect(() => {
+    if (!selectedId) return;
+    const exists = threads.some((t) => String(t.id) === String(selectedId));
+    if (!exists) {
+      setSelectedId(null);
+      setActiveChatId(null);
+      closeChat();
+      setInConversation(false);
+      setReplyTarget(null);
+    }
+  }, [threads, selectedId, setActiveChatId, closeChat, setInConversation]);
+
+  /** After server sync clears cached messages, reload open chat from API (e.g. DB wipe). */
+  useEffect(() => {
+    if (!selectedId) {
+      reloadEmptyChatRef.current = '';
+      return;
+    }
+    const msgs = Array.isArray(selected?.messages) ? selected.messages : [];
+    if (msgs.length > 0) {
+      reloadEmptyChatRef.current = '';
+      return;
+    }
+    const key = String(selectedId);
+    if (reloadEmptyChatRef.current === key) return;
+    reloadEmptyChatRef.current = key;
+    void loadMessagesForChat(selectedId);
+  }, [selectedId, selected?.messages, loadMessagesForChat]);
+
+  useEffect(() => {
+    if (!listRefreshing) return;
+    reloadEmptyChatRef.current = '';
+  }, [listRefreshing]);
+
+  const onPullRefreshInbox = useCallback(async () => {
+    setListRefreshing(true);
+    try {
+      await refreshThreads({ silent: true, syncFromServer: true });
+      await reloadContacts();
+    } finally {
+      setListRefreshing(false);
+    }
+  }, [refreshThreads, reloadContacts]);
+
   const headerProfile = useMemo(() => {
     if (!selected) return { loading: false, name: '', avatarUrl: null, role: '' };
     const peer = selected.peerId ? resolvePeerProfile(selected.peerId) : null;
     const name = resolveChatPeerDisplayName(selected, peer);
     const loading = isChatDisplayNamePending(name, selected.peerId);
+    const isGroup = selected?.server?.kind === 'group';
+    const avatarUrl = isGroup
+      ? selected.listAvatarUrl || null
+      : peer?.avatarUrl || selected.listAvatarUrl || null;
     return {
       loading,
       name: name || '…',
-      avatarUrl: selected.listAvatarUrl || peer?.avatarUrl || null,
+      avatarUrl,
       role: selected.headerRole || peer?.roleLabel || '',
     };
   }, [resolvePeerProfile, selected]);
@@ -524,30 +613,77 @@ export default function MessagesScreen() {
     return map;
   }, [selected?.messages]);
 
+  const isGroupChat = selected?.server?.kind === 'group';
+
+  const canComposeInSelectedChat = useMemo(
+    () => canComposeInChat(selected?.server, myUserId),
+    [selected?.server, myUserId],
+  );
+
+  const prevCanComposeRef = useRef(true);
+  useEffect(() => {
+    const prev = prevCanComposeRef.current;
+    prevCanComposeRef.current = canComposeInSelectedChat;
+    if (prev && !canComposeInSelectedChat) {
+      setDraft('');
+      setReplyTarget(null);
+      setAttachOpen(false);
+      if (selectedId) emitChatTyping(selectedId, false);
+    }
+  }, [canComposeInSelectedChat, emitChatTyping, selectedId]);
+
   const messageRows = useMemo(() => {
     const rows = [];
     let lastLabel = '';
     const msgs = Array.isArray(selected?.messages) ? selected.messages : [];
-    for (const msg of msgs) {
+    for (let i = 0; i < msgs.length; i += 1) {
+      const msg = msgs[i];
       const label = formatMessageDateLabel(msg.createdAtIso);
       if (label !== lastLabel) {
         rows.push({ kind: 'date', id: `date-${msg.createdAtIso || msg.id}`, label });
         lastLabel = label;
       }
-      rows.push({ kind: 'message', id: String(msg.id), message: msg });
+      const prev = i > 0 ? msgs[i - 1] : null;
+      const authorId = msg.authorId ? String(msg.authorId) : '';
+      const showSenderHeader =
+        isGroupChat &&
+        !msg.me &&
+        authorId &&
+        (!prev || prev.me || String(prev.authorId || '') !== authorId);
+      const peer = authorId ? resolvePeerProfile(authorId) : null;
+      const senderName = peer?.displayName || peer?.name || '';
+      rows.push({
+        kind: 'message',
+        id: String(msg.id),
+        message: msg,
+        showSenderHeader,
+        senderName,
+        senderAvatarUrl: peer?.avatarUrl || null,
+        senderColor: groupSenderColor(authorId),
+      });
     }
     return rows;
-  }, [selected?.messages]);
+  }, [isGroupChat, resolvePeerProfile, selected?.messages]);
+
+  const messageListExtra = useMemo(() => {
+    const last = messageRows[messageRows.length - 1];
+    return `${selectedId || ''}:${messageRows.length}:${last?.id || ''}`;
+  }, [messageRows, selectedId]);
 
   const filteredThreads = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
-    return threads.filter((thread) => {
+    const filtered = threads.filter((thread) => {
       if (listFilter === 'unread' && !(Number(thread.unread) > 0)) return false;
       if (listFilter === 'groups' && thread?.server?.kind !== 'group') return false;
       if (!q) return true;
       const title = String(thread.listTitle || thread.name || '').toLowerCase();
       const role = String(thread.headerRole || '').toLowerCase();
       return title.includes(q) || role.includes(q);
+    });
+    return filtered.sort((a, b) => {
+      const aMs = Number(a.threadPreview?.createdAtMs) || 0;
+      const bMs = Number(b.threadPreview?.createdAtMs) || 0;
+      return bMs - aMs;
     });
   }, [threads, listFilter, listSearch]);
 
@@ -563,14 +699,17 @@ export default function MessagesScreen() {
 
   const openThread = useCallback(
     (threadId) => {
+      const id = String(threadId);
+      setActiveChatId(id);
       setInConversation(true);
-      setSelectedId(threadId);
-      void openChat(threadId);
+      setSelectedId(id);
+      void openChat(id);
     },
-    [openChat, setInConversation],
+    [openChat, setActiveChatId, setInConversation],
   );
 
   const sendMessage = async () => {
+    if (!canComposeInSelectedChat) return;
     const text = draft.trim();
     if (!text || !selectedId) return;
     isNearBottomRef.current = true;
@@ -588,7 +727,7 @@ export default function MessagesScreen() {
   };
 
   const pickAndSendAttachment = async (mode) => {
-    setAttachOpen(false);
+    if (!canComposeInSelectedChat) return;
     try {
       if (mode === 'image') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -611,22 +750,37 @@ export default function MessagesScreen() {
       }
       const doc = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false });
       if (doc.canceled || !doc.assets?.length) return;
+      if (!selectedId) {
+        Alert.alert('Chat', 'Open a conversation before sending a file.');
+        return;
+      }
       const a = doc.assets[0];
-      const uri = a.uri;
-      const mimeType = a.mimeType || 'application/octet-stream';
-      const fileName = a.name || 'document';
-      const size = typeof a.size === 'number' ? a.size : undefined;
-      setPendingSend({ uri, mimeType, fileName, kind: 'file', size });
+      isNearBottomRef.current = true;
+      try {
+        await sendAttachment(
+          selectedId,
+          {
+            uri: a.uri,
+            mimeType: a.mimeType || 'application/octet-stream',
+            fileName: a.name || 'document',
+            sizeBytes: typeof a.size === 'number' ? a.size : undefined,
+          },
+          { onProgress: () => {} },
+        );
+        scrollToLatest(true);
+      } catch (e) {
+        Alert.alert('Send', e?.message ?? 'Upload failed');
+      }
     } catch (e) {
       Alert.alert('Attachment', e?.message ?? 'Could not pick file');
     }
   };
 
   const confirmPendingSend = async () => {
-    if (!pendingSend || !selectedId) return;
+    if (!canComposeInSelectedChat || !pendingSend || !selectedId || pendingSending) return;
     const payload = { ...pendingSend };
-    setPendingSend(null);
     isNearBottomRef.current = true;
+    setPendingSending(true);
     try {
       await sendAttachment(
         selectedId,
@@ -638,9 +792,12 @@ export default function MessagesScreen() {
         },
         { onProgress: () => {} },
       );
+      setPendingSend(null);
       scrollToLatest(true);
     } catch (e) {
       Alert.alert('Send', e?.message ?? 'Upload failed');
+    } finally {
+      setPendingSending(false);
     }
   };
 
@@ -652,7 +809,7 @@ export default function MessagesScreen() {
     typingStopTimerRef.current = setTimeout(() => {
       typingStopTimerRef.current = null;
       emitChatTyping(selectedId, false);
-    }, 1400);
+    }, 1000);
   };
 
   useEffect(
@@ -698,8 +855,8 @@ export default function MessagesScreen() {
     const id = String(last.id);
     const me = !!last.me;
     const prev = lastMsgTrackRef.current;
-    if (id === prev.id) return;
-    lastMsgTrackRef.current = { id, me };
+    if (id === prev.id && msgs.length === (prev.count ?? 0)) return;
+    lastMsgTrackRef.current = { id, me, count: msgs.length };
     const isIncoming = !me;
     if (isIncoming) {
       isNearBottomRef.current = true;
@@ -734,21 +891,42 @@ export default function MessagesScreen() {
         actionTargetId={messageActionItem?.id != null ? String(messageActionItem.id) : null}
         onLongPress={setMessageActionItem}
         onOpenMedia={setPreviewItem}
+        isGroupChat={isGroupChat}
+        showSenderHeader={!!row.showSenderHeader}
+        senderName={row.senderName || ''}
+        senderAvatarUrl={row.senderAvatarUrl}
+        senderColor={row.senderColor || '#1266f1'}
       />
     ),
-    [headerProfile.name, messageActionItem?.id, selectedMessageById],
+    [headerProfile.name, isGroupChat, messageActionItem?.id, selectedMessageById],
   );
 
-  const startNewChat = async (contact) => {
-    try {
-      const id = await startDm(contact.id);
+  const startNewChat = useCallback(
+    async (contact) => {
+      const uid = contact?.id != null ? String(contact.id) : '';
+      if (!uid) return;
       setNewChatOpen(false);
       setContactSearch('');
-      if (id) setSelectedId(id);
-    } catch (e) {
-      Alert.alert('Chat', e?.message ?? 'Could not start DM');
-    }
-  };
+      setInConversation(true);
+      try {
+        const id = await ensureDmChat(uid);
+        if (!id) throw new Error('Could not open chat');
+        setActiveChatId(id);
+        setSelectedId(id);
+        await openChat(id);
+      } catch (e) {
+        setInConversation(false);
+        Alert.alert('Chat', e?.message ?? 'Could not start chat');
+        throw e;
+      }
+    },
+    [ensureDmChat, openChat, setActiveChatId, setInConversation],
+  );
+
+  useEffect(() => {
+    if (!newChatOpen) return;
+    void reloadContacts();
+  }, [newChatOpen, reloadContacts]);
 
   const confirmHideChat = useCallback(
     (threadId = selectedId) => {
@@ -762,6 +940,7 @@ export default function MessagesScreen() {
             await hideChatForMe(threadId);
             if (threadId === selectedId) {
               closeChat();
+              setActiveChatId(null);
               setSelectedId(null);
               setInConversation(false);
             }
@@ -769,7 +948,7 @@ export default function MessagesScreen() {
         },
       ]);
     },
-    [closeChat, hideChatForMe, selectedId],
+    [closeChat, hideChatForMe, selectedId, setActiveChatId, setInConversation],
   );
 
   const renderThreadItem = useCallback(
@@ -793,6 +972,7 @@ export default function MessagesScreen() {
     (actionKey, item) => {
       if (!item) return;
       if (actionKey === 'reply') {
+        if (!canComposeInSelectedChat) return;
         setReplyTarget(item);
         return;
       }
@@ -809,17 +989,17 @@ export default function MessagesScreen() {
         setSelectedMessageIds(new Set([String(item.id)]));
         return;
       }
+      if (item.deleted) return;
       if (actionKey === 'hide') {
         if (selectedId && item.id) void hideMessageForMe(selectedId, item.id);
         return;
       }
-      // NEW UI FIX FOR MESSAGE ACTION UI — delete sheet handles confirm (no extra alert)
       if (actionKey === 'everyone') {
         if (selectedId && item.id) void deleteMessageForEveryone(selectedId, item.id);
         return;
       }
     },
-    [copyMessage, deleteMessageForEveryone, hideMessageForMe, selectedId],
+    [canComposeInSelectedChat, copyMessage, deleteMessageForEveryone, hideMessageForMe, selectedId],
   );
 
   const forwardMessageTo = async (contact) => {
@@ -848,45 +1028,40 @@ export default function MessagesScreen() {
     }
   };
 
-  const toggleGroupMember = (memberId) => {
-    setGroupMembers((prev) => (prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]));
-  };
-
-  const handleCreateGroupSubmit = async () => {
-    const name = groupName.trim();
-    if (!name) return;
-    if (!groupMembers.length) {
-      Alert.alert('Group', 'Add at least one member.');
-      return;
-    }
+  const handleCreateGroupFromFlow = async ({
+    name,
+    memberIds,
+    avatarUri,
+    privacy,
+    allowMembersToAdd,
+    idempotencyKey,
+  }) => {
     try {
-      setGroupCreating(true);
-      setGroupCreated(false);
+      const privacyLocked =
+        privacy === 'private' || privacy === 'restricted' || !allowMembersToAdd;
       const id = await submitGroupToApi({
         name,
-        memberIds: groupMembers.map(String),
+        memberIds,
         scope: groupScopeForRole(),
-        privacyLockedInvites: groupPrivacy === 'private' || groupPrivacy === 'restricted',
-        adminsOnlyMessages: groupPrivacy === 'restricted',
+        privacyLockedInvites: privacyLocked,
+        adminsOnlyMessages: privacy === 'restricted',
+        avatarUrl: avatarUri || undefined,
+        idempotencyKey,
+        openAfterCreate: false,
       });
+      const pool = groupContacts.length ? groupContacts : contacts;
       setCreatedGroupSummary({
         id,
         name,
-        memberIds: groupMembers.map(String),
-        members: contacts.filter((c) => groupMembers.includes(c.id)).slice(0, 3),
+        memberIds,
+        members: pool.filter((c) => memberIds.includes(String(c.id))).slice(0, 3),
       });
       setGroupOpen(false);
-      setNewChatOpen(false);
-      setGroupName('');
-      setGroupDescription('');
-      setGroupPrivacy('private');
-      setGroupAdmin('');
-      setGroupMembers([]);
       setGroupCreated(true);
+      return id;
     } catch (e) {
       Alert.alert('Group', e?.message ?? 'Could not create group');
-    } finally {
-      setGroupCreating(false);
+      throw e;
     }
   };
 
@@ -922,6 +1097,7 @@ export default function MessagesScreen() {
               onPress={() => {
                 if (selectedId) emitChatTyping(selectedId, false);
                 closeChat();
+                setActiveChatId(null);
                 setSelectedId(null);
                 setInConversation(false);
               }}>
@@ -960,14 +1136,28 @@ export default function MessagesScreen() {
                 ) : null}
               </Animated.View>
             </View>
-            <Pressable style={styles.headerActionBtn} onPress={() => confirmHideChat(selected.id)}>
-              <MaterialCommunityIcons name="trash-can-outline" size={19} color="#ef4444" />
-            </Pressable>
+            {isGroupChat ? (
+              <Pressable
+                style={styles.headerActionBtn}
+                onPress={() => {
+                  if (selectedId) {
+                    router.push({ pathname: '/dashboard/group-info', params: { chatId: selectedId } });
+                  }
+                }}>
+                <MaterialCommunityIcons name="dots-vertical" size={22} color={BrandColors.text} />
+              </Pressable>
+            ) : (
+              <Pressable style={styles.headerActionBtn} onPress={() => confirmHideChat(selected.id)}>
+                <MaterialCommunityIcons name="trash-can-outline" size={19} color="#ef4444" />
+              </Pressable>
+            )}
           </View>
 
+          <ChatWallpaper style={styles.messagesWallpaper}>
           <FlatList
             ref={msgListRef}
             data={messageRows}
+            extraData={messageListExtra}
             keyExtractor={(item) => item.id}
             style={styles.messagesList}
             contentContainerStyle={[styles.msgList, { paddingBottom: 16 }]}
@@ -995,8 +1185,9 @@ export default function MessagesScreen() {
             }
             renderItem={renderMessageRow}
           />
+          </ChatWallpaper>
 
-          {replyTarget ? (
+          {canComposeInSelectedChat && replyTarget ? (
             <View style={styles.replyComposer}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.replyComposerTitle}>
@@ -1012,37 +1203,39 @@ export default function MessagesScreen() {
             </View>
           ) : null}
 
-          {/* NEW UI FIX FOR MESSAGE COMPOSER — pill input + attach + camera + send */}
-          <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <Pressable style={styles.composerEmojiBtn} onPress={() => {}}>
-              <MaterialCommunityIcons name="emoticon-outline" size={24} color="#94a3b8" />
-            </Pressable>
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={draft}
-                onChangeText={handleDraftChange}
-                onSubmitEditing={sendMessage}
-                placeholder="Write a message..."
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-                returnKeyType="default"
-                multiline
-                maxLength={8000}
-              />
-              <Pressable style={styles.inputIconBtn} onPress={() => setAttachOpen(true)} hitSlop={6}>
-                <MaterialCommunityIcons name="paperclip" size={22} color="#94a3b8" />
-              </Pressable>
-              <Pressable style={styles.inputIconBtn} onPress={() => void pickAndSendAttachment('image')} hitSlop={6}>
-                <MaterialCommunityIcons name="camera-outline" size={22} color="#94a3b8" />
+          {canComposeInSelectedChat ? (
+            <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  value={draft}
+                  onChangeText={handleDraftChange}
+                  onSubmitEditing={sendMessage}
+                  placeholder="Message"
+                  placeholderTextColor={ChatTheme.inputPlaceholder}
+                  style={styles.input}
+                  returnKeyType="default"
+                  multiline
+                  maxLength={8000}
+                />
+                <Pressable style={styles.inputIconBtn} onPress={() => setAttachOpen(true)} hitSlop={8}>
+                  <MaterialCommunityIcons
+                    name="paperclip"
+                    size={24}
+                    color={ChatTheme.inputIcon}
+                    style={styles.paperclipIcon}
+                  />
+                </Pressable>
+              </View>
+              <Pressable
+                style={[styles.sendBtn, !!draft.trim() && styles.sendBtnActive]}
+                onPress={sendMessage}
+                disabled={!draft.trim()}>
+                <MaterialCommunityIcons name="send" size={22} color="#fff" />
               </Pressable>
             </View>
-            <Pressable
-              style={[styles.sendBtn, !!draft.trim() && styles.sendBtnActive]}
-              onPress={sendMessage}
-              disabled={!draft.trim()}>
-              <MaterialCommunityIcons name="send" size={20} color="#fff" />
-            </Pressable>
-          </View>
+          ) : (
+            <GroupAdminsOnlyBanner bottomInset={insets.bottom} />
+          )}
         </KeyboardAvoidingView>
       ) : (
         <View style={[styles.listScreen, { paddingBottom: tabBarHeight + 14 }]}>
@@ -1099,6 +1292,9 @@ export default function MessagesScreen() {
             data={filteredThreads}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={listRefreshing} onRefresh={() => void onPullRefreshInbox()} />
+            }
             initialNumToRender={10}
             maxToRenderPerBatch={8}
             updateCellsBatchingPeriod={80}
@@ -1118,195 +1314,29 @@ export default function MessagesScreen() {
         </View>
       )}
 
-      <Modal visible={newChatOpen} transparent animationType="fade" onRequestClose={() => setNewChatOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>Start new chat</Text>
-              <Pressable onPress={() => setNewChatOpen(false)}>
-                <MaterialCommunityIcons name="close" size={20} color="#334155" />
-              </Pressable>
-            </View>
-            <Pressable style={styles.groupCreateEntry} onPress={() => setGroupOpen(true)}>
-              <MaterialCommunityIcons name="account-group-outline" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.groupCreateEntryText}>Create New Group</Text>
-            </Pressable>
-            <View style={styles.searchWrap}>
-              <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
-              <TextInput
-                value={contactSearch}
-                onChangeText={setContactSearch}
-                placeholder="Search contact"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-              />
-            </View>
-            <FlatList
-              data={filteredContacts}
-              keyExtractor={(item) => item.id}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={<Text style={styles.emptyText}>No available contacts.</Text>}
-              renderItem={({ item }) => {
-                const line = item.displayName || item.name;
-                return (
-                  <Pressable style={styles.contactRow} onPress={() => startNewChat(item)}>
-                    <View>
-                      {item.avatarUrl ? (
-                        <Image source={{ uri: item.avatarUrl }} style={styles.contactAvatarImg} contentFit="cover" />
-                      ) : (
-                        <View style={styles.avatarSm}>
-                          <Text style={styles.avatarText}>{String(line).slice(0, 1)}</Text>
-                        </View>
-                      )}
-                      <View style={[styles.contactPresenceDot, item.online && styles.presenceDotOnline]} />
-                    </View>
-                    <View style={[styles.chatCardTitleRow, { flex: 1, minWidth: 0 }]}>
-                      <Text style={styles.contactName} numberOfLines={1}>
-                        {line}
-                      </Text>
-                      {item.roleLabel ? <Text style={styles.roleBadge}>{roleBadgeLabel(item.roleLabel)}</Text> : null}
-                    </View>
-                    <MaterialCommunityIcons name="chevron-right" size={18} color="#64748b" />
-                  </Pressable>
-                );
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
+      <NewChatPicker
+        visible={newChatOpen}
+        onClose={() => {
+          setNewChatOpen(false);
+          setContactSearch('');
+        }}
+        contacts={contacts}
+        contactsLoading={inboxLoading}
+        directoryHydrated={directoryHydrated}
+        onSelectContact={startNewChat}
+        onCreateGroup={() => {
+          setNewChatOpen(false);
+          setGroupOpen(true);
+        }}
+      />
 
-      <Modal visible={groupOpen} transparent animationType="fade" onRequestClose={() => setGroupOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, styles.groupModalCard]}>
-            <View style={styles.modalHead}>
-              <Pressable onPress={() => setGroupOpen(false)}>
-                <MaterialCommunityIcons name="arrow-left" size={22} color={BrandColors.text} />
-              </Pressable>
-              <Text style={styles.modalTitle}>Create Group</Text>
-              <Pressable onPress={() => setGroupOpen(false)}>
-                <MaterialCommunityIcons name="close" size={20} color="#334155" />
-              </Pressable>
-            </View>
-
-            <View style={styles.groupPhotoBlock}>
-              <View style={styles.groupDpCircle}>
-                <MaterialCommunityIcons name="camera-outline" size={30} color={BrandColors.primaryMid} />
-              </View>
-              <Pressable style={styles.groupDpBtn}>
-                <Text style={styles.groupDpBtnText}>Add Group Photo</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.groupSectionLabel}>Group Name</Text>
-            <View style={styles.searchWrap}>
-              <TextInput
-                value={groupName}
-                onChangeText={setGroupName}
-                placeholder="Enter group name"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-              />
-            </View>
-
-            <Text style={styles.groupSectionLabel}>Group Description (Optional)</Text>
-            <View style={[styles.searchWrap, styles.groupDescriptionBox]}>
-              <TextInput
-                value={groupDescription}
-                onChangeText={(text) => setGroupDescription(text.slice(0, 200))}
-                placeholder="Add a description..."
-                placeholderTextColor="#94a3b8"
-                style={[styles.searchInput, styles.groupDescriptionInput]}
-                multiline
-              />
-              <Text style={styles.descriptionCount}>{groupDescription.length}/200</Text>
-            </View>
-
-            <Text style={styles.groupSectionLabel}>Privacy Settings</Text>
-            <View style={styles.privacyStack}>
-              <Pressable style={styles.privacyOption} onPress={() => setGroupPrivacy('public')}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.privacyOptionTitle}>Public Group</Text>
-                  <Text style={styles.privacyOptionSub}>Anyone in the organization can find and join this group</Text>
-                </View>
-                <View style={[styles.radioOuter, groupPrivacy === 'public' && styles.radioOuterActive]}>
-                  {groupPrivacy === 'public' ? <View style={styles.radioInner} /> : null}
-                </View>
-              </Pressable>
-              <Pressable style={styles.privacyOption} onPress={() => setGroupPrivacy('private')}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.privacyOptionTitle}>Private Group</Text>
-                  <Text style={styles.privacyOptionSub}>Only invited members can join</Text>
-                </View>
-                <View style={[styles.radioOuter, groupPrivacy === 'private' && styles.radioOuterActive]}>
-                  {groupPrivacy === 'private' ? <View style={styles.radioInner} /> : null}
-                </View>
-              </Pressable>
-              <Pressable style={styles.privacyOption} onPress={() => setGroupPrivacy('restricted')}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.privacyOptionTitle}>Restricted Group</Text>
-                  <Text style={styles.privacyOptionSub}>Only admins can add members</Text>
-                </View>
-                <View style={[styles.radioOuter, groupPrivacy === 'restricted' && styles.radioOuterActive]}>
-                  {groupPrivacy === 'restricted' ? <View style={styles.radioInner} /> : null}
-                </View>
-              </Pressable>
-            </View>
-
-            <Text style={styles.groupSectionLabel}>Group Admin</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adminRow}>
-              {contacts.map((contact) => (
-                <Pressable
-                  key={contact.id}
-                  style={[styles.adminChip, groupAdmin === contact.id && styles.adminChipActive]}
-                  onPress={() => setGroupAdmin(contact.id)}>
-                  <Text style={[styles.adminChipText, groupAdmin === contact.id && styles.adminChipTextActive]}>{contact.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.groupSectionLabel}>Members</Text>
-            <ScrollView style={styles.membersBox} showsVerticalScrollIndicator={false}>
-              {contacts.map((contact) => (
-                <Pressable key={contact.id} style={styles.memberRow} onPress={() => toggleGroupMember(contact.id)}>
-                  <View style={styles.memberIdentity}>
-                    {contact.avatarUrl ? (
-                      <Image source={{ uri: contact.avatarUrl }} style={styles.contactAvatarImg} contentFit="cover" />
-                    ) : (
-                      <View style={styles.avatarSm}>
-                        <Text style={styles.avatarText}>{String(contact.name || '?').slice(0, 1)}</Text>
-                      </View>
-                    )}
-                    <Text style={styles.memberName}>{contact.name}</Text>
-                    {contact.roleLabel ? <Text style={styles.roleBadge}>{roleBadgeLabel(contact.roleLabel)}</Text> : null}
-                  </View>
-                  <View style={[styles.memberCheck, groupMembers.includes(contact.id) && styles.memberCheckActive]}>
-                    {groupMembers.includes(contact.id) ? <MaterialCommunityIcons name="check" size={12} color="#fff" /> : null}
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-            {groupMembers.length ? <Text style={styles.selectedCount}>{groupMembers.length} members selected</Text> : null}
-
-            {groupCreating ? (
-              <SkeletonGroup>
-                <View style={{ gap: 8 }}>
-                  <SkeletonListRow />
-                  <SkeletonListRow />
-                </View>
-              </SkeletonGroup>
-            ) : groupCreated ? (
-              <Text style={styles.groupSuccessText}>Group created successfully.</Text>
-            ) : null}
-
-            <Pressable
-              style={[styles.createGroupBtn, groupCreating && styles.createGroupBtnDisabled]}
-              onPress={handleCreateGroupSubmit}
-              disabled={groupCreating}>
-              {groupCreating ? <ActivityIndicator color="#fff" /> : <Text style={styles.createGroupBtnText}>Next: Add Members</Text>}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <CreateGroupFlow
+        visible={groupOpen}
+        onClose={() => setGroupOpen(false)}
+        contacts={groupContacts.length ? groupContacts : contacts}
+        contactsLoading={inboxLoading && !directoryHydrated}
+        onCreate={handleCreateGroupFromFlow}
+      />
 
       <Modal visible={!!groupCreated} transparent animationType="fade" onRequestClose={() => setGroupCreated(false)}>
         <View style={styles.successOverlay}>
@@ -1336,7 +1366,12 @@ export default function MessagesScreen() {
               onPress={() => {
                 const id = createdGroupSummary?.id;
                 setGroupCreated(false);
-                if (id) setSelectedId(id);
+                if (id) {
+                  void openChat(id);
+                  setActiveChatId(id);
+                  setSelectedId(id);
+                  setInConversation(true);
+                }
               }}>
               <Text style={styles.successPrimaryText}>Open Group</Text>
             </Pressable>
@@ -1356,6 +1391,7 @@ export default function MessagesScreen() {
         visible={!!messageActionItem}
         message={messageActionItem}
         canDeleteForEveryone={!!messageActionItem?.me}
+        allowReply={canComposeInSelectedChat}
         onClose={() => setMessageActionItem(null)}
         onAction={handleMessageAction}
       />
@@ -1403,20 +1439,12 @@ export default function MessagesScreen() {
         </View>
       </Modal>
 
-      <Modal visible={attachOpen} transparent animationType="fade" onRequestClose={() => setAttachOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setAttachOpen(false)}>
-          <View style={styles.attachCard}>
-            <Pressable style={styles.attachOption} onPress={() => pickAndSendAttachment('file')}>
-              <MaterialCommunityIcons name="folder-upload-outline" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.attachOptionText}>Upload File</Text>
-            </Pressable>
-            <Pressable style={styles.attachOption} onPress={() => pickAndSendAttachment('image')}>
-              <MaterialCommunityIcons name="image-outline" size={18} color={BrandColors.primaryMid} />
-              <Text style={styles.attachOptionText}>Upload Image</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <ChatAttachmentSheet
+        visible={attachOpen && canComposeInSelectedChat}
+        onClose={() => setAttachOpen(false)}
+        onPickGallery={() => void pickAndSendAttachment('image')}
+        onPickFiles={() => void pickAndSendAttachment('file')}
+      />
 
       <ChatImagePreview
         visible={!!previewItem && previewItem.type === 'image' && !!previewItem.uri}
@@ -1424,81 +1452,15 @@ export default function MessagesScreen() {
         onClose={() => setPreviewItem(null)}
       />
 
-      <Modal
-        visible={!!previewItem && previewItem?.type === 'file'}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewItem(null)}>
-        <View style={styles.previewOverlay}>
-          <View style={styles.previewCard}>
-            <View style={styles.previewHead}>
-              <Text style={styles.previewTitle}>Document Preview</Text>
-              <Pressable onPress={() => setPreviewItem(null)}>
-                <MaterialCommunityIcons name="close" size={20} color="#e2e8f0" />
-              </Pressable>
-            </View>
-            <FileDocumentCard
-              compact
-              item={{
-                fileName: previewItem?.fileName,
-                fileSizeLabel: previewItem?.fileSizeLabel ? String(previewItem.fileSizeLabel) : '',
-                time: '',
-                me: false,
-                status: 'sent',
-              }}
-              isActionTarget={false}
-              tickColor="#94a3b8"
-              onDownload={() => previewItem?.uri && void Linking.openURL(String(previewItem.uri))}
-            />
-            <Pressable
-              style={styles.previewOpenBtn}
-              onPress={() => previewItem?.uri && Linking.openURL(String(previewItem.uri))}>
-              <Text style={styles.previewOpenBtnText}>Open File</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={!!pendingSend} transparent animationType="fade" onRequestClose={() => setPendingSend(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>Review attachment</Text>
-              <Pressable onPress={() => setPendingSend(null)}>
-                <MaterialCommunityIcons name="close" size={20} color="#334155" />
-              </Pressable>
-            </View>
-            {pendingSend?.kind === 'image' && pendingSend.uri ? (
-              <Image source={{ uri: pendingSend.uri }} style={styles.pendingPreviewImg} contentFit="contain" />
-            ) : pendingSend ? (
-              <View style={styles.pendingFileCardWrap}>
-                <FileDocumentCard
-                  compact
-                  item={{
-                    fileName: pendingSend.fileName,
-                    fileSizeLabel:
-                      pendingSend.size != null ? formatFileSize(pendingSend.size) : '',
-                    time: '',
-                    me: false,
-                    status: 'sent',
-                  }}
-                  isActionTarget={false}
-                  tickColor="#94a3b8"
-                  onDownload={() => {}}
-                />
-              </View>
-            ) : null}
-            <View style={styles.pendingActions}>
-              <Pressable style={styles.pendingCancelBtn} onPress={() => setPendingSend(null)}>
-                <Text style={styles.pendingCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.pendingSendBtn} onPress={confirmPendingSend}>
-                <Text style={styles.pendingSendText}>Send</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ChatImageSendPreview
+        visible={!!pendingSend && pendingSend.kind === 'image'}
+        uri={pendingSend?.uri ? String(pendingSend.uri) : ''}
+        onClose={() => {
+          if (!pendingSending) setPendingSend(null);
+        }}
+        onSend={() => void confirmPendingSend()}
+        sending={pendingSending}
+      />
     </SafeAreaView>
   );
 }
@@ -1564,24 +1526,26 @@ const styles = StyleSheet.create({
   chatCardMsg: { marginTop: 3, color: '#64748b', fontSize: 12, fontWeight: '500' },
   chatCardStatus: { marginTop: 1, color: '#94a3b8', fontSize: 11 },
   unreadBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: BrandColors.primaryMid,
+    backgroundColor: '#25D366',
   },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  chatCardTimeUnread: { color: '#25D366', fontWeight: '600' },
+  chatCardMsgUnread: { color: '#111b21', fontWeight: '700' },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#dbe4fb',
+    backgroundColor: ChatTheme.chromeBg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e9edef',
   },
   headerAvatarImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#e2e8f0' },
   headerActionBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -1611,8 +1575,9 @@ const styles = StyleSheet.create({
   chatName: { fontSize: 16, fontWeight: '700', color: BrandColors.text, flexShrink: 1 },
   chatStatus: { marginTop: 1, fontSize: 12, color: '#94a3b8' },
   chatStatusOnline: { color: '#16a34a' },
-  messagesList: { flex: 1 },
-  msgList: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 8, gap: 8 },
+  messagesWallpaper: { flex: 1 },
+  messagesList: { flex: 1, backgroundColor: 'transparent' },
+  msgList: { paddingHorizontal: 10, paddingTop: 12, paddingBottom: 8, gap: 3 },
   emptyChatState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, paddingTop: 120 },
   emptyListState: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, paddingTop: 72 },
   emptyChatIcon: {
@@ -1626,39 +1591,126 @@ const styles = StyleSheet.create({
   },
   emptyChatTitle: { color: BrandColors.text, fontSize: 18, fontWeight: '900', textAlign: 'center' },
   emptyChatSub: { marginTop: 8, color: '#64748b', fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 22 },
-  dateSeparatorWrap: { alignItems: 'center', marginVertical: 4 },
+  dateSeparatorWrap: { alignItems: 'center', marginVertical: 10 },
+  dateSeparatorPill: {
+    borderRadius: 8,
+    backgroundColor: ChatTheme.datePillBg,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   dateSeparatorText: {
-    overflow: 'hidden',
-    borderRadius: 999,
-    backgroundColor: '#eaf2ff',
-    color: '#2563eb',
-    fontSize: 11,
-    fontWeight: '800',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    color: ChatTheme.datePillText,
+    fontSize: 12,
+    fontWeight: '600',
   },
   msgRow: { width: '100%', flexDirection: 'row' },
-  msgRowMe: { justifyContent: 'flex-end' },
+  msgRowMe: { justifyContent: 'flex-end', marginBottom: 2, marginTop: 1 },
   msgRowOther: { justifyContent: 'flex-start' },
+  msgRowGroupBlockStart: { marginTop: 8 },
+  msgRowGroupOther: {
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingLeft: 2,
+    marginBottom: 1,
+  },
+  groupAvatarCol: {
+    width: 40,
+    marginRight: 6,
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingTop: 2,
+  },
+  groupSideAvatar: { width: 36, height: 36, borderRadius: 18 },
+  groupSideAvatarFb: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#dfe5e7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupSideAvatarLetter: { fontSize: 14, fontWeight: '800', color: '#54656f' },
+  groupSideAvatarGhost: { width: 36, height: 36 },
+  groupBubbleWrap: { maxWidth: '78%', alignSelf: 'flex-start', flexGrow: 0, flexShrink: 1 },
+  groupNameInBubble: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 2,
+    flexShrink: 1,
+  },
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
-    borderRadius: 14,
-    borderBottomLeftRadius: 7,
+    backgroundColor: ChatTheme.bubbleIn,
+    borderRadius: 8,
+    borderBottomLeftRadius: 2,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#94a3b8' },
   typingDotOne: { opacity: 0.45 },
   typingDotTwo: { opacity: 0.7 },
   typingDotThree: { opacity: 1 },
-  bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
-  bubbleMe: { backgroundColor: '#1266f1', borderBottomRightRadius: 7 },
-  bubbleOther: { backgroundColor: '#fff', borderWidth: 0, borderColor: '#eef2ff', borderBottomLeftRadius: 7 },
+  bubble: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, paddingBottom: 5 },
+  bubbleFitContent: { alignSelf: 'flex-start', flexGrow: 0, flexShrink: 1, maxWidth: '82%' },
+  bubbleMe: {
+    alignSelf: 'flex-end',
+    backgroundColor: ChatTheme.bubbleOut,
+    borderBottomRightRadius: 2,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  bubbleOther: {
+    backgroundColor: ChatTheme.bubbleIn,
+    borderBottomLeftRadius: 2,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  bubbleGroupFirst: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 2,
+  },
+  bubbleGroupStack: {
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 2,
+    marginTop: 1,
+  },
+  bubbleFileOuter: { padding: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+  deletedBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '88%',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  deletedBubbleText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: '#8696a0',
+    flexShrink: 1,
+  },
   // NEW UI FIX FOR MESSAGE ACTION UI — selected message highlight (light bg + blue text)
   msgRowActionTarget: { zIndex: 2 },
   bubbleMeSelected: {
@@ -1681,12 +1733,21 @@ const styles = StyleSheet.create({
   replyQuoteMeSelected: { backgroundColor: '#dbeafe' },
   replyQuoteTitleSelected: { color: BrandColors.primaryMid },
   replyQuoteTextSelected: { color: '#334155' },
-  fileNameSelected: { color: BrandColors.primaryMid },
-  fileMetaTextSelected: { color: '#64748b' },
   bubbleAttachment: { borderWidth: 0, paddingHorizontal: 0, paddingVertical: 0, backgroundColor: 'transparent' },
-  imageBubble: { borderRadius: 10, overflow: 'hidden' },
-  bubbleText: { fontSize: 14, color: '#334155', lineHeight: 20 },
-  bubbleTextMe: { color: '#fff' },
+  bubbleImageOuter: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  bubbleImageMe: { borderBottomRightRadius: 2 },
+  bubbleImageOther: { borderBottomLeftRadius: 2 },
+  bubbleImageGroupFirst: { borderBottomLeftRadius: 2 },
+  bubbleImageGroupStack: { borderTopLeftRadius: 4, borderBottomLeftRadius: 2, marginTop: 1 },
+  imageBubble: { borderRadius: 0, overflow: 'visible', padding: 0 },
+  bubbleText: { fontSize: 15, color: ChatTheme.bubbleInText, lineHeight: 21, flexShrink: 1 },
+  bubbleTextMe: { color: ChatTheme.bubbleOutText },
   messageFlag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   messageFlagMe: {},
   messageFlagText: { color: '#64748b', fontSize: 11, fontWeight: '700', fontStyle: 'italic' },
@@ -1695,124 +1756,117 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: BrandColors.primaryMid,
     backgroundColor: '#eff6ff',
-    borderRadius: 8,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 6,
     marginBottom: 6,
   },
+  replyQuoteGroup: {
+    borderLeftWidth: 4,
+    borderLeftColor: ChatTheme.replyBar,
+    backgroundColor: ChatTheme.replyBg,
+    borderRadius: 4,
+  },
+  replyQuoteTitleGroup: { color: ChatTheme.replyBar, fontSize: 12, fontWeight: '800' },
+  replyQuoteTextGroup: { color: '#667781', fontSize: 13, lineHeight: 17 },
   replyQuoteMe: { borderLeftColor: '#bfdbfe', backgroundColor: 'rgba(255,255,255,0.18)' },
   replyQuoteTitle: { color: BrandColors.primaryMid, fontSize: 11, fontWeight: '800' },
   replyQuoteTitleMe: { color: '#dbeafe' },
   replyQuoteText: { marginTop: 1, color: '#475569', fontSize: 12 },
   replyQuoteTextMe: { color: '#eef6ff' },
-  attachmentImage: {
-    width: 216,
-    height: 198,
-    borderRadius: 10,
-  },
-  imageFrame: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
+  imageBubbleWrap: {
+    borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    maxWidth: 260,
+    backgroundColor: '#e9edef',
+    position: 'relative',
   },
-  imageFrameSelected: { borderColor: '#c7dcff', borderWidth: 2 },
+  imageBubbleWrapMe: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 2,
+  },
+  imageBubbleWrapOther: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderBottomLeftRadius: 2,
+  },
+  imageBubbleWrapGroupFirst: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 8,
+  },
+  imageBubbleWrapGroupStack: {
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 8,
+    marginTop: 1,
+  },
+  attachmentImage: {
+    width: 252,
+    maxWidth: '100%',
+    height: 220,
+    borderRadius: 0,
+  },
+  imageFrameSelected: { borderWidth: 2, borderColor: '#c7dcff', borderRadius: 8 },
   imageOverlayBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
+    top: undefined,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    backgroundColor: 'rgba(15,23,42,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
   },
-  imageTimeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
-  bubbleFileDoc: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    maxWidth: '90%',
-  },
-  fileCard: {
-    minWidth: 248,
-    maxWidth: 300,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 8,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  fileCardSelected: { borderWidth: 1, borderColor: '#c7dcff' },
-  fileCardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fileBadge: {
-    width: 44,
-    height: 50,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 6,
-    overflow: 'hidden',
-  },
-  fileBadgeFold: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    borderBottomLeftRadius: 6,
-  },
-  fileBadgeExt: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
-  fileTextWrap: { flex: 1, minWidth: 0, paddingRight: 4 },
-  fileName: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
-  fileMetaText: { marginTop: 3, color: '#94a3b8', fontSize: 13, fontWeight: '500' },
-  fileDownloadBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  fileCardFooter: {
-    marginTop: 8,
+  imageTimeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  bubbleFileSelected: { padding: 0 },
+  msgMetaRow: {
+    marginTop: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-    minHeight: 16,
+    alignSelf: 'flex-end',
+    gap: 3,
+    marginLeft: 8,
   },
-  fileCardTime: { color: '#94a3b8', fontSize: 11, fontWeight: '500' },
-  msgMetaRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
   msgMetaRowMe: { alignSelf: 'flex-end' },
   msgMetaHidden: { display: 'none' },
-  msgTime: { fontSize: 11, fontWeight: '500', minWidth: 52, textAlign: 'right' },
-  msgTimeMe: { color: '#dbeafe' },
-  msgTimeOther: { color: '#64748b' },
+  msgTime: { fontSize: 11, fontWeight: '500', textAlign: 'right' },
+  msgTimeMe: { color: 'rgba(255,255,255,0.85)' },
+  msgTimeOther: { color: ChatTheme.metaMuted },
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    backgroundColor: '#f0f4f8',
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: ChatTheme.chromeBg,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: '#e9edef',
   },
-  composerEmojiBtn: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1,
-    color: BrandColors.text,
-    fontSize: 15,
-    paddingLeft: 4,
-    paddingRight: 4,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    color: ChatTheme.bubbleInText,
+    fontSize: 16,
+    lineHeight: 20,
+    paddingHorizontal: 6,
+    paddingTop: Platform.OS === 'ios' ? 12 : 10,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 10,
     minHeight: 44,
-    maxHeight: 100,
+    maxHeight: 120,
     textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   inputWrap: {
     flex: 1,
@@ -1820,37 +1874,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 48,
     maxHeight: 120,
-    paddingLeft: 14,
+    paddingLeft: 16,
     paddingRight: 6,
-    borderRadius: 28,
-    backgroundColor: '#fff',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    borderRadius: 24,
+    backgroundColor: '#f0f2f5',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e9edef',
   },
-  inputIconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  attachCard: {
-    marginTop: 'auto',
-    marginBottom: 110,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
-    borderRadius: 14,
-    paddingVertical: 4,
-  },
-  attachOption: {
-    flexDirection: 'row',
+  inputIconBtn: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    justifyContent: 'center',
   },
-  attachOptionText: {
-    color: BrandColors.text,
-    fontSize: 14,
-    fontWeight: '600',
+  paperclipIcon: {
+    transform: [{ rotate: '-45deg' }],
   },
   sendBtn: {
     width: 48,
@@ -1858,11 +1896,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#b8c9e8',
+    backgroundColor: ChatTheme.sendBtnDisabled,
+    flexShrink: 0,
   },
-  sendBtnActive: { backgroundColor: '#1266f1' },
+  sendBtnActive: { backgroundColor: ChatTheme.sendBtn },
   pendingFileCardWrap: { marginVertical: 8 },
-  pendingPreviewImg: { width: '100%', height: 220, borderRadius: 12, backgroundColor: '#f8fafc' },
   pendingDocRow: { alignItems: 'center', paddingVertical: 12, gap: 8 },
   pendingFileTitle: { fontSize: 15, fontWeight: '700', color: BrandColors.text, textAlign: 'center', paddingHorizontal: 8 },
   pendingMeta: { fontSize: 13, color: '#64748b' },
@@ -1881,16 +1919,6 @@ const styles = StyleSheet.create({
   },
   replyComposerTitle: { color: BrandColors.primaryMid, fontSize: 12, fontWeight: '800' },
   replyComposerText: { marginTop: 1, color: '#64748b', fontSize: 12 },
-  pendingActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 },
-  pendingCancelBtn: { paddingVertical: 10, paddingHorizontal: 14 },
-  pendingCancelText: { color: '#64748b', fontSize: 15, fontWeight: '700' },
-  pendingSendBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 10,
-    backgroundColor: BrandColors.primaryMid,
-  },
-  pendingSendText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 16 },
   successOverlay: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', padding: 22 },
   successCard: { alignItems: 'center', gap: 12 },
@@ -1941,36 +1969,6 @@ const styles = StyleSheet.create({
   successPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '900' },
   successSecondaryBtn: { paddingVertical: 12 },
   successSecondaryText: { color: '#1266f1', fontSize: 14, fontWeight: '800' },
-  previewOverlay: { flex: 1, backgroundColor: 'rgba(6,42,102,0.82)', justifyContent: 'center', padding: 16 },
-  previewCard: {
-    backgroundColor: BrandColors.splashTop,
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.35)',
-    borderRadius: 14,
-    padding: 12,
-  },
-  previewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  previewTitle: { color: '#e2e8f0', fontSize: 15, fontWeight: '700' },
-  previewImage: { width: '100%', height: 320, borderRadius: 10, backgroundColor: '#0b3a82' },
-  previewDocCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.35)',
-    backgroundColor: '#0b3a82',
-    alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 14,
-    gap: 8,
-  },
-  previewDocName: { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
-  previewOpenBtn: {
-    marginTop: 4,
-    backgroundColor: BrandColors.primaryLight,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  previewOpenBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   actionSheet: {
     marginTop: 'auto',
     backgroundColor: '#fff',

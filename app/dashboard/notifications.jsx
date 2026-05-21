@@ -246,7 +246,9 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              {loadError ? loadError : 'No notifications yet. Pull to refresh.'}
+              {loadError
+                ? loadError
+                : 'No alerts yet. Task assignments, leave updates, and system messages appear here when your team sends them. Chat unread counts are on the Chat tab.'}
             </Text>
           }
           renderItem={({ item }) => (

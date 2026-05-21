@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { BrandColors } from '@/constants/brand';
 import { SkeletonCardGrid, SkeletonGroup, SkeletonText } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
+import { GdcInboxProvider } from '@/context/gdc-inbox-context';
 
 export default function DashboardRootLayout() {
   const { user, hydrated } = useAuth();
@@ -27,12 +28,15 @@ export default function DashboardRootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: '#F2F4FC' },
-      }}>
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <GdcInboxProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#F2F4FC' },
+        }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="group-info" options={{ animation: 'slide_from_right' }} />
+      </Stack>
+    </GdcInboxProvider>
   );
 }
