@@ -56,14 +56,22 @@ export function useGdcNotificationRealtime(opts = {}) {
 
     const bump = () => invalidateNotificationInbox();
 
+    const onChatSignal = () => {
+      bump();
+    };
+
     sock.on('newNotification', bump);
     sock.on('task.updated', bump);
     sock.on('dailyUpdates.updated', bump);
+    sock.on('receiveMessage', onChatSignal);
+    sock.on('chat.message', onChatSignal);
 
     return () => {
       sock.off('newNotification', bump);
       sock.off('task.updated', bump);
       sock.off('dailyUpdates.updated', bump);
+      sock.off('receiveMessage', onChatSignal);
+      sock.off('chat.message', onChatSignal);
     };
   }, [enabled, token, userId]);
 

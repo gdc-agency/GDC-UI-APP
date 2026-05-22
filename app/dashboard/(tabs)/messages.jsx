@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useNavigation } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -32,9 +32,13 @@ import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banne
 import { CreateGroupFlow } from '@/components/chat/create-group-flow';
 import { NewChatPicker } from '@/components/chat/new-chat-picker';
 import { groupSenderColor } from '@/utils/group-sender-style';
+import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
+import { threadIdEquals } from '@/utils/chat-thread-inbox';
 import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
 import { ChatWallpaper } from '@/components/chat/chat-wallpaper';
+import { CHAT_BUBBLE_MAX_WIDTH, CHAT_GROUP_BUBBLE_MAX_WIDTH, CHAT_IMAGE_MAX_WIDTH, CHAT_MSG_EDGE } from '@/constants/chat-layout';
 import { ChatTheme } from '@/constants/chat-theme';
+import { CircularProgressRing } from '@/components/chat/circular-progress-ring';
 import { DocumentMessageCard } from '@/components/chat/document-message-card';
 import { MessageActionMenu } from '@/components/chat/message-action-menu';
 import { TypingDots } from '@/components/chat/typing-dots';
@@ -49,7 +53,7 @@ import {
   isChatDisplayNamePending,
   resolveChatPeerDisplayName,
 } from '@/utils/chat-directory';
-import { statusIconColor, statusIconName } from '@/utils/chat-message-status';
+import { isMessageUploading, statusIconColor, statusIconName } from '@/utils/chat-message-status';
 import { canComposeInChat } from '@/utils/group-compose-permissions';
 
 const HOME_TAB_BAR_STYLE = {
@@ -269,7 +273,6 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
     isImageBubble && (item.me ? styles.bubbleImageMe : styles.bubbleImageOther),
     isImageBubble && isGroupIncoming && showSenderHeader && styles.bubbleImageGroupFirst,
     isImageBubble && isGroupIncoming && !showSenderHeader && styles.bubbleImageGroupStack,
-    item.type === 'file' && styles.bubbleFileOuter,
     isActionTarget && item.me && styles.bubbleMeSelected,
     isActionTarget && !item.me && styles.bubbleOtherSelected,
     item.type === 'image' && styles.bubbleAttachment,
@@ -278,6 +281,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
     isActionTarget && item.type === 'file' && styles.bubbleFileSelected,
   ];
   const isFileBubble = item.type === 'file';
+  const imageUploading = isImageBubble && isMessageUploading(item);
   const bubbleContent = (
     <>
         {item.forwardedFrom ? (
@@ -328,11 +332,6 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             </Text>
           </View>
         ) : null}
-        {isGroupIncoming && showSenderHeader ? (
-          <Text style={[styles.groupNameInBubble, { color: senderColor || ChatTheme.groupSenderName }]} numberOfLines={1}>
-            {senderName || 'Member'}
-          </Text>
-        ) : null}
         {isImageBubble ? (
           <View
             style={[
@@ -349,6 +348,18 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
               transition={200}
               placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
             />
+            {imageUploading ? (
+              <View style={styles.imageUploadOverlay}>
+                <CircularProgressRing
+                  progress={typeof item.uploadProgress === 'number' ? item.uploadProgress : 0}
+                  size={52}
+                  strokeWidth={4}
+                  trackColor="rgba(255,255,255,0.35)"
+                  progressColor="#fff"
+                  labelColor="#fff"
+                />
+              </View>
+            ) : null}
             <View style={styles.imageOverlayBar}>
               <Text style={styles.imageTimeText}>{normalizeTime(item.time)}</Text>
               {item.me ? (
@@ -368,46 +379,58 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             tickColor={tickColor}
             normalizeTime={normalizeTime}
             onLongPress={() => onLongPress(item)}
+            showGroupSender={isGroupIncoming && showSenderHeader}
+            groupSenderName={senderName}
+            groupSenderColor={senderColor}
           />
         ) : null}
         {item.type !== 'file' && item.type !== 'image' ? (
-          <Text
-            style={[
-              styles.bubbleText,
-              item.me && !isActionTarget && styles.bubbleTextMe,
-              isActionTarget && styles.bubbleTextSelected,
-            ]}>
-            {item.text}
-          </Text>
+          <View style={styles.textBubbleBlock}>
+            {isGroupIncoming && showSenderHeader ? (
+              <Text
+                style={[
+                  styles.bubbleText,
+                  item.me && !isActionTarget && styles.bubbleTextMe,
+                  isActionTarget && styles.bubbleTextSelected,
+                ]}>
+                <Text style={[styles.groupNameInline, { color: senderColor || ChatTheme.groupSenderName }]}>
+                  {senderName || 'Member'}{' '}
+                </Text>
+                {item.text}
+              </Text>
+            ) : (
+              <Text
+                style={[
+                  styles.bubbleText,
+                  item.me && !isActionTarget && styles.bubbleTextMe,
+                  isActionTarget && styles.bubbleTextSelected,
+                ]}>
+                {item.text}
+              </Text>
+            )}
+            <View style={styles.bubbleMetaTail}>
+              <Text
+                style={[
+                  styles.msgTime,
+                  item.me && !isActionTarget && styles.msgTimeMe,
+                  !item.me && styles.msgTimeOther,
+                  isActionTarget && styles.msgTimeSelected,
+                ]}>
+                {normalizeTime(item.time)}
+              </Text>
+              {item.me ? (
+                <MaterialCommunityIcons
+                  name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
+                  size={14}
+                  color={tickColor}
+                />
+              ) : null}
+            </View>
+          </View>
         ) : null}
-        <View
-          style={[
-            styles.msgMetaRow,
-            item.me && styles.msgMetaRowMe,
-            (item.type === 'image' || item.type === 'file') && styles.msgMetaHidden,
-          ]}>
-          <Text
-            style={[
-              styles.msgTime,
-              item.me && !isActionTarget && styles.msgTimeMe,
-              !item.me && styles.msgTimeOther,
-              isActionTarget && styles.msgTimeSelected,
-            ]}>
-            {normalizeTime(item.time)}
-          </Text>
-          {item.me ? (
-            <MaterialCommunityIcons
-              name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
-              size={14}
-              color={tickColor}
-            />
-          ) : null}
-        </View>
     </>
   );
-  const bubbleBlock = isFileBubble ? (
-    <View style={bubbleStyle}>{bubbleContent}</View>
-  ) : (
+  const textOrImageBubble = (
     <Pressable
       style={bubbleStyle}
       onLongPress={() => onLongPress(item)}
@@ -416,6 +439,19 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
       }}>
       {bubbleContent}
     </Pressable>
+  );
+
+  const fileBubble = (
+    <DocumentMessageCard
+      item={item}
+      isActionTarget={isActionTarget}
+      tickColor={tickColor}
+      normalizeTime={normalizeTime}
+      onLongPress={() => onLongPress(item)}
+      showGroupSender={isGroupIncoming && showSenderHeader}
+      groupSenderName={senderName}
+      groupSenderColor={senderColor}
+    />
   );
 
   if (isGroupIncoming) {
@@ -440,7 +476,9 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             <View style={styles.groupSideAvatarGhost} />
           )}
         </View>
-        <View style={styles.groupBubbleWrap}>{bubbleBlock}</View>
+        <View style={styles.groupBubbleWrap}>
+          {isFileBubble ? fileBubble : textOrImageBubble}
+        </View>
       </View>
     );
   }
@@ -452,7 +490,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
         item.me ? styles.msgRowMe : styles.msgRowOther,
         isActionTarget && styles.msgRowActionTarget,
       ]}>
-      {bubbleBlock}
+      {isFileBubble ? fileBubble : textOrImageBubble}
     </View>
   );
 });
@@ -527,11 +565,14 @@ export default function MessagesScreen() {
   const headerStatusFade = useRef(new Animated.Value(1)).current;
 
   // NEW CODE ADDED FOR AUTO SCROLL ISSUE — wait for layout after new messages / keyboard
-  const scrollToLatest = useCallback((animated = true) => {
+  const scrollToLatest = useCallback((animated = true, immediate = false) => {
+    const run = () => msgListRef.current?.scrollToEnd({ animated });
+    if (immediate) {
+      requestAnimationFrame(run);
+      return;
+    }
     InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        msgListRef.current?.scrollToEnd({ animated });
-      });
+      requestAnimationFrame(run);
     });
   }, []);
 
@@ -542,12 +583,15 @@ export default function MessagesScreen() {
     return 'Employee';
   }, [user?.role]);
 
-  const selected = useMemo(() => threads.find((thread) => thread.id === selectedId) ?? null, [threads, selectedId]);
+  const selected = useMemo(
+    () => threads.find((thread) => threadIdEquals(thread.id, selectedId)) ?? null,
+    [threads, selectedId],
+  );
 
   /** DB/admin deletes remove threads server-side — close stale open chat without manual refresh. */
   useEffect(() => {
     if (!selectedId) return;
-    const exists = threads.some((t) => String(t.id) === String(selectedId));
+    const exists = threads.some((t) => threadIdEquals(t.id, selectedId));
     if (!exists) {
       setSelectedId(null);
       setActiveChatId(null);
@@ -708,6 +752,15 @@ export default function MessagesScreen() {
     [openChat, setActiveChatId, setInConversation],
   );
 
+  const searchParams = useLocalSearchParams();
+  useEffect(() => {
+    const fromUrl = searchParams?.chatId ?? searchParams?.chat;
+    const id = fromUrl != null ? String(fromUrl).trim() : consumePendingChatOpen();
+    if (id) openThread(id);
+  }, [openThread, searchParams?.chatId, searchParams?.chat]);
+
+  useEffect(() => subscribePendingChatOpen((chatId) => openThread(chatId)), [openThread]);
+
   const sendMessage = async () => {
     if (!canComposeInSelectedChat) return;
     const text = draft.trim();
@@ -848,6 +901,8 @@ export default function MessagesScreen() {
     return () => clearTimeout(t);
   }, [selectedId, scrollToLatest]);
 
+  const lastIncomingAckIdRef = useRef('');
+
   useEffect(() => {
     const msgs = Array.isArray(selected?.messages) ? selected.messages : [];
     if (!selectedId || !msgs.length) return;
@@ -855,17 +910,26 @@ export default function MessagesScreen() {
     const id = String(last.id);
     const me = !!last.me;
     const prev = lastMsgTrackRef.current;
-    if (id === prev.id && msgs.length === (prev.count ?? 0)) return;
+    const countChanged = msgs.length !== (prev.count ?? 0);
+    const idChanged = id !== prev.id;
+    if (!idChanged && !countChanged) return;
     lastMsgTrackRef.current = { id, me, count: msgs.length };
     const isIncoming = !me;
     if (isIncoming) {
       isNearBottomRef.current = true;
-      scrollToLatest(true);
-      acknowledgeChatRead(selectedId);
-    } else if (isNearBottomRef.current) {
+      scrollToLatest(true, true);
+      if (idChanged || id !== lastIncomingAckIdRef.current) {
+        lastIncomingAckIdRef.current = id;
+        acknowledgeChatRead(selectedId);
+      }
+    } else if (isNearBottomRef.current && (idChanged || countChanged)) {
       scrollToLatest(true);
     }
   }, [acknowledgeChatRead, scrollToLatest, selected?.messages, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) lastIncomingAckIdRef.current = '';
+  }, [selectedId]);
 
   const handleChatScroll = useCallback(
     (e) => {
@@ -1039,7 +1103,7 @@ export default function MessagesScreen() {
     try {
       const privacyLocked =
         privacy === 'private' || privacy === 'restricted' || !allowMembersToAdd;
-      const id = await submitGroupToApi({
+      const created = await submitGroupToApi({
         name,
         memberIds,
         scope: groupScopeForRole(),
@@ -1049,12 +1113,26 @@ export default function MessagesScreen() {
         idempotencyKey,
         openAfterCreate: false,
       });
+      const id =
+        created && typeof created === 'object' && created.id != null
+          ? String(created.id)
+          : String(created || '');
+      const serverThread =
+        created && typeof created === 'object' && created.thread && typeof created.thread === 'object'
+          ? created.thread
+          : null;
+      const serverMemberIds = Array.isArray(serverThread?.memberIds)
+        ? serverThread.memberIds.map(String)
+        : memberIds.map(String);
       const pool = groupContacts.length ? groupContacts : contacts;
       setCreatedGroupSummary({
         id,
-        name,
-        memberIds,
-        members: pool.filter((c) => memberIds.includes(String(c.id))).slice(0, 3),
+        name: String(serverThread?.name || name || 'Group'),
+        memberIds: serverMemberIds,
+        members: serverMemberIds
+          .map((mid) => pool.find((c) => String(c.id) === String(mid)))
+          .filter(Boolean)
+          .slice(0, 3),
       });
       setGroupOpen(false);
       setGroupCreated(true);
@@ -1082,7 +1160,7 @@ export default function MessagesScreen() {
   }, [navigation, selected]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, styles.safeRelative]} edges={['top']}>
       {selected ? (
         <KeyboardAvoidingView
           style={styles.safe}
@@ -1238,7 +1316,7 @@ export default function MessagesScreen() {
           )}
         </KeyboardAvoidingView>
       ) : (
-        <View style={[styles.listScreen, { paddingBottom: tabBarHeight + 14 }]}>
+        <View style={[styles.listScreen, styles.listScreenRelative, { paddingBottom: tabBarHeight + 14 }]}>
           <View style={styles.listHeader}>
             <View>
               <Text style={styles.listTitle}>Chats</Text>
@@ -1467,7 +1545,9 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f8fbff' },
+  safeRelative: { position: 'relative' },
   listScreen: { flex: 1, paddingHorizontal: 14, paddingTop: 10, backgroundColor: '#f8fbff' },
+  listScreenRelative: { position: 'relative' },
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   listTitle: { fontSize: 26, fontWeight: '800', color: BrandColors.text },
   listSubTitle: { marginTop: 2, fontSize: 12, color: BrandColors.textMuted },
@@ -1577,7 +1657,7 @@ const styles = StyleSheet.create({
   chatStatusOnline: { color: '#16a34a' },
   messagesWallpaper: { flex: 1 },
   messagesList: { flex: 1, backgroundColor: 'transparent' },
-  msgList: { paddingHorizontal: 10, paddingTop: 12, paddingBottom: 8, gap: 3 },
+  msgList: { paddingHorizontal: CHAT_MSG_EDGE, paddingTop: 12, paddingBottom: 8, gap: 4 },
   emptyChatState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, paddingTop: 120 },
   emptyListState: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34, paddingTop: 72 },
   emptyChatIcon: {
@@ -1609,14 +1689,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   msgRow: { width: '100%', flexDirection: 'row' },
-  msgRowMe: { justifyContent: 'flex-end', marginBottom: 2, marginTop: 1 },
-  msgRowOther: { justifyContent: 'flex-start' },
-  msgRowGroupBlockStart: { marginTop: 8 },
+  msgRowMe: { justifyContent: 'flex-end', marginBottom: 5, marginTop: 2 },
+  msgRowOther: { justifyContent: 'flex-start', marginBottom: 5, marginTop: 2 },
+  msgRowGroupBlockStart: { marginTop: 10 },
   msgRowGroupOther: {
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
-    paddingLeft: 2,
-    marginBottom: 1,
+    marginBottom: 2,
   },
   groupAvatarCol: {
     width: 40,
@@ -1636,12 +1715,30 @@ const styles = StyleSheet.create({
   },
   groupSideAvatarLetter: { fontSize: 14, fontWeight: '800', color: '#54656f' },
   groupSideAvatarGhost: { width: 36, height: 36 },
-  groupBubbleWrap: { maxWidth: '78%', alignSelf: 'flex-start', flexGrow: 0, flexShrink: 1 },
-  groupNameInBubble: {
-    fontSize: 13,
+  groupBubbleWrap: {
+    maxWidth: CHAT_GROUP_BUBBLE_MAX_WIDTH,
+    alignSelf: 'flex-start',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  textBubbleBlock: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    maxWidth: '100%',
+  },
+  bubbleMetaTail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginLeft: 6,
+    marginBottom: 1,
+    flexShrink: 0,
+  },
+  groupNameInline: {
+    fontSize: 14,
     fontWeight: '800',
-    marginBottom: 2,
-    flexShrink: 1,
+    lineHeight: 20,
   },
   typingBubble: {
     flexDirection: 'row',
@@ -1662,38 +1759,64 @@ const styles = StyleSheet.create({
   typingDotOne: { opacity: 0.45 },
   typingDotTwo: { opacity: 0.7 },
   typingDotThree: { opacity: 1 },
-  bubble: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, paddingBottom: 5 },
-  bubbleFitContent: { alignSelf: 'flex-start', flexGrow: 0, flexShrink: 1, maxWidth: '82%' },
+  bubble: {
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingTop: 7,
+    paddingBottom: 6,
+  },
+  bubbleFitContent: {
+    alignSelf: 'flex-start',
+    flexGrow: 0,
+    flexShrink: 1,
+    maxWidth: CHAT_BUBBLE_MAX_WIDTH,
+    minWidth: 56,
+  },
   bubbleMe: {
     alignSelf: 'flex-end',
     backgroundColor: ChatTheme.bubbleOut,
+    borderTopRightRadius: 12,
     borderBottomRightRadius: 2,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
   bubbleOther: {
     backgroundColor: ChatTheme.bubbleIn,
+    borderTopLeftRadius: 12,
     borderBottomLeftRadius: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   bubbleGroupFirst: {
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     borderBottomLeftRadius: 2,
+    alignSelf: 'flex-start',
   },
   bubbleGroupStack: {
-    borderTopLeftRadius: 4,
+    borderTopLeftRadius: 5,
     borderBottomLeftRadius: 2,
-    marginTop: 1,
+    marginTop: 2,
+    alignSelf: 'flex-start',
   },
-  bubbleFileOuter: { padding: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+  bubbleFileOuter: {
+    padding: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+    borderWidth: 0,
+    maxWidth: CHAT_BUBBLE_MAX_WIDTH,
+  },
+  bubbleFileMe: { alignSelf: 'flex-end' },
+  bubbleFileOther: { alignSelf: 'flex-start' },
   deletedBubble: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1746,7 +1869,14 @@ const styles = StyleSheet.create({
   bubbleImageGroupFirst: { borderBottomLeftRadius: 2 },
   bubbleImageGroupStack: { borderTopLeftRadius: 4, borderBottomLeftRadius: 2, marginTop: 1 },
   imageBubble: { borderRadius: 0, overflow: 'visible', padding: 0 },
-  bubbleText: { fontSize: 15, color: ChatTheme.bubbleInText, lineHeight: 21, flexShrink: 1 },
+  bubbleText: {
+    fontSize: 15,
+    color: ChatTheme.bubbleInText,
+    lineHeight: 20,
+    flexShrink: 1,
+    letterSpacing: 0.1,
+    marginRight: 2,
+  },
   bubbleTextMe: { color: ChatTheme.bubbleOutText },
   messageFlag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   messageFlagMe: {},
@@ -1775,42 +1905,56 @@ const styles = StyleSheet.create({
   replyQuoteText: { marginTop: 1, color: '#475569', fontSize: 12 },
   replyQuoteTextMe: { color: '#eef6ff' },
   imageBubbleWrap: {
-    borderRadius: 8,
+    borderRadius: 14,
     overflow: 'hidden',
-    maxWidth: 260,
+    maxWidth: CHAT_IMAGE_MAX_WIDTH,
+    width: CHAT_IMAGE_MAX_WIDTH,
     backgroundColor: '#e9edef',
     position: 'relative',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   imageBubbleWrapMe: {
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 2,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 4,
+    alignSelf: 'flex-end',
   },
   imageBubbleWrapOther: {
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    borderBottomRightRadius: 8,
-    borderBottomLeftRadius: 2,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
+    borderBottomLeftRadius: 4,
+    alignSelf: 'flex-start',
   },
   imageBubbleWrapGroupFirst: {
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 14,
   },
   imageBubbleWrapGroupStack: {
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 8,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 8,
-    marginTop: 1,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 14,
+    marginTop: 2,
   },
   attachmentImage: {
-    width: 252,
+    width: CHAT_IMAGE_MAX_WIDTH,
     maxWidth: '100%',
     height: 220,
     borderRadius: 0,
+  },
+  imageUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15,23,42,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   imageFrameSelected: { borderWidth: 2, borderColor: '#c7dcff', borderRadius: 8 },
   imageOverlayBar: {
@@ -1831,17 +1975,7 @@ const styles = StyleSheet.create({
   },
   imageTimeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   bubbleFileSelected: { padding: 0 },
-  msgMetaRow: {
-    marginTop: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: 3,
-    marginLeft: 8,
-  },
-  msgMetaRowMe: { alignSelf: 'flex-end' },
-  msgMetaHidden: { display: 'none' },
-  msgTime: { fontSize: 11, fontWeight: '500', textAlign: 'right' },
+  msgTime: { fontSize: 11, fontWeight: '500' },
   msgTimeMe: { color: 'rgba(255,255,255,0.85)' },
   msgTimeOther: { color: ChatTheme.metaMuted },
   composer: {

@@ -3,6 +3,46 @@ export function isTempMessageId(id) {
   return String(id || '').startsWith('temp-');
 }
 
+/** @param {string} [status] */
+export function messageDeliveryRank(status) {
+  const s = String(status || '');
+  if (s === 'seen') return 4;
+  if (s === 'delivered') return 3;
+  if (s === 'sent') return 2;
+  if (s === 'sending') return 1;
+  if (s === 'failed') return 0;
+  return 2;
+}
+
+/** @param {unknown} ids */
+function normalizeReadBy(ids) {
+  if (!Array.isArray(ids)) return [];
+  return ids.map(String).filter(Boolean);
+}
+
+/** @param {unknown} a @param {unknown} b */
+export function mergeReadByUserIds(a, b) {
+  return [...new Set([...normalizeReadBy(a), ...normalizeReadBy(b)])];
+}
+
+/**
+ * Keep best delivery state when merging API reload with in-memory messages (seen ticks must not reset).
+ * @param {Record<string, unknown>} server
+ * @param {Record<string, unknown> | undefined} local
+ */
+export function mergeOutgoingDeliveryState(server, local) {
+  if (!local) return server;
+  if (isTempMessageId(local.id) && local.me && (local.status === 'sending' || isMessageUploading(local))) {
+    return local;
+  }
+  if (!local.me || !server.me) return server;
+  const readByUserIds = mergeReadByUserIds(server.readByUserIds, local.readByUserIds);
+  const serverRank = messageDeliveryRank(String(server.status || ''));
+  const localRank = messageDeliveryRank(String(local.status || ''));
+  const status = localRank > serverRank ? String(local.status || 'delivered') : String(server.status || 'delivered');
+  return { ...server, status, readByUserIds, uploadProgress: undefined };
+}
+
 /**
  * True only while an outgoing attachment is actively uploading.
  * @param {Record<string, unknown> | null | undefined} item

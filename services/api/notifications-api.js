@@ -98,6 +98,7 @@ export async function clearAllNotifications(token) {
  *   category?: NotificationCategory;
  *   eventKey?: string;
  *   targetPath?: string;
+ *   upsert?: boolean;
  * }} body
  */
 export async function dispatchNotificationToUser(internalNotifyKey, body) {

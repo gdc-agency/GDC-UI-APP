@@ -119,9 +119,6 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
   const progress = useRef(new Animated.Value(0)).current;
   const submittingRef = useRef(false);
   const idempotencyRef = useRef('');
-  const scrollRef = useRef(/** @type {ScrollView | null} */ (null));
-  const fieldOffsetsRef = useRef(/** @type {Record<string, number>} */ ({}));
-
   const [step, setStep] = useState(1);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(/** @type {Set<string>} */ (new Set()));
@@ -159,7 +156,6 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
     setListLimit(PAGE_SIZE);
     setFocusedField(null);
     setKeyboardHeight(0);
-    fieldOffsetsRef.current = {};
     submittingRef.current = false;
     idempotencyRef.current = '';
   }, []);
@@ -190,27 +186,6 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
       onHide.remove();
     };
   }, [visible]);
-
-  const scrollToField = useCallback((fieldKey) => {
-    const y = fieldOffsetsRef.current[fieldKey];
-    if (y == null || !scrollRef.current) return;
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!keyboardHeight || !focusedField || step !== 2) return undefined;
-    const delay = Platform.OS === 'ios' ? 300 : 140;
-    const t = setTimeout(() => scrollToField(focusedField), delay);
-    return () => clearTimeout(t);
-  }, [focusedField, keyboardHeight, scrollToField, step]);
-
-  const registerFieldLayout = useCallback((fieldKey) => {
-    return (e) => {
-      fieldOffsetsRef.current[fieldKey] = e.nativeEvent.layout.y;
-    };
-  }, []);
 
   const closeAnimated = useCallback(() => {
     if (submittingRef.current || submitting) return;
@@ -322,7 +297,6 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
     step === 1 ? 'Add members' : step === 2 ? 'Group details' : 'Group settings';
 
   const keyboardOpen = keyboardHeight > 0;
-  const scrollBottomPad = keyboardOpen ? Math.max(24, Math.round(keyboardHeight * 0.15)) : 20;
   const androidFooterLift =
     Platform.OS === 'android' && keyboardOpen ? Math.max(0, keyboardHeight - insets.bottom) : 0;
 
@@ -416,7 +390,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
 
           <KeyboardAvoidingView
             style={styles.kav}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            enabled={Platform.OS === 'ios' || step !== 2}
             keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom + 8 : 0}>
             <View style={styles.body}>
               {step === 1 ? (
@@ -483,120 +458,108 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                 </>
               ) : null}
 
-              {step === 2 || step === 3 ? (
-                <ScrollView
-                  ref={scrollRef}
-                  style={styles.scrollFlex}
-                  contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPad }]}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled>
-                  {step === 2 ? (
-                    <>
-                      <Pressable style={styles.avatarPick} onPress={pickAvatar} disabled={submitting}>
-                        {avatarUri ? (
-                          <Image source={{ uri: avatarUri }} style={styles.avatarPickImg} contentFit="cover" />
-                        ) : (
-                          <MaterialCommunityIcons name="camera-plus-outline" size={32} color={BrandColors.primaryMid} />
-                        )}
-                      </Pressable>
-                      <View onLayout={registerFieldLayout('name')}>
-                        <Text style={styles.fieldLabel}>Group name</Text>
-                        <TextInput
-                          value={name}
-                          onChangeText={setName}
-                          placeholder="Enter group name"
-                          placeholderTextColor="#94a3b8"
-                          style={inputStyle('name')}
-                          editable={!submitting}
-                          onFocus={() => {
-                            setFocusedField('name');
-                            scrollToField('name');
-                          }}
-                          onBlur={() => setFocusedField((f) => (f === 'name' ? null : f))}
-                          returnKeyType="next"
-                          onSubmitEditing={() => scrollToField('description')}
-                        />
-                      </View>
-                      <View onLayout={registerFieldLayout('description')}>
-                        <Text style={styles.fieldLabel}>Description (optional)</Text>
-                        <TextInput
-                          value={description}
-                          onChangeText={(t) => setDescription(t.slice(0, 200))}
-                          placeholder="What's this group about?"
-                          placeholderTextColor="#94a3b8"
-                          style={inputStyle('description')}
-                          multiline
-                          editable={!submitting}
-                          onFocus={() => {
-                            setFocusedField('description');
-                            scrollToField('description');
-                          }}
-                          onBlur={() => setFocusedField((f) => (f === 'description' ? null : f))}
-                          blurOnSubmit
-                        />
-                      </View>
-                    </>
-                  ) : null}
+              {step === 2 ? (
+                <View style={styles.detailsBody}>
+                  <Pressable style={styles.avatarPick} onPress={pickAvatar} disabled={submitting}>
+                    {avatarUri ? (
+                      <Image source={{ uri: avatarUri }} style={styles.avatarPickImg} contentFit="cover" />
+                    ) : (
+                      <MaterialCommunityIcons name="camera-plus-outline" size={32} color={BrandColors.primaryMid} />
+                    )}
+                  </Pressable>
+                  <View>
+                    <Text style={styles.fieldLabel}>Group name</Text>
+                    <TextInput
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="Enter group name"
+                      placeholderTextColor="#94a3b8"
+                      style={inputStyle('name')}
+                      editable={!submitting}
+                      onFocus={() => setFocusedField('name')}
+                      onBlur={() => setFocusedField((f) => (f === 'name' ? null : f))}
+                      returnKeyType="next"
+                    />
+                  </View>
+                  <View>
+                    <Text style={styles.fieldLabel}>Description (optional)</Text>
+                    <TextInput
+                      value={description}
+                      onChangeText={(t) => setDescription(t.slice(0, 200))}
+                      placeholder="What's this group about?"
+                      placeholderTextColor="#94a3b8"
+                      style={inputStyle('description')}
+                      multiline
+                      scrollEnabled={false}
+                      editable={!submitting}
+                      onFocus={() => setFocusedField('description')}
+                      onBlur={() => setFocusedField((f) => (f === 'description' ? null : f))}
+                      blurOnSubmit
+                    />
+                  </View>
+                </View>
+              ) : null}
 
-                  {step === 3 ? (
-                    <>
-                      <Text style={styles.settingsHint}>
-                        {selectedSet.size} members · {name.trim()}
-                      </Text>
-                      <Text style={styles.fieldLabel}>Privacy</Text>
-                      <View style={styles.privacyStack}>
-                        {[
-                          ['public', 'Public', 'Anyone in your org can find this group'],
-                          ['private', 'Private', 'Only invited members can join'],
-                          ['restricted', 'Restricted', 'Only admins can post and invite'],
-                        ].map(([key, title, sub]) => (
-                          <Pressable
-                            key={key}
-                            style={[styles.privacyRow, privacy === key && styles.privacyRowActive]}
-                            onPress={() => setPrivacy(key)}
-                            disabled={submitting}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.privacyTitle}>{title}</Text>
-                              <Text style={styles.privacySub}>{sub}</Text>
-                            </View>
-                            <View style={[styles.radio, privacy === key && styles.radioOn]}>
-                              {privacy === key ? <View style={styles.radioDot} /> : null}
-                            </View>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <SettingToggle
-                        label="Members can add others"
-                        sub="When off, only admins can invite"
-                        value={allowMembersToAdd}
-                        onValueChange={setAllowMembersToAdd}
-                        disabled={submitting || privacy === 'restricted'}
-                      />
-                      <SettingToggle
-                        label="Members can edit group info"
-                        sub="Name and photo (admins always can)"
-                        value={allowMembersToEditInfo}
-                        onValueChange={setAllowMembersToEditInfo}
-                        disabled={submitting}
-                      />
-                      <SettingToggle
-                        label="Mute notifications"
-                        sub="You won't get alerts for this group"
-                        value={muteNotifications}
-                        onValueChange={setMuteNotifications}
-                        disabled={submitting}
-                      />
-                      <SettingToggle
-                        label="Disappearing messages"
-                        sub="Coming soon — saved locally for now"
-                        value={disappearingMessages}
-                        onValueChange={setDisappearingMessages}
-                        disabled={submitting}
-                      />
-                    </>
-                  ) : null}
+              {step === 3 ? (
+                <ScrollView
+                  style={styles.scrollFlex}
+                  contentContainerStyle={styles.scrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}>
+                  <Text style={styles.settingsHint}>
+                    {selectedSet.size} members · {name.trim()}
+                  </Text>
+                  <Text style={styles.fieldLabel}>Privacy</Text>
+                  <View style={styles.privacyStack}>
+                    {[
+                      ['public', 'Public', 'Anyone in your org can find this group'],
+                      ['private', 'Private', 'Only invited members can join'],
+                      ['restricted', 'Restricted', 'Only admins can post and invite'],
+                    ].map(([key, title, sub]) => (
+                      <Pressable
+                        key={key}
+                        style={[styles.privacyRow, privacy === key && styles.privacyRowActive]}
+                        onPress={() => setPrivacy(key)}
+                        disabled={submitting}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.privacyTitle}>{title}</Text>
+                          <Text style={styles.privacySub}>{sub}</Text>
+                        </View>
+                        <View style={[styles.radio, privacy === key && styles.radioOn]}>
+                          {privacy === key ? <View style={styles.radioDot} /> : null}
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <SettingToggle
+                    label="Members can add others"
+                    sub="When off, only admins can invite"
+                    value={allowMembersToAdd}
+                    onValueChange={setAllowMembersToAdd}
+                    disabled={submitting || privacy === 'restricted'}
+                  />
+                  <SettingToggle
+                    label="Members can edit group info"
+                    sub="Name and photo (admins always can)"
+                    value={allowMembersToEditInfo}
+                    onValueChange={setAllowMembersToEditInfo}
+                    disabled={submitting}
+                  />
+                  <SettingToggle
+                    label="Mute notifications"
+                    sub="You won't get alerts for this group"
+                    value={muteNotifications}
+                    onValueChange={setMuteNotifications}
+                    disabled={submitting}
+                  />
+                  <SettingToggle
+                    label="Disappearing messages"
+                    sub="Coming soon — saved locally for now"
+                    value={disappearingMessages}
+                    onValueChange={setDisappearingMessages}
+                    disabled={submitting}
+                  />
                 </ScrollView>
               ) : null}
             </View>
@@ -650,7 +613,8 @@ const styles = StyleSheet.create({
   kav: { flex: 1, minHeight: 0 },
   body: { flex: 1, minHeight: 0 },
   scrollFlex: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingTop: 4 },
+  scrollContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 20 },
+  detailsBody: { flex: 1, paddingTop: 4 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

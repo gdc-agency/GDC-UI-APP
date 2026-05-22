@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking';
 
 import { deleteNotification, deleteNotificationByEventKey } from '@/services/api/notifications-api';
 import { ApiError } from '@/services/api/http';
+import { publishPendingChatOpen } from '@/utils/chat-open-bus';
 
 const TAB_BASE = '/dashboard/(tabs)';
 
@@ -97,6 +98,16 @@ export function navigateFromNotificationTarget(router, targetPath) {
   const query = qIndex >= 0 ? raw.slice(qIndex) : '';
 
   const pathNorm = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+
+  if (pathNorm === '/messages' || pathNorm.endsWith('/messages')) {
+    const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+    const chatId = params.get('chatId') || params.get('chat');
+    if (chatId) {
+      publishPendingChatOpen(chatId);
+    }
+    router.push(`${TAB_BASE}/messages`);
+    return true;
+  }
 
   if (pathNorm === '/' || pathNorm === '') {
     router.push(TAB_BASE);

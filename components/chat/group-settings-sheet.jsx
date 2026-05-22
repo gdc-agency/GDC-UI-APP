@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { resolveGroupMember } from '@/utils/resolve-group-member';
 
 const SHEET_SLIDE = 520;
 const ROW_H = 58;
@@ -112,13 +113,18 @@ export function GroupSettingsSheet({
     return undefined;
   }, [progress, visible, server.name, thread?.name]);
 
-  const members = useMemo(() => {
-    const byId = new Map((Array.isArray(contacts) ? contacts : []).map((c) => [String(c.id), c]));
-    return memberIds.map((id) => {
-      const c = byId.get(id);
-      return c || { id, displayName: `User ${id}`, name: `User ${id}`, avatarUrl: null };
-    });
-  }, [contacts, memberIds]);
+  const directory = useMemo(() => {
+    const m = /** @type {Record<string, { displayName?: string; name?: string; roleLabel?: string; avatarUrl?: string | null }>} */ ({});
+    for (const c of Array.isArray(contacts) ? contacts : []) {
+      m[String(c.id)] = c;
+    }
+    return m;
+  }, [contacts]);
+
+  const members = useMemo(
+    () => memberIds.map((id) => resolveGroupMember(id, directory)),
+    [directory, memberIds],
+  );
 
   const addCandidates = useMemo(() => {
     const q = addSearch.trim().toLowerCase();

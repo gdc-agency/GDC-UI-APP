@@ -64,7 +64,7 @@ DELETE /api/auth/notifications/:id
 | `attendance` | Clock-in reminders, anomalies |
 | `system` | Announcements, maintenance |
 
-Task service already calls `POST /api/auth/notifications/dispatch` (internal key). **No Chat-Services notification table** — chat unread is separate (message-level).
+Task service already calls `POST /api/auth/notifications/dispatch` (internal key). **CRM-App** creates chat alerts client-side via `POST /api/auth/notifications` (`upsert` + `event_key` `chat-msg-{chatId}`) when `receiveMessage` / thread refresh detects an incoming message.
 
 ---
 

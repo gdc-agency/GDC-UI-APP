@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { CircularProgressRing } from '@/components/chat/circular-progress-ring';
 import { BrandColors } from '@/constants/brand';
+import { CHAT_BUBBLE_MAX_WIDTH, CHAT_DOC_BUBBLE_WIDTH } from '@/constants/chat-layout';
 import { ChatTheme } from '@/constants/chat-theme';
 import { downloadChatDocument, getCachedChatDocumentPath } from '@/utils/chat-document-download';
 import { openChatDocument } from '@/utils/chat-document-open';
@@ -21,27 +22,53 @@ import {
   View,
 } from 'react-native';
 
-const WA_GREEN = '#25D366';
+const INNER_CARD = '#f0f2f5';
+const ACTION_SIZE = 40;
+const WA_BLUE = ChatTheme.bubbleOut;
 
-function FileTypeBadge({ fileMeta }) {
+/** @param {Record<string, unknown>} item */
+function resolveDisplayFileName(item) {
+  const raw = String(item.fileName || item.name || '').trim();
+  if (raw) return raw;
+  const uri = String(item.uri || '');
+  const fromUri = uri.split('/').pop()?.split('?')[0];
+  if (fromUri && fromUri.includes('.')) return decodeURIComponent(fromUri);
+  return 'Document';
+}
+
+function FileIconTile({ fileMeta }) {
   return (
-    <View style={[styles.badge, { backgroundColor: fileMeta.badgeColor }]}>
-      <View style={styles.badgeFold} />
-      <Text style={styles.badgeLabel}>{fileMeta.badgeLabel}</Text>
+    <View style={[styles.iconTile, { backgroundColor: fileMeta.badgeColor }]}>
+      <View style={styles.iconFold} />
+      <MaterialCommunityIcons name={fileMeta.icon || 'file-outline'} size={22} color="#fff" />
+      <Text style={styles.iconLabel}>{fileMeta.badgeLabel}</Text>
     </View>
   );
 }
 
-/**
- * @param {{
- *   item: Record<string, unknown>;
- *   isActionTarget?: boolean;
- *   tickColor?: string;
- *   normalizeTime?: (t: string) => string;
- *   compact?: boolean;
- *   onLongPress?: () => void;
- * }} props
- */
+function DownloadIdleButton({ onPress }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10} style={styles.downloadIdle}>
+      <MaterialCommunityIcons name="arrow-down" size={20} color={WA_BLUE} />
+    </Pressable>
+  );
+}
+
+function TransferRing({ progress, outgoing }) {
+  return (
+    <CircularProgressRing
+      progress={progress}
+      size={ACTION_SIZE}
+      strokeWidth={3}
+      trackColor={outgoing ? 'rgba(255,255,255,0.35)' : '#dfe5e7'}
+      progressColor={outgoing ? '#fff' : WA_BLUE}
+      centerIcon="arrow-down"
+      centerIconColor={outgoing ? '#fff' : WA_BLUE}
+      showLabel={false}
+    />
+  );
+}
+
 export function DocumentMessageCard({
   item,
   isActionTarget = false,
@@ -49,9 +76,12 @@ export function DocumentMessageCard({
   normalizeTime = (t) => String(t || ''),
   compact = false,
   onLongPress,
+  groupSenderName = '',
+  groupSenderColor = ChatTheme.groupSenderName,
+  showGroupSender = false,
 }) {
   const isMe = !!item.me;
-  const fileName = String(item.fileName || 'Document');
+  const fileName = resolveDisplayFileName(item);
   const fileMeta = getChatFileMeta(fileName);
   const metaLine = [item.fileSizeLabel, fileMeta.ext].filter(Boolean).join(' • ');
   const uploadProgress =
@@ -67,14 +97,14 @@ export function DocumentMessageCard({
   const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (compact || !item.id) return undefined;
+    if (compact || !item.id || isMe) return undefined;
     let cancelled = false;
     (async () => {
       const cached = await getCachedChatDocumentPath(String(item.id));
       if (cancelled) return;
       if (cached) {
         setLocalUri(cached);
-        if (!isMe) setDownloadPhase('done');
+        setDownloadPhase('done');
       }
     })();
     return () => {
@@ -119,218 +149,280 @@ export function DocumentMessageCard({
       setDownloadPhase('done');
       return saved;
     } catch {
+      Alert.alert('Download', 'Could not download file.');
       setDownloadPhase('idle');
       setDownloadProgress(0);
       return null;
     }
   }, [downloadPhase, fileName, isMe, isUploading, item.id, item.uri]);
 
-  const handleDocumentPress = useCallback(async () => {
-    if (isUploading || isFailed || compact || downloadPhase === 'downloading') return;
-    try {
-      if (!isMe && downloadPhase !== 'done') {
-        const saved = await handleDownload();
-        if (!saved) return;
-        await openDocument(saved);
-        return;
-      }
-      await openDocument();
-    } catch (e) {
-      Alert.alert('Document', e?.message ?? 'Could not open file');
-    }
-  }, [compact, downloadPhase, handleDownload, isFailed, isMe, isUploading, openDocument]);
-
   const handleDownloadPress = useCallback(
-    async (e) => {
+    (e) => {
       e?.stopPropagation?.();
-      await handleDownload();
+      void handleDownload();
     },
     [handleDownload],
   );
 
-  const renderSenderFooter = () => (
-    <View style={styles.footerRow}>
-      {isUploading ? (
-        <Text style={styles.senderHint}>Sending document…</Text>
-      ) : isFailed ? (
-        <Text style={styles.senderFailed}>Upload failed · tap to retry later</Text>
-      ) : (
-        <View style={{ flex: 1 }} />
-      )}
-      <View style={styles.timeRow}>
-        {item.time ? <Text style={styles.senderTime}>{normalizeTime(String(item.time))}</Text> : null}
-        {isMe ? (
-          <MaterialCommunityIcons name={statusIconName(messageStatus)} size={14} color={ticks} />
-        ) : null}
-      </View>
-    </View>
-  );
+  const showSenderAction = isMe && (isUploading || isFailed);
+  const showReceiverAction = !isMe && downloadPhase !== 'done';
 
-  const renderSender = () => (
-    <View style={[styles.senderBubble, isActionTarget && styles.senderBubbleSelected]}>
-      <View style={styles.row}>
-        <FileTypeBadge fileMeta={fileMeta} />
-        <View style={styles.textCol}>
-          <Text
-            numberOfLines={2}
-            style={[styles.senderName, isActionTarget && styles.senderNameSelected]}>
-            {fileName}
-          </Text>
-          {metaLine ? (
-            <Text style={[styles.senderMeta, isActionTarget && styles.senderMetaSelected]}>{metaLine}</Text>
-          ) : null}
+  const renderSenderAction = () => {
+    if (isFailed) {
+      return (
+        <View style={styles.actionFailOut}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#fff" />
         </View>
-        {isUploading ? (
-          <CircularProgressRing
-            progress={uploadProgress}
-            size={42}
-            strokeWidth={3}
-            trackColor="rgba(255,255,255,0.35)"
-            progressColor="#fff"
-            labelColor="#fff"
-          />
-        ) : isFailed ? (
-          <MaterialCommunityIcons name="refresh" size={26} color="#fff" />
-        ) : null}
-      </View>
-      {renderSenderFooter()}
-    </View>
-  );
+      );
+    }
+    return <TransferRing progress={uploadProgress} outgoing />;
+  };
 
-  const renderReceiver = () => (
-    <View style={[styles.receiverBubble, isActionTarget && styles.receiverBubbleSelected]}>
-      <View style={styles.row}>
-        <FileTypeBadge fileMeta={fileMeta} />
-        <View style={styles.textCol}>
-          <Text numberOfLines={2} style={styles.receiverName}>
-            {fileName}
-          </Text>
-          {metaLine ? <Text style={styles.receiverMeta}>{metaLine}</Text> : null}
-        </View>
-        {downloadPhase === 'downloading' ? (
-          <CircularProgressRing
-            progress={downloadProgress}
-            size={42}
-            strokeWidth={3}
-            trackColor="#e9edef"
-            progressColor={ChatTheme.bubbleOut}
-            labelColor="#334155"
-          />
-        ) : downloadPhase === 'done' ? (
-          <Pressable onPress={() => void openDocument()} hitSlop={8}>
-            <MaterialCommunityIcons name="file-check-outline" size={26} color={WA_GREEN} />
-          </Pressable>
-        ) : (
-          <Pressable style={styles.recvDownloadBtn} onPress={handleDownloadPress} hitSlop={8}>
-            <MaterialCommunityIcons name="arrow-down-circle-outline" size={28} color="#8696a0" />
-          </Pressable>
-        )}
-      </View>
-      {item.time ? (
-        <Text style={styles.receiverTime}>{normalizeTime(String(item.time))}</Text>
+  const renderReceiverAction = () => {
+    if (downloadPhase === 'downloading') {
+      return <TransferRing progress={downloadProgress} outgoing={false} />;
+    }
+    return <DownloadIdleButton onPress={handleDownloadPress} />;
+  };
+
+  const renderFileInfo = (outgoing) => (
+    <View style={styles.textCol}>
+      <Text
+        style={[outgoing ? styles.fileNameOut : styles.fileNameIn, isActionTarget && styles.fileNameSelected]}
+        numberOfLines={2}
+        ellipsizeMode="tail">
+        {fileName}
+      </Text>
+      {metaLine ? (
+        <Text style={outgoing ? styles.metaOut : styles.metaIn} numberOfLines={1}>
+          {metaLine}
+        </Text>
       ) : null}
     </View>
   );
 
+  const renderFileRow = (outgoing) => (
+    <View style={styles.fileRow}>
+      <FileIconTile fileMeta={fileMeta} />
+      {renderFileInfo(outgoing)}
+      {outgoing ? (showSenderAction ? renderSenderAction() : null) : showReceiverAction ? renderReceiverAction() : null}
+    </View>
+  );
+
+  const renderSender = () => (
+    <View style={[styles.bubbleOut, isActionTarget && styles.bubbleOutSelected]}>
+      {renderFileRow(true)}
+      <View style={styles.footerOut}>
+        {item.time ? <Text style={styles.timeOut}>{normalizeTime(String(item.time))}</Text> : null}
+        {isUploading ? (
+          <MaterialCommunityIcons name="clock-outline" size={14} color="rgba(255,255,255,0.85)" />
+        ) : (
+          <MaterialCommunityIcons name={statusIconName(messageStatus)} size={15} color={ticks} />
+        )}
+      </View>
+    </View>
+  );
+
+  const renderReceiver = () => (
+    <View style={[styles.bubbleIn, isActionTarget && styles.bubbleInSelected]}>
+      {showGroupSender && groupSenderName ? (
+        <Text style={[styles.groupNameInBubble, { color: groupSenderColor }]} numberOfLines={1}>
+          {groupSenderName}
+        </Text>
+      ) : null}
+      <View style={styles.innerCard}>{renderFileRow(false)}</View>
+      <View style={styles.footerIn}>
+        {item.time ? <Text style={styles.timeIn}>{normalizeTime(String(item.time))}</Text> : null}
+      </View>
+    </View>
+  );
+
   const body = (
-    <Animated.View style={[{ transform: [{ scale }] }, compact && styles.compact]}>
+    <Animated.View
+      style={[{ transform: [{ scale }] }, styles.root, isMe && styles.rootMe, compact && styles.compact]}>
       {isMe ? renderSender() : renderReceiver()}
     </Animated.View>
   );
 
   if (compact) return body;
 
+  const canOpen =
+    (isMe && !isUploading && (localUri || item.uri)) ||
+    (!isMe && downloadPhase === 'done');
+
   return (
     <Pressable
-      onPress={() => void handleDocumentPress()}
+      onPress={canOpen ? () => void openDocument() : undefined}
       onLongPress={onLongPress}
       delayLongPress={280}
       onPressIn={animatePressIn}
       onPressOut={animatePressOut}
-      disabled={isUploading || downloadPhase === 'downloading'}>
+      disabled={!isMe && downloadPhase === 'downloading'}>
       {body}
     </Pressable>
   );
 }
 
+const docBubbleBase = {
+  width: CHAT_DOC_BUBBLE_WIDTH,
+  maxWidth: CHAT_BUBBLE_MAX_WIDTH,
+  minWidth: 248,
+};
+
 const styles = StyleSheet.create({
-  compact: { minWidth: 0 },
-  senderBubble: {
+  root: {
+    alignSelf: 'flex-start',
+    width: CHAT_DOC_BUBBLE_WIDTH,
+    maxWidth: CHAT_BUBBLE_MAX_WIDTH,
     minWidth: 248,
-    maxWidth: '100%',
-    backgroundColor: ChatTheme.bubbleOut,
-    borderRadius: 8,
-    borderTopRightRadius: 2,
-    paddingHorizontal: 10,
-    paddingTop: 9,
-    paddingBottom: 7,
   },
-  senderBubbleSelected: {
+  rootMe: { alignSelf: 'flex-end' },
+  compact: { minWidth: 0, width: 'auto' },
+  bubbleOut: {
+    ...docBubbleBase,
+    backgroundColor: ChatTheme.bubbleOut,
+    borderRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 2,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 7,
+    alignSelf: 'flex-end',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  bubbleOutSelected: {
     backgroundColor: '#eef4ff',
     borderWidth: 1,
     borderColor: '#c7dcff',
   },
-  receiverBubble: {
-    minWidth: 248,
-    maxWidth: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderTopLeftRadius: 2,
-    paddingHorizontal: 10,
-    paddingTop: 9,
-    paddingBottom: 7,
+  bubbleIn: {
+    ...docBubbleBase,
+    backgroundColor: ChatTheme.bubbleIn,
+    borderRadius: 12,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 2,
+    paddingHorizontal: 8,
+    paddingTop: 7,
+    paddingBottom: 6,
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.07,
     shadowRadius: 3,
-    elevation: 1,
+    elevation: 2,
   },
-  receiverBubbleSelected: {
+  bubbleInSelected: {
     borderWidth: 1,
     borderColor: '#c7dcff',
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: {
-    width: 40,
-    height: 46,
-    borderRadius: 6,
+  groupNameInBubble: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 5,
+    marginLeft: 2,
+  },
+  innerCard: {
+    backgroundColor: INNER_CARD,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    width: '100%',
+  },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  iconTile: {
+    width: 44,
+    height: 50,
+    borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 5,
+    paddingBottom: 4,
     overflow: 'hidden',
+    flexShrink: 0,
+    marginRight: 10,
   },
-  badgeFold: {
+  iconFold: {
     position: 'absolute',
     top: 0,
     right: 0,
     width: 11,
     height: 11,
-    backgroundColor: 'rgba(255,255,255,0.32)',
-    borderBottomLeftRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderBottomLeftRadius: 3,
   },
-  badgeLabel: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  textCol: { flex: 1, minWidth: 0 },
-  senderName: { color: '#fff', fontSize: 14, fontWeight: '600', lineHeight: 18 },
-  senderNameSelected: { color: BrandColors.primaryMid },
-  senderMeta: { marginTop: 2, color: 'rgba(255,255,255,0.88)', fontSize: 12 },
-  senderMetaSelected: { color: '#64748b' },
-  receiverName: { color: '#111b21', fontSize: 14, fontWeight: '600', lineHeight: 18 },
-  receiverMeta: { marginTop: 2, color: '#667781', fontSize: 12 },
-  recvDownloadBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  footerRow: {
-    marginTop: 6,
+  iconLabel: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  textCol: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 72,
+    paddingRight: 6,
+  },
+  fileNameOut: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  fileNameIn: {
+    color: ChatTheme.bubbleInText,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  fileNameSelected: { color: BrandColors.primaryMid },
+  metaOut: { marginTop: 3, color: 'rgba(255,255,255,0.92)', fontSize: 12 },
+  metaIn: { marginTop: 3, color: ChatTheme.metaMuted, fontSize: 12 },
+  downloadIdle: {
+    width: ACTION_SIZE,
+    height: ACTION_SIZE,
+    borderRadius: ACTION_SIZE / 2,
+    borderWidth: 2,
+    borderColor: WA_BLUE,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  actionFailOut: {
+    width: ACTION_SIZE,
+    height: ACTION_SIZE,
+    borderRadius: ACTION_SIZE / 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  footerOut: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 6,
+    paddingTop: 2,
     minHeight: 16,
   },
-  senderHint: { flex: 1, color: 'rgba(255,255,255,0.9)', fontSize: 11 },
-  senderFailed: { flex: 1, color: '#fecaca', fontSize: 11 },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  senderTime: { color: 'rgba(255,255,255,0.9)', fontSize: 11 },
-  receiverTime: {
+  timeOut: { color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: '500' },
+  footerIn: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     marginTop: 4,
-    alignSelf: 'flex-end',
-    color: '#667781',
-    fontSize: 11,
+    paddingLeft: 2,
   },
+  timeIn: { color: ChatTheme.metaMuted, fontSize: 11, fontWeight: '500' },
 });

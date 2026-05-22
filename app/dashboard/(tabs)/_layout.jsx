@@ -6,13 +6,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlobalChatNotice } from '@/components/chat/global-chat-notice';
 import { HapticTab } from '@/components/haptic-tab';
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcNotificationRealtime } from '@/hooks/useGdcNotificationRealtime';
-import { formatTabBadgeCount } from '@/utils/compute-total-chat-unread';
-import { subscribeChatUnreadTotal } from '@/utils/chat-unread-bus';
 
 /** Content row above home indicator; total bar height = this + insets.bottom */
 const TAB_BAR_BASE_HEIGHT = 70;
@@ -160,16 +159,9 @@ function DashboardTabsLayoutInner() {
   const insets = useSafeAreaInsets();
   const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
   const [isRouteLoading, setIsRouteLoading] = useState(false);
-  const [messagesTabBadge, setMessagesTabBadge] = useState(undefined);
   const { badge: notificationTabBadge } = useGdcNotificationRealtime();
   const shimmerX = useRef(new Animated.Value(-140)).current;
   const skeletonCardCount = skeletonCardCountForPath(pathname);
-
-  useEffect(() => {
-    return subscribeChatUnreadTotal((total) => {
-      setMessagesTabBadge(formatTabBadgeCount(total));
-    });
-  }, []);
 
   useEffect(() => {
     setIsRouteLoading(true);
@@ -196,6 +188,7 @@ function DashboardTabsLayoutInner() {
 
   return (
     <View style={styles.container}>
+      <GlobalChatNotice />
       <Tabs
         initialRouteName="index"
         screenOptions={{
@@ -226,7 +219,6 @@ function DashboardTabsLayoutInner() {
           name="messages"
           options={{
             title: 'Chat',
-            tabBarBadge: messagesTabBadge,
             tabBarIcon: ({ color, focused }) => (
               <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
             ),

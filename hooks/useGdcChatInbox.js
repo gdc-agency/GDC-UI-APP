@@ -23,12 +23,19 @@ import { ChatApiError } from '@/services/api/chat-http';
 import { getAllUsers } from '@/services/api/admin-api';
 import { listAuthUsers } from '@/services/api/auth-api';
 import { fetchChatParticipantSnapshots } from '@/services/api/profile-api';
+import { deleteNotificationByEventKey } from '@/services/api/notifications-api';
 import { getMyTeamRoster, getVisibleDirectory } from '@/services/api/teams-api';
 import { ensureGdcSocketConnected, getGdcSocket } from '@/services/realtime/gdc-socket';
 import { computeTotalChatUnread } from '@/utils/compute-total-chat-unread';
-import { publishChatUnreadTotal, resetChatUnreadBus } from '@/utils/chat-unread-bus';
+import { clearChatInAppNotice, messagePreviewLabel, publishChatInAppNotice } from '@/utils/chat-in-app-notice';
+import { invalidateNotificationInbox } from '@/utils/notification-invalidate';
+import { syncChatInAppNotification } from '@/utils/sync-chat-in-app-notification';
 import { patchMessagesWithTombstone, toDeletedMessageUi } from '@/utils/chat-deleted-message';
-import { buildPlaceholderThreadFromIncoming, sortThreadsByRecent } from '@/utils/chat-thread-inbox';
+import {
+  buildPlaceholderThreadFromIncoming,
+  sortThreadsByRecent,
+  threadIdEquals,
+} from '@/utils/chat-thread-inbox';
 import {
   buildGroupCreateKey,
   createGroupIdempotencyKey,
@@ -37,8 +44,16 @@ import {
 import { isAdminRole } from '@/utils/roles';
 import { formatDisplayRole, formatFileSize, mapDirectoryUser, resolveProfileImageUri } from '@/utils/chat-directory';
 import { readLocalUriAsDataUrl } from '@/utils/chat-attachment-read';
-import { finalizeOutgoingMessage, isTempMessageId } from '@/utils/chat-message-status';
-import { runWithTransferProgress } from '@/utils/chat-transfer-progress';
+import {
+  finalizeOutgoingMessage,
+  isMessageUploading,
+  isTempMessageId,
+  mergeOutgoingDeliveryState,
+} from '@/utils/chat-message-status';
+import {
+  runWithTransferProgress,
+  startTransferProgressAnimator,
+} from '@/utils/chat-transfer-progress';
 
 const HIDDEN_CHAT_IDS_PREFIX = 'gdc_chat_hidden_threads:';
 const HIDDEN_MESSAGE_IDS_PREFIX = 'gdc_chat_hidden_messages:';
@@ -93,19 +108,26 @@ function collectThreadParticipantIds(threads, myUserId) {
   return [...ids];
 }
 
-/** Keep optimistic/pending messages when merging server history. */
+/** Merge API messages with in-memory rows: keep temp uploads + never downgrade seen/delivered ticks. */
 function mergeMessagesWithLocal(serverMessages, localMessages) {
-  const byId = new Map();
-  for (const m of serverMessages) byId.set(String(m.id), m);
+  const localById = new Map();
+  for (const m of localMessages) localById.set(String(m.id), m);
+
+  const merged = serverMessages.map((server) =>
+    mergeOutgoingDeliveryState(server, localById.get(String(server.id))),
+  );
+  const mergedIds = new Set(merged.map((m) => String(m.id)));
+
   for (const m of localMessages) {
     const id = String(m.id);
-    if (isTempMessageId(id)) {
-      byId.set(id, m);
-      continue;
+    if (mergedIds.has(id)) continue;
+    if (isTempMessageId(id) && m.me && (m.status === 'sending' || isMessageUploading(m))) {
+      merged.push(m);
+      mergedIds.add(id);
     }
-    if (!byId.has(id)) byId.set(id, m);
   }
-  return sortChatMessages([...byId.values()]);
+
+  return sortChatMessages(merged);
 }
 
 function reconcileOutgoingMessage(messages, tempId, confirmedUi) {
@@ -195,11 +217,6 @@ function mergeMessageList(existing, incomingUi) {
   const filtered = existing.filter((m) => m.id !== incomingUi.id);
   filtered.push(incomingUi);
   return sortChatMessages(filtered);
-}
-
-function threadIdEquals(a, b) {
-  if (a == null || b == null) return false;
-  return String(a).trim() === String(b).trim();
 }
 
 /** @param {Record<string, unknown>} m @param {string} myUserId */
@@ -349,6 +366,11 @@ export function useGdcChatInbox({ token, user }) {
   const applyServerThreadPatchRef = useRef(/** @type {((thread: Record<string, unknown> | null, action?: Record<string, unknown>) => void) | null} */ (null));
   const userDirectoryByIdRef = useRef(/** @type {Record<string, { displayName: string; roleLabel: string; avatarUrl: string | null }>} */ ({}));
   const onlineUserIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
+  /** chatId → temp message id while attachment upload is in flight (blocks premature socket merge). */
+  const outboundAttachmentUploadRef = useRef(/** @type {Map<string, string>} */ (new Map()));
+  const inboxSyncedFromServerRef = useRef(false);
+  /** chatId → last successful messages fetch (ms) */
+  const lastMessagesLoadAtRef = useRef(/** @type {Map<string, number>} */ (new Map()));
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -358,15 +380,24 @@ export function useGdcChatInbox({ token, user }) {
     onlineUserIdsRef.current = onlineUserIds;
   }, [onlineUserIds]);
 
-  const totalUnreadMessages = useMemo(() => computeTotalChatUnread(threads), [threads]);
+  const [incomingNotice, setIncomingNotice] = useState(/** @type {import('@/utils/chat-in-app-notice').ChatInAppNotice | null} */ (null));
 
   useEffect(() => {
-    publishChatUnreadTotal(totalUnreadMessages);
-  }, [totalUnreadMessages]);
-
-  useEffect(() => {
-    if (!myId) resetChatUnreadBus();
+    if (!myId) {
+      clearChatInAppNotice();
+      setIncomingNotice(null);
+      inboxSyncedFromServerRef.current = false;
+    }
   }, [myId]);
+
+  const dismissIncomingNotice = useCallback((chatId) => {
+    setIncomingNotice((prev) => {
+      if (!prev) return null;
+      if (chatId != null && !threadIdEquals(prev.chatId, chatId)) return prev;
+      clearChatInAppNotice();
+      return null;
+    });
+  }, []);
 
   useEffect(() => {
     hiddenChatIdsRef.current = hiddenChatIds;
@@ -380,29 +411,6 @@ export function useGdcChatInbox({ token, user }) {
     if (hiddenChatIds.size === 0) return;
     setThreads((prev) => prev.filter((t) => !hiddenChatIds.has(String(t.id))));
   }, [hiddenChatIds]);
-
-  // NEW CODE ADDED FOR CHAT LIST NAME LOADING — hydrate directory from cache before network
-  useEffect(() => {
-    if (!myId) {
-      setDirectoryHydrated(false);
-      return undefined;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const cached = await AsyncStorage.getItem(storageKey(DIRECTORY_CACHE_PREFIX, myId));
-        const parsed = cached ? JSON.parse(cached) : [];
-        if (cancelled || !Array.isArray(parsed) || !parsed.length) return;
-        setDirectoryRows(parsed);
-        setDirectoryHydrated(true);
-      } catch {
-        /* cache optional */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [myId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -472,19 +480,6 @@ export function useGdcChatInbox({ token, user }) {
       return;
     }
     try {
-      if (myId) {
-        try {
-          const cached = await AsyncStorage.getItem(storageKey(DIRECTORY_CACHE_PREFIX, myId));
-          const parsed = cached ? JSON.parse(cached) : [];
-          if (Array.isArray(parsed) && parsed.length) {
-            setDirectoryRows(parsed);
-            setContacts(parsed);
-            setDirectoryHydrated(true);
-          }
-        } catch {
-          /* cache optional */
-        }
-      }
       const mapRows = (items) =>
         (Array.isArray(items) ? items : [])
           .map((u) => {
@@ -733,10 +728,12 @@ export function useGdcChatInbox({ token, user }) {
         await loadContactsRef.current();
         if (cancelled) return;
         const silent = threadsRef.current.length > 0;
+        const needsFullSync = !inboxSyncedFromServerRef.current;
         await refreshThreadsRef.current({
           silent,
-          syncFromServer: threadsRef.current.length === 0,
+          syncFromServer: needsFullSync,
         });
+        inboxSyncedFromServerRef.current = true;
       })();
       return () => {
         cancelled = true;
@@ -816,10 +813,12 @@ export function useGdcChatInbox({ token, user }) {
   }, [onlineUserIds]);
 
   const selectedChatIdRef = useRef(/** @type {string | null} */ (null));
+  const [activeChatId, setActiveChatIdState] = useState(/** @type {string | null} */ (null));
 
   const setActiveChatId = useCallback((chatId) => {
     const id = chatId != null ? String(chatId).trim() : '';
     selectedChatIdRef.current = id || null;
+    setActiveChatIdState(id || null);
     if (!id) setTypingPeerId(null);
   }, []);
 
@@ -841,9 +840,19 @@ export function useGdcChatInbox({ token, user }) {
           }
           const existing = Array.isArray(t.messages) ? t.messages : [];
           const merged = mergeMessagesWithLocal(ui, existing);
-          return { ...t, messages: merged, messagesHasMore: hasMore, messagesLoadingOlder: false };
+          const preview =
+            t.threadPreview && merged.some((m) => String(m.id) === String(t.threadPreview.id))
+              ? mergeOutgoingDeliveryState(
+                  merged.find((m) => String(m.id) === String(t.threadPreview.id)) || t.threadPreview,
+                  t.threadPreview,
+                )
+              : merged.length
+                ? merged[merged.length - 1]
+                : t.threadPreview;
+          return { ...t, messages: merged, messagesHasMore: hasMore, messagesLoadingOlder: false, threadPreview: preview };
         }),
       );
+      lastMessagesLoadAtRef.current.set(String(chatId), Date.now());
     },
     [hiddenMessageIdsByChat, token, myId],
   );
@@ -932,7 +941,7 @@ export function useGdcChatInbox({ token, user }) {
   const flushMarkChatRead = useCallback(
     async (chatId) => {
       const id = String(chatId || '').trim();
-      if (!token || !id || selectedChatIdRef.current !== id) return;
+      if (!token || !id || !threadIdEquals(selectedChatIdRef.current, id)) return;
       try {
         await markChatRead(token, id);
         emitMessageSeenSocket(id);
@@ -954,7 +963,7 @@ export function useGdcChatInbox({ token, user }) {
   // NEW CODE ADDED FOR REAL-TIME SEEN TICK FIX — debounced read ack while receiver has chat open
   scheduleMarkChatReadRef.current = (chatId) => {
     const id = String(chatId || '').trim();
-    if (!token || !id || selectedChatIdRef.current !== id) return;
+    if (!token || !id || !threadIdEquals(selectedChatIdRef.current, id)) return;
     if (readAckTimerRef.current) clearTimeout(readAckTimerRef.current);
     readAckTimerRef.current = setTimeout(() => {
       readAckTimerRef.current = null;
@@ -964,7 +973,7 @@ export function useGdcChatInbox({ token, user }) {
   };
 
   const openChat = useCallback(
-    async (chatId) => {
+    async (chatId, opts = {}) => {
       if (!token || !chatId) return;
       const id = String(chatId).trim();
       selectedChatIdRef.current = id;
@@ -981,13 +990,31 @@ export function useGdcChatInbox({ token, user }) {
       sock?.emit('joinRoom', id);
       lastReadAckChatRef.current = '';
       setThreads((prev) => prev.map((t) => (threadIdEquals(t.id, id) ? { ...t, unread: 0 } : t)));
-      await Promise.all([
-        loadMessagesForChat(id).catch(() => {}),
-        flushMarkChatReadRef.current(id).catch(() => {}),
-      ]);
+      dismissIncomingNotice(id);
+      void deleteNotificationByEventKey(token, `chat-msg-${id}`)
+        .catch(() => {})
+        .finally(() => invalidateNotificationInbox());
+
+      const hasCached = Array.isArray(active?.messages) && active.messages.length > 0;
+      const lastLoad = lastMessagesLoadAtRef.current.get(id) || 0;
+      const stale = Date.now() - lastLoad > 25000;
+      const force = !!opts.force;
+
+      if (!hasCached || force) {
+        void loadMessagesForChat(id).catch(() => {});
+      } else if (stale) {
+        void loadMessagesForChat(id).catch(() => {});
+      } else {
+        setTimeout(() => {
+          if (!threadIdEquals(selectedChatIdRef.current, id)) return;
+          void loadMessagesForChat(id).catch(() => {});
+        }, 600);
+      }
+
+      void flushMarkChatReadRef.current(id).catch(() => {});
       patchThreadDisplayFromDirectory(id);
     },
-    [token, myId, loadMessagesForChat, patchThreadDisplayFromDirectory],
+    [token, myId, loadMessagesForChat, patchThreadDisplayFromDirectory, dismissIncomingNotice],
   );
 
   /** Opens or creates DM without loading messages (fast path for picker → chat). */
@@ -1123,7 +1150,7 @@ export function useGdcChatInbox({ token, user }) {
         } else {
           await refreshThreads({ silent: true });
         }
-        return id;
+        return { id, thread: thread && typeof thread === 'object' ? thread : null };
       });
     },
     [
@@ -1290,7 +1317,6 @@ export function useGdcChatInbox({ token, user }) {
           forwardedFrom: options.forwardedFrom && typeof options.forwardedFrom === 'object' ? options.forwardedFrom : undefined,
         });
         if (!msg || typeof msg !== 'object') return;
-        getGdcSocket()?.emit('sendMessage', { chatId, message: msg });
         const ui = finalizeOutgoingMessage(mapApiMessageToUi(msg, myId));
         setThreads((prev) =>
           sortThreadsByRecent(
@@ -1302,7 +1328,6 @@ export function useGdcChatInbox({ token, user }) {
             }),
           ),
         );
-        refreshThreadsImmediate();
       } catch (e) {
         setThreads((prev) =>
           prev.map((t) =>
@@ -1336,6 +1361,7 @@ export function useGdcChatInbox({ token, user }) {
         typeof hintedSize === 'number' && Number.isFinite(hintedSize) && hintedSize >= 0
           ? formatFileSize(hintedSize)
           : '';
+      outboundAttachmentUploadRef.current.set(String(chatId), tempId);
       const optimisticUi = isImg
         ? {
             id: tempId,
@@ -1346,7 +1372,8 @@ export function useGdcChatInbox({ token, user }) {
             time: formatMsgTime(nowIso),
             createdAtIso: nowIso,
             createdAtMs: nowMs,
-            status: 'sent',
+            status: 'sending',
+            uploadProgress: 0,
           }
         : {
             id: tempId,
@@ -1387,38 +1414,52 @@ export function useGdcChatInbox({ token, user }) {
         ),
       );
       const reportUpload = (ratio) => {
-        const v = Math.min(1, Math.max(0, ratio));
+        const v = Math.min(0.99, Math.max(0, ratio));
         onProgress(v);
-        if (!isImg) patchOptimistic({ uploadProgress: v });
+        patchOptimistic({ uploadProgress: v, status: 'sending' });
       };
 
       reportUpload(0);
-      const { dataUrl, byteLength } = await runWithTransferProgress(
-        () => readLocalUriAsDataUrl(uri, mimeType, fileName),
-        reportUpload,
-        {
-          from: 0,
-          to: 0.55,
-          maxMs:
-            typeof hintedSize === 'number' && hintedSize > 0
-              ? Math.min(12000, 2000 + hintedSize / 8000)
-              : 6000,
-        },
-      );
-      const attachment = {
-        mimeType: mime,
-        fileName: safeName,
-        dataUrl,
-        sizeBytes: byteLength,
-      };
       try {
-        const msg = await runWithTransferProgress(
-          () => postChatMessage(token, chatId, { body: '', attachment }),
+        const readMaxMs =
+          typeof hintedSize === 'number' && hintedSize > 0
+            ? Math.min(14000, 2500 + hintedSize / 6000)
+            : 7000;
+        const { dataUrl, byteLength } = await runWithTransferProgress(
+          () => readLocalUriAsDataUrl(uri, mimeType, fileName),
           reportUpload,
-          { from: 0.55, to: 1, maxMs: 15000 },
+          { from: 0, to: 0.52, maxMs: readMaxMs },
         );
-        if (!msg || typeof msg !== 'object') return;
-        getGdcSocket()?.emit('sendMessage', { chatId, message: msg });
+
+        const attachment = {
+          mimeType: mime,
+          fileName: safeName,
+          dataUrl,
+          sizeBytes: byteLength,
+        };
+        const postMaxMs =
+          typeof byteLength === 'number' && byteLength > 0
+            ? Math.min(16000, 3000 + byteLength / 5000)
+            : 9000;
+        const postAnim = startTransferProgressAnimator(reportUpload, {
+          from: 0.52,
+          to: 0.96,
+          maxMs: postMaxMs,
+        });
+        let msg;
+        try {
+          msg = await postChatMessage(token, chatId, { body: '', attachment });
+          postAnim.complete(0.99);
+        } catch (postErr) {
+          postAnim.cancel();
+          throw postErr;
+        }
+        if (!msg || typeof msg !== 'object') {
+          outboundAttachmentUploadRef.current.delete(String(chatId));
+          return;
+        }
+
+        reportUpload(1);
         const ui = finalizeOutgoingMessage(mapApiMessageToUi(msg, myId));
         setThreads((prev) =>
           prev.map((t) => {
@@ -1428,8 +1469,10 @@ export function useGdcChatInbox({ token, user }) {
             return { ...t, messages: next, threadPreview: ui };
           }),
         );
+        outboundAttachmentUploadRef.current.delete(String(chatId));
         onProgress(1);
       } catch (e) {
+        outboundAttachmentUploadRef.current.delete(String(chatId));
         setThreads((prev) =>
           prev.map((t) =>
             t.id === chatId
@@ -1493,6 +1536,24 @@ export function useGdcChatInbox({ token, user }) {
     const s = getGdcSocket();
     if (!s) return undefined;
 
+    const pushIncomingNotice = (chatId, ui, authorId) => {
+      const aid = String(authorId || '').trim();
+      if (!aid || aid === String(myId)) return;
+      if (threadIdEquals(selectedChatIdRef.current, chatId)) return;
+      const row = threadsRef.current.find((t) => threadIdEquals(t.id, chatId));
+      const peer = aid ? userDirectoryByIdRef.current[aid] : null;
+      const notice = {
+        chatId: String(chatId),
+        title: String(row?.listTitle || row?.name || peer?.displayName || 'Chat'),
+        preview: messagePreviewLabel(ui),
+        senderName: String(peer?.displayName || peer?.name || ''),
+        at: Date.now(),
+      };
+      setIncomingNotice(notice);
+      publishChatInAppNotice(notice);
+      if (token) void syncChatInAppNotification(token, notice);
+    };
+
     const onReceive = (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
       const chatId = p.chatId != null ? String(p.chatId) : '';
@@ -1509,6 +1570,18 @@ export function useGdcChatInbox({ token, user }) {
       } else if (authorId === String(myId)) {
         ui = finalizeOutgoingMessage(ui);
       }
+      const isAttachmentMsg = ui.type === 'file' || ui.type === 'image';
+      const uploadStillActive =
+        authorId === String(myId) &&
+        isAttachmentMsg &&
+        outboundAttachmentUploadRef.current.get(chatId) != null;
+      const att = serverMsg.attachment && typeof serverMsg.attachment === 'object' ? serverMsg.attachment : null;
+      const serverDataUrl =
+        att && typeof att.dataUrl === 'string' && att.dataUrl.length > 48 ? att.dataUrl : '';
+      const attachmentReady =
+        !isAttachmentMsg ||
+        !!(typeof ui.uri === 'string' && ui.uri.length > 48) ||
+        !!serverDataUrl;
       const isOpen = threadIdEquals(selectedChatIdRef.current, chatId);
 
       if (hiddenChatIdsRef.current.has(chatId)) {
@@ -1519,13 +1592,16 @@ export function useGdcChatInbox({ token, user }) {
         scheduleSilentThreadRefreshRef.current?.();
       }
 
-      let matched = false;
+      let needsMessageReload = false;
       setThreads((prev) => {
-        const next = prev.map((t) => {
-          if (!threadIdEquals(t.id, chatId)) return t;
-          matched = true;
+        const patchThread = (t) => {
           const msgs = Array.isArray(t.messages) ? t.messages : [];
           if (hiddenMessageIdsByChatRef.current[chatId]?.has(String(ui.id))) return t;
+          if (uploadStillActive) return t;
+          if (!attachmentReady) {
+            if (isOpen) needsMessageReload = true;
+            return t;
+          }
           let nextMsgs = msgs;
           if (isDeletedEvent) {
             const has = msgs.some((m) => String(m.id) === String(ui.id));
@@ -1549,28 +1625,37 @@ export function useGdcChatInbox({ token, user }) {
           let row = { ...t, messages: nextMsgs, unread, threadPreview: ui };
           if (authorId === String(myId)) row = upgradeOwnMessageDelivery(row, ui.id);
           return row;
+        };
+
+        const idx = prev.findIndex((t) => threadIdEquals(t.id, chatId));
+        if (idx >= 0) {
+          const next = prev.map((t, i) => (i === idx ? patchThread(t) : t));
+          return sortThreadsByRecent(next);
+        }
+
+        if (!attachmentReady) {
+          if (isOpen) needsMessageReload = true;
+          return prev;
+        }
+
+        const stub = buildPlaceholderThreadFromIncoming({
+          chatId,
+          ui,
+          authorId,
+          myId,
+          userDirectoryById,
+          onlineUserIds,
         });
-        return sortThreadsByRecent(next);
+        return sortThreadsByRecent([patchThread(stub), ...prev]);
       });
 
-      if (!matched) {
-        const isIncoming = authorId && authorId !== String(myId);
-        if (isIncoming && !isDeletedEvent) {
-          setThreads((prev) => {
-            if (prev.some((t) => threadIdEquals(t.id, chatId))) return prev;
-            const row = buildPlaceholderThreadFromIncoming({
-              chatId,
-              ui,
-              authorId,
-              myId,
-              userDirectoryById: userDirectoryByIdRef.current,
-              onlineUserIds: onlineUserIdsRef.current,
-            });
-            return sortThreadsByRecent([row, ...prev]);
-          });
-        }
-        refreshThreadsImmediate();
-        if (isOpen) void loadMessagesForChat(chatId);
+      if (needsMessageReload) void loadMessagesForChat(chatId);
+
+      const isIncoming = authorId && authorId !== String(myId) && !isDeletedEvent && attachmentReady;
+      if (isIncoming && !isOpen) {
+        pushIncomingNotice(chatId, ui, authorId);
+      } else if (isOpen) {
+        dismissIncomingNotice(chatId);
       }
 
       if (isOpen && authorId && authorId !== String(myId)) {
@@ -1598,9 +1683,9 @@ export function useGdcChatInbox({ token, user }) {
         return;
       }
       if (chatId) {
-        void refreshThreadsRef.current?.({ silent: true });
+        scheduleSilentThreadRefreshRef.current?.();
       } else {
-        refreshThreadsImmediate();
+        scheduleSilentThreadRefreshRef.current?.();
       }
     };
 
@@ -1608,16 +1693,23 @@ export function useGdcChatInbox({ token, user }) {
       onThreadUpdated(payload);
     };
 
-    /** Fallback when Chat relay omits full payload (misconfigured INTERNAL_NOTIFY_KEY). */
+    /** Fallback when relay sends `chat.message` without full `receiveMessage` payload. */
     const onChatMessageSignal = (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
       const chatId = p.chatId != null ? String(p.chatId) : '';
       if (!chatId) return;
       if (threadIdEquals(selectedChatIdRef.current, chatId)) {
         void loadMessagesForChat(chatId);
-      } else {
-        refreshThreadsImmediate();
+        return;
       }
+      scheduleSilentThreadRefreshRef.current?.();
+      setTimeout(() => {
+        if (threadIdEquals(selectedChatIdRef.current, chatId)) return;
+        const row = threadsRef.current.find((t) => threadIdEquals(t.id, chatId));
+        const preview = row?.threadPreview;
+        if (!preview || preview.deleted) return;
+        pushIncomingNotice(chatId, preview, String(preview.authorId ?? ''));
+      }, 650);
     };
 
     const onChatTyping = (payload) => {
@@ -1724,11 +1816,12 @@ export function useGdcChatInbox({ token, user }) {
       s.off('presence:update', onPresenceUpdate);
       s.off('presence:snapshot', onPresenceSnapshot);
     };
-  }, [token, myId, upgradeOwnMessageDelivery, loadMessagesForChat, refreshThreadsImmediate]);
+  }, [token, myId, userDirectoryById, onlineUserIds, upgradeOwnMessageDelivery, loadMessagesForChat, dismissIncomingNotice]);
 
   const closeChat = useCallback(() => {
     const id = selectedChatIdRef.current;
     selectedChatIdRef.current = null;
+    setActiveChatIdState(null);
     setTypingPeerId(null);
     lastReadAckChatRef.current = '';
     if (readAckTimerRef.current) {
@@ -1851,7 +1944,9 @@ export function useGdcChatInbox({ token, user }) {
 
   return {
     threads,
-    totalUnreadMessages,
+    totalUnreadMessages: computeTotalChatUnread(threads),
+    incomingNotice,
+    dismissIncomingNotice,
     setThreads,
     contacts,
     groupContacts: directoryRows.length > 0 ? directoryRows : contacts,
@@ -1881,6 +1976,7 @@ export function useGdcChatInbox({ token, user }) {
     userDirectoryById,
     onlineUserIds,
     closeChat,
+    activeChatId,
     setActiveChatId,
     emitChatTyping,
     typingPeerId,

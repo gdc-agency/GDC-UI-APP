@@ -2,6 +2,12 @@
  * Chat list ordering + optimistic thread upsert (WhatsApp-style: latest on top).
  */
 
+/** @param {string | number | null | undefined} a @param {string | number | null | undefined} b */
+export function threadIdEquals(a, b) {
+  if (a == null || b == null) return false;
+  return String(a).trim() === String(b).trim();
+}
+
 /** @param {Record<string, unknown>} thread */
 export function threadLastActivityMs(thread) {
   const preview = thread?.threadPreview;
@@ -106,7 +112,7 @@ export function buildPlaceholderThreadFromIncoming({
  */
 export function upsertThreadInList(prev, chatId, updater) {
   const list = Array.isArray(prev) ? prev : [];
-  const idx = list.findIndex((t) => String(t.id) === String(chatId));
+  const idx = list.findIndex((t) => threadIdEquals(t.id, chatId));
   if (idx >= 0) {
     const next = list.map((t, i) => (i === idx ? updater(t) : t));
     return sortThreadsByRecent(next);

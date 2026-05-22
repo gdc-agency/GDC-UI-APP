@@ -37,9 +37,12 @@ const CATEGORY_ICONS = {
   task: 'checkbox-marked-circle-outline',
   request: 'clipboard-text-outline',
   system: 'bell-outline',
+  chat: 'message-text-outline',
 };
 
-function iconForCategory(cat) {
+function iconForCategory(cat, eventKey) {
+  const key = String(eventKey || '');
+  if (key.startsWith('chat-msg-')) return CATEGORY_ICONS.chat;
   return CATEGORY_ICONS[String(cat || '').toLowerCase()] || CATEGORY_ICONS.system;
 }
 
@@ -258,7 +261,11 @@ export default function NotificationsScreen() {
                 onPress={() => void onOpenItem(item)}
                 android_ripple={{ color: '#e2e8f0' }}>
                 <View style={styles.iconWrap}>
-                  <MaterialCommunityIcons name={iconForCategory(item.category)} size={18} color={BrandColors.primaryMid} />
+                  <MaterialCommunityIcons
+                    name={iconForCategory(item.category, item.eventKey)}
+                    size={18}
+                    color={BrandColors.primaryMid}
+                  />
                 </View>
                 <View style={styles.body}>
                   <Text style={styles.rowTitle}>{item.title}</Text>
