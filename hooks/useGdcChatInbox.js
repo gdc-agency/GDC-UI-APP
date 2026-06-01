@@ -108,6 +108,25 @@ function collectThreadParticipantIds(threads, myUserId) {
   return [...ids];
 }
 
+/**
+ * Rows already in memory (socket / optimistic) but missing from a stale API page —
+ * includes incoming messages for the open chat, not only the sender's own.
+ */
+function shouldPreserveLocalOnlyMessage(localMsg, serverMessages) {
+  if (!localMsg) return false;
+  const id = String(localMsg.id);
+  if (serverMessages.some((s) => String(s.id) === id)) return false;
+  if (isTempMessageId(id) && localMsg.me && (localMsg.status === 'sending' || isMessageUploading(localMsg))) {
+    return true;
+  }
+  if (localMsg.me && localMsg.status === 'failed') return true;
+  const localMs = messageSortKey(localMsg);
+  if (!localMs) return false;
+  const serverNewestMs = serverMessages.reduce((max, s) => Math.max(max, messageSortKey(s)), 0);
+  if (localMs >= serverNewestMs - 5000) return true;
+  return Date.now() - localMs < 180000;
+}
+
 /** Merge API messages with in-memory rows: keep temp uploads + never downgrade seen/delivered ticks. */
 function mergeMessagesWithLocal(serverMessages, localMessages) {
   const localById = new Map();
@@ -122,6 +141,11 @@ function mergeMessagesWithLocal(serverMessages, localMessages) {
     const id = String(m.id);
     if (mergedIds.has(id)) continue;
     if (isTempMessageId(id) && m.me && (m.status === 'sending' || isMessageUploading(m))) {
+      merged.push(m);
+      mergedIds.add(id);
+      continue;
+    }
+    if (shouldPreserveLocalOnlyMessage(m, serverMessages)) {
       merged.push(m);
       mergedIds.add(id);
     }
@@ -351,6 +375,7 @@ export function useGdcChatInbox({ token, user }) {
   const [directoryHydrated, setDirectoryHydrated] = useState(false);
   const [inboxError, setInboxError] = useState(/** @type {string | null} */ (null));
   const silentRefreshTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const openChatReloadTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
   const typingClearTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
   const readAckTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
   const lastReadAckChatRef = useRef('');
@@ -364,6 +389,7 @@ export function useGdcChatInbox({ token, user }) {
   const hiddenMessageIdsByChatRef = useRef(hiddenMessageIdsByChat);
   const scheduleSilentThreadRefreshRef = useRef(/** @type {(() => void) | null} */ (null));
   const applyServerThreadPatchRef = useRef(/** @type {((thread: Record<string, unknown> | null, action?: Record<string, unknown>) => void) | null} */ (null));
+  const evictChatFromInboxRef = useRef(/** @type {((chatId: string, opts?: { persistHide?: boolean }) => void) | null} */ (null));
   const userDirectoryByIdRef = useRef(/** @type {Record<string, { displayName: string; roleLabel: string; avatarUrl: string | null }>} */ ({}));
   const onlineUserIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
   /** chatId → temp message id while attachment upload is in flight (blocks premature socket merge). */
@@ -1045,32 +1071,82 @@ export function useGdcChatInbox({ token, user }) {
     [ensureDmChat, openChat],
   );
 
-  const applyServerThreadPatch = useCallback(
-    (serverThread, action) => {
-      if (!serverThread || typeof serverThread !== 'object') {
-        const cid = action?.chatId ? String(action.chatId) : '';
-        if (action?.action === 'group_deleted' && cid) {
-          setThreads((prev) => prev.filter((t) => !threadIdEquals(t.id, cid)));
+  const evictChatFromInbox = useCallback(
+    (chatId, { persistHide = false } = {}) => {
+      const cid = String(chatId || '').trim();
+      if (!cid) return;
+
+      dismissIncomingNotice(cid);
+
+      if (threadIdEquals(selectedChatIdRef.current, cid)) {
+        selectedChatIdRef.current = null;
+        setActiveChatIdState(null);
+        setTypingPeerId(null);
+        lastReadAckChatRef.current = '';
+        if (readAckTimerRef.current) {
+          clearTimeout(readAckTimerRef.current);
+          readAckTimerRef.current = null;
         }
+        getGdcSocket()?.emit('leaveRoom', cid);
+      }
+
+      if (persistHide && myId) {
+        setHiddenChatIds((prev) => {
+          if (prev.has(cid)) return prev;
+          const next = new Set(prev);
+          next.add(cid);
+          void writeStringSet(storageKey(HIDDEN_CHAT_IDS_PREFIX, myId), next);
+          return next;
+        });
+      }
+
+      setThreads((prev) => {
+        const next = prev.filter((t) => !threadIdEquals(t.id, cid));
+        return next.length === prev.length ? prev : next;
+      });
+    },
+    [dismissIncomingNotice, myId],
+  );
+
+  const applyServerThreadPatch = useCallback(
+    (serverThread, action = {}) => {
+      const actionName = action?.action ? String(action.action) : '';
+      const cid =
+        action?.chatId != null
+          ? String(action.chatId)
+          : serverThread && typeof serverThread === 'object' && serverThread.id != null
+            ? String(serverThread.id)
+            : '';
+      const removedIds = Array.isArray(action?.removedIds) ? action.removedIds.map(String) : [];
+      const iWasRemoved = !!(myId && removedIds.includes(String(myId)));
+
+      if (actionName === 'group_deleted' || iWasRemoved) {
+        if (cid) evictChatFromInbox(cid, { persistHide: true });
         return;
       }
+
+      if (!serverThread || typeof serverThread !== 'object') {
+        return;
+      }
+
       const mapped = mapServerThreads([serverThread]);
       if (!mapped.length) return;
       const row = mapped[0];
-      const cid = String(serverThread.id ?? row.id);
+      const threadId = String(serverThread.id ?? row.id);
       const members = Array.isArray(serverThread.memberIds) ? serverThread.memberIds.map(String) : [];
       const iAmMember = myId && members.includes(String(myId));
       const joinedViaAdd =
-        action?.action === 'member_added' &&
+        actionName === 'member_added' &&
         Array.isArray(action?.memberIds) &&
         action.memberIds.map(String).includes(String(myId));
 
+      if (!iAmMember) {
+        evictChatFromInbox(threadId, { persistHide: true });
+        return;
+      }
+
       setThreads((prev) => {
-        if (action?.action === 'group_deleted') return prev.filter((t) => !threadIdEquals(t.id, cid));
-        const idx = prev.findIndex((t) => threadIdEquals(t.id, cid));
-        if (idx >= 0 && !iAmMember) {
-          return prev.filter((t) => !threadIdEquals(t.id, cid));
-        }
+        const idx = prev.findIndex((t) => threadIdEquals(t.id, threadId));
         if (idx >= 0) {
           const old = prev[idx];
           const next = [...prev];
@@ -1086,7 +1162,6 @@ export function useGdcChatInbox({ token, user }) {
           };
           return sortThreadsByRecent(next);
         }
-        if (!iAmMember) return prev;
         return sortThreadsByRecent([
           {
             ...row,
@@ -1099,7 +1174,7 @@ export function useGdcChatInbox({ token, user }) {
         ]);
       });
     },
-    [mapServerThreads, myId],
+    [evictChatFromInbox, mapServerThreads, myId],
   );
 
   const createGroup = useCallback(
@@ -1215,27 +1290,23 @@ export function useGdcChatInbox({ token, user }) {
       if (!token || !chatId) throw new Error('Missing chat');
       const res = await leaveGroupChat(token, chatId);
       if (res && typeof res === 'object' && res.deleted) {
-        applyServerThreadPatch(null, { action: 'group_deleted', chatId });
+        evictChatFromInbox(chatId, { persistHide: true });
       } else if (res && typeof res === 'object') {
         applyServerThreadPatch(res, { action: 'member_removed', chatId, removedIds: [myId] });
       }
-      if (selectedChatIdRef.current === chatId) selectedChatIdRef.current = null;
-      setThreads((prev) => prev.filter((t) => !threadIdEquals(t.id, chatId)));
       refreshThreadsImmediate();
     },
-    [token, myId, applyServerThreadPatch, refreshThreadsImmediate],
+    [token, myId, applyServerThreadPatch, evictChatFromInbox, refreshThreadsImmediate],
   );
 
   const deleteGroup = useCallback(
     async (chatId) => {
       if (!token || !chatId) throw new Error('Missing chat');
       await deleteGroupChat(token, chatId);
-      applyServerThreadPatch(null, { action: 'group_deleted', chatId });
-      if (selectedChatIdRef.current === chatId) selectedChatIdRef.current = null;
-      setThreads((prev) => prev.filter((t) => !threadIdEquals(t.id, chatId)));
+      evictChatFromInbox(chatId, { persistHide: true });
       refreshThreadsImmediate();
     },
-    [token, applyServerThreadPatch, refreshThreadsImmediate],
+    [token, evictChatFromInbox, refreshThreadsImmediate],
   );
 
   const promoteGroupMemberAdmin = useCallback(
@@ -1261,6 +1332,10 @@ export function useGdcChatInbox({ token, user }) {
   useEffect(() => {
     applyServerThreadPatchRef.current = applyServerThreadPatch;
   }, [applyServerThreadPatch]);
+
+  useEffect(() => {
+    evictChatFromInboxRef.current = evictChatFromInbox;
+  }, [evictChatFromInbox]);
 
   const sendText = useCallback(
     async (chatId, text, options = {}) => {
@@ -1328,6 +1403,7 @@ export function useGdcChatInbox({ token, user }) {
             }),
           ),
         );
+        getGdcSocket()?.emit('sendMessage', { chatId: String(chatId), message: msg });
       } catch (e) {
         setThreads((prev) =>
           prev.map((t) =>
@@ -1393,7 +1469,7 @@ export function useGdcChatInbox({ token, user }) {
       const patchOptimistic = (patch) => {
         setThreads((prev) =>
           prev.map((t) => {
-            if (t.id !== chatId) return t;
+            if (!threadIdEquals(t.id, chatId)) return t;
             const msgs = Array.isArray(t.messages) ? t.messages : [];
             const nextMsgs = msgs.map((m) => (m.id === tempId ? { ...m, ...patch } : m));
             const preview = t.threadPreview?.id === tempId ? { ...t.threadPreview, ...patch } : t.threadPreview;
@@ -1404,7 +1480,7 @@ export function useGdcChatInbox({ token, user }) {
 
       setThreads((prev) =>
         prev.map((t) =>
-          t.id === chatId
+          threadIdEquals(t.id, chatId)
             ? {
                 ...t,
                 messages: mergeMessageList(Array.isArray(t.messages) ? t.messages : [], optimisticUi),
@@ -1463,7 +1539,7 @@ export function useGdcChatInbox({ token, user }) {
         const ui = finalizeOutgoingMessage(mapApiMessageToUi(msg, myId));
         setThreads((prev) =>
           prev.map((t) => {
-            if (t.id !== chatId) return t;
+            if (!threadIdEquals(t.id, chatId)) return t;
             const msgs = Array.isArray(t.messages) ? t.messages : [];
             const next = reconcileOutgoingMessage(msgs, tempId, ui);
             return { ...t, messages: next, threadPreview: ui };
@@ -1475,7 +1551,7 @@ export function useGdcChatInbox({ token, user }) {
         outboundAttachmentUploadRef.current.delete(String(chatId));
         setThreads((prev) =>
           prev.map((t) =>
-            t.id === chatId
+            threadIdEquals(t.id, chatId)
               ? {
                   ...t,
                   messages: (Array.isArray(t.messages) ? t.messages : []).map((m) =>
@@ -1668,18 +1744,31 @@ export function useGdcChatInbox({ token, user }) {
       const p = payload && typeof payload === 'object' ? payload : {};
       const chatId =
         p.chatId != null ? String(p.chatId) : p.thread?.id != null ? String(p.thread.id) : '';
+      const actionName = p.action != null ? String(p.action) : '';
+      const removedIds = Array.isArray(p.removedIds) ? p.removedIds.map(String) : [];
 
-      if (p.action === 'member_added' && Array.isArray(p.memberIds) && p.memberIds.length) {
+      if (actionName === 'group_deleted' && chatId) {
+        evictChatFromInboxRef.current?.(chatId, { persistHide: true });
+        return;
+      }
+
+      if (
+        actionName === 'member_removed' &&
+        chatId &&
+        myId &&
+        removedIds.includes(String(myId))
+      ) {
+        evictChatFromInboxRef.current?.(chatId, { persistHide: true });
+        return;
+      }
+
+      if (actionName === 'member_added' && Array.isArray(p.memberIds) && p.memberIds.length) {
         void hydrateChatParticipantsRef.current?.(p.memberIds);
       }
 
       if (p.thread && typeof p.thread === 'object') {
         applyServerThreadPatchRef.current?.(p.thread, p);
         if (chatId) patchThreadDisplayFromDirectoryRef.current?.(chatId);
-        return;
-      }
-      if (p.action === 'group_deleted' && chatId) {
-        applyServerThreadPatchRef.current?.(null, p);
         return;
       }
       if (chatId) {
@@ -1693,13 +1782,24 @@ export function useGdcChatInbox({ token, user }) {
       onThreadUpdated(payload);
     };
 
+    const scheduleOpenChatMessageReload = (chatId) => {
+      if (!threadIdEquals(selectedChatIdRef.current, chatId)) return;
+      if (openChatReloadTimerRef.current) clearTimeout(openChatReloadTimerRef.current);
+      openChatReloadTimerRef.current = setTimeout(() => {
+        openChatReloadTimerRef.current = null;
+        if (threadIdEquals(selectedChatIdRef.current, chatId)) {
+          void loadMessagesForChat(chatId);
+        }
+      }, 150);
+    };
+
     /** Fallback when relay sends `chat.message` without full `receiveMessage` payload. */
     const onChatMessageSignal = (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
       const chatId = p.chatId != null ? String(p.chatId) : '';
       if (!chatId) return;
       if (threadIdEquals(selectedChatIdRef.current, chatId)) {
-        void loadMessagesForChat(chatId);
+        scheduleOpenChatMessageReload(chatId);
         return;
       }
       scheduleSilentThreadRefreshRef.current?.();
@@ -1799,6 +1899,10 @@ export function useGdcChatInbox({ token, user }) {
     s.on('connect', onSocketConnect);
     s.on('reconnect', onSocketConnect);
     return () => {
+      if (openChatReloadTimerRef.current) {
+        clearTimeout(openChatReloadTimerRef.current);
+        openChatReloadTimerRef.current = null;
+      }
       s.off('connect', onSocketConnect);
       s.off('reconnect', onSocketConnect);
       s.off('receiveMessage', onReceive);

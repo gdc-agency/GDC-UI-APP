@@ -125,10 +125,6 @@ function RolePanel({
           <StatCard label="Active Now" value="—" icon="pulse" color="#16a34a" />
           <StatCard label="Pending Leave" value="0" icon="calendar-clock-outline" color="#f59e0b" onPress={onOpenPendingLeave} />
           <StatCard label="Pending Tasks" value={p} icon="bullseye-arrow" color="#6366f1" onPress={() => onOpenProjectStatus?.('pending')} />
-          <StatCard label="In Progress" value={ip} icon="chart-box-outline" color="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
-          <StatCard label="Review" value={rv} icon="timer-outline" color="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
-          <StatCard label="Submitted" value={sb} icon="arrow-top-right" color="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
-          <StatCard label="Approved" value={ap} icon="check-decagram" color="#10b981" onPress={() => onOpenProjectStatus?.('approved')} />
           <StatCard label="Overdue" value={od} icon="alert-circle-outline" color="#dc2626" onPress={() => onOpenProjectStatus?.('overdue')} />
           <StatCard label="Pending Approval" value={pend} icon="shield-check-outline" color="#9333ea" onPress={onOpenPendingApprovals} />
         </View>

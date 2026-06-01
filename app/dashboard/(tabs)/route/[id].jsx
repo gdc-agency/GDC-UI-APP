@@ -11,14 +11,6 @@ import { AdminSection } from '@/components/dashboard/route-modules/admin-section
 import { DailyUpdatesSection } from '@/components/dashboard/route-modules/daily-updates-section';
 import { ProjectManagerSection } from '@/components/dashboard/route-modules/project-manager-section';
 import { RequestsSection } from '@/components/dashboard/route-modules/requests-section';
-import {
-  AVAILABILITY_USERS,
-  LEAVE_REQUESTS,
-  MANUAL_TIME_REQUESTS,
-  MY_AVAILABILITY_LOG,
-  TIMESHEET_LOGS,
-  TIMESHEET_USERS,
-} from '@/components/dashboard/route-modules/route-detail-mock-data';
 import routeDetailStyles from '@/components/dashboard/route-modules/route-detail-styles';
 import { TeamsManagementSection } from '@/components/dashboard/route-modules/teams-management-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
@@ -50,7 +42,45 @@ import {
   upsertHrDailySummary,
   upsertMyEmployeeDailyUpdate,
   upsertTeamLeaderDailySummary,
+  approveLeaveRequest as approveLeaveRequestApi,
+  approveManualTimeRequest as approveManualTimeRequestApi,
+  createLeaveRequest as createLeaveRequestApi,
+  createManualTimeRequest as createManualTimeRequestApi,
+  getAttendance30Days,
+  getAttendance7Days,
+  getAttendanceSummary,
+  getClockHistory,
+  getClockRecords,
+  getCurrentShift,
+  getManualTimesheetRecords,
+  listLeaveRequests,
+  listManualTimeRequests,
+  rejectLeaveRequest as rejectLeaveRequestApi,
+  rejectManualTimeRequest as rejectManualTimeRequestApi,
+  saveShiftTiming,
 } from '@/services/api';
+import {
+  apiLeaveTypeFromUi,
+  apiRoleFromDisplayFilter,
+  apiTimeFromAmPm,
+  buildAttendanceRows,
+  displayRoleFromApi,
+  filterAttendanceOverviewUsers,
+  isExcludedAttendanceOverviewRole,
+  mapClockHistoryToAvailabilityLog,
+  mapClockHistoryToLog,
+  mapLeaveRowToUi,
+  mapManualRowToUi,
+  mapRecordRowToTimesheetLog,
+  mapSevenDayUserRow,
+  mapSummaryUserToAvailability,
+  mapThirtyDayUserRow,
+  mapTodaySummaryUserRow,
+  enrichTimesheetUserAvatars,
+  amPmFromApiTime,
+  timeLabelFromTimestamp,
+} from '@/utils/attendance-ui-map';
+import { resolveProfileImageUri } from '@/utils/chat-directory';
 import {
   isApprovedRow,
   isVerifiedRow,
@@ -65,6 +95,16 @@ import { normalizeTeamsList } from '@/utils/teams-api-response';
 
 /** Background refresh while Task / Daily Updates routes are open (same cadence as dashboard home). */
 const DATA_POLL_INTERVAL_MS = 45_000;
+
+const ATTENDANCE_ROUTE_SLUGS = new Set([
+  'timesheet',
+  'clock-records',
+  'manual-records',
+  'availability',
+  'my-requests',
+  'request-management',
+  'admin',
+]);
 
 // --- Mock-data helpers (temporary until backend integration) ---
 
@@ -157,16 +197,24 @@ export default function RouteDetailScreen() {
   const [recordSearch, setRecordSearch] = useState('');
   const [recordFromDate, setRecordFromDate] = useState('');
   const [recordToDate, setRecordToDate] = useState('');
+  const [recordDepartmentFilter, setRecordDepartmentFilter] = useState('all');
+  const [recordStatusFilter, setRecordStatusFilter] = useState('all');
   const [requestStatusMenuOpen, setRequestStatusMenuOpen] = useState(false);
-  const [availabilityUsers, setAvailabilityUsers] = useState(AVAILABILITY_USERS);
+  const [timesheetUsers, setTimesheetUsers] = useState([]);
+  const [timesheetLogs, setTimesheetLogs] = useState([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState(null);
+  const [myAvailabilityLog, setMyAvailabilityLog] = useState([]);
+  const [availabilityUsers, setAvailabilityUsers] = useState([]);
   const [availabilityRoleFilter, setAvailabilityRoleFilter] = useState('all');
   const [availabilityStatusFilter, setAvailabilityStatusFilter] = useState('all');
+  const [availabilityQuickFilter, setAvailabilityQuickFilter] = useState('all');
   const [availabilitySearch, setAvailabilitySearch] = useState('');
   const [hoveredAvailabilityStatus, setHoveredAvailabilityStatus] = useState(null);
   const [availabilityFromDate, setAvailabilityFromDate] = useState('2026-05-01');
   const [availabilityToDate, setAvailabilityToDate] = useState('2026-05-31');
-  const [leaveRequests, setLeaveRequests] = useState(LEAVE_REQUESTS);
-  const [manualRequests, setManualRequests] = useState(MANUAL_TIME_REQUESTS);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [manualRequests, setManualRequests] = useState([]);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [leaveType, setLeaveType] = useState('Leave');
@@ -625,8 +673,8 @@ export default function RouteDetailScreen() {
     isReviewerUser &&
     canReviewerActOnTlCreatedTask;
   const employeeNameByGdcId = useMemo(
-    () => Object.fromEntries(TIMESHEET_USERS.map((entry) => [entry.gdcId, entry.name])),
-    []
+    () => Object.fromEntries(timesheetUsers.map((entry) => [entry.gdcId, entry.name])),
+    [timesheetUsers],
   );
   const teamsManagementGroups = useMemo(
     () => buildTeamsManagementGroups(teamRosterTeams, teamRosterUsers),
@@ -654,60 +702,318 @@ export default function RouteDetailScreen() {
     return days;
   }, [timesheetWindow]);
 
+  const loadAttendanceScreen = useCallback(async () => {
+    if (!token || !ATTENDANCE_ROUTE_SLUGS.has(slug)) return;
+    setAttendanceLoading(true);
+    setAttendanceError(null);
+    try {
+      const roleQ = apiRoleFromDisplayFilter(timesheetRoleFilter);
+      const searchQ =
+        slug === 'clock-records' || slug === 'manual-records'
+          ? recordSearch.trim()
+          : timesheetSearch.trim();
+      const rangeFrom = recordFromDate || timesheetDays[0] || '';
+      const rangeTo = recordToDate || timesheetDays[timesheetDays.length - 1] || '';
+
+      if (slug === 'request-management' || slug === 'my-requests') {
+        const [leaves, manuals] = await Promise.all([listLeaveRequests(token), listManualTimeRequests(token)]);
+        setLeaveRequests(leaves.map((row) => mapLeaveRowToUi(row)));
+        setManualRequests(manuals.map((row) => mapManualRowToUi(row)));
+        return;
+      }
+
+      if (slug === 'availability') {
+        const summary = await getAttendanceSummary(token, {
+          role: apiRoleFromDisplayFilter(availabilityRoleFilter),
+        });
+        let availUsers = filterAttendanceOverviewUsers(
+          summary.users
+            .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+            .map((row) => mapSummaryUserToAvailability(row)),
+        );
+        if (availUsers.some((u) => !u.avatarUrl)) {
+          try {
+            const authRes = await getAllUsers(token, { approvedOnly: true });
+            availUsers = enrichTimesheetUserAvatars(availUsers, normalizeApprovedUsersList(authRes));
+          } catch {
+            /* attendance profile_image only */
+          }
+        }
+        setAvailabilityUsers(availUsers);
+        const history = await getClockHistory(token);
+        setMyAvailabilityLog(history.map((row) => mapClockHistoryToAvailabilityLog(row)));
+        return;
+      }
+
+      if (slug === 'admin') {
+        const shift = await getCurrentShift(token);
+        if (shift && typeof shift === 'object') {
+          const s = /** @type {{ effective_date?: string; shift_start?: string; shift_end?: string }} */ (shift);
+          if (s.effective_date) setShiftDate(String(s.effective_date).slice(0, 10));
+          if (s.shift_start) setShiftStart(amPmFromApiTime(s.shift_start));
+          if (s.shift_end) setShiftEnd(amPmFromApiTime(s.shift_end));
+        }
+        return;
+      }
+
+      if (slug === 'clock-records' || slug === 'manual-records') {
+        const recordRole =
+          recordProviderFilter !== 'all' ? apiRoleFromDisplayFilter(recordProviderFilter) : roleQ;
+        const query = {
+          from: rangeFrom,
+          to: rangeTo,
+          ...(recordRole !== 'ALL' ? { role: recordRole } : {}),
+          ...(searchQ ? { gdc_id: searchQ } : {}),
+          ...(recordDepartmentFilter !== 'all' ? { department: recordDepartmentFilter } : {}),
+          ...(slug === 'manual-records' && recordStatusFilter !== 'all'
+            ? { status: recordStatusFilter }
+            : {}),
+        };
+        const source = slug === 'manual-records' ? 'manual' : 'clock';
+        const rows =
+          source === 'manual'
+            ? await getManualTimesheetRecords(token, query)
+            : await getClockRecords(token, query);
+        const logs = rows
+          .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+          .map((row) => mapRecordRowToTimesheetLog(row, source));
+        const usersByGdc = new Map();
+        for (const log of logs) {
+          if (!usersByGdc.has(log.gdcId)) {
+            usersByGdc.set(log.gdcId, {
+              gdcId: log.gdcId,
+              name: log.userName || log.gdcId,
+              role: log.userRole || 'Employee',
+              team: log.team || log.department || '—',
+              avatarUrl: log.avatarUrl || null,
+            });
+          }
+        }
+        setTimesheetUsers(filterAttendanceOverviewUsers([...usersByGdc.values()]));
+        setTimesheetLogs(logs);
+        return;
+      }
+
+      if (slug === 'timesheet') {
+        if (timesheetWindow === '30d') {
+          const data = await getAttendance30Days(token, {
+            role: roleQ,
+            ...(searchQ ? { search: searchQ } : {}),
+          });
+          setTimesheetUsers(
+            filterAttendanceOverviewUsers(
+              data.users
+                .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+                .map((row) => mapThirtyDayUserRow(row)),
+            ),
+          );
+          setTimesheetLogs([]);
+        } else if (timesheetWindow === '7d') {
+          const rows = await getAttendance7Days(token, {
+            role: roleQ,
+            ...(searchQ ? { search: searchQ } : {}),
+          });
+          setTimesheetUsers(
+            filterAttendanceOverviewUsers(
+              rows
+                .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+                .map((row) => mapSevenDayUserRow(row)),
+            ),
+          );
+          setTimesheetLogs([]);
+        } else {
+          const summary = await getAttendanceSummary(token, { role: roleQ });
+          const today = timesheetDays[0] || '';
+          let todayUsers = filterAttendanceOverviewUsers(
+            summary.users
+              .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+              .map((row) => mapTodaySummaryUserRow(row, today)),
+          );
+          if (todayUsers.some((u) => !u.avatarUrl)) {
+            try {
+              const authRes = await getAllUsers(token, { approvedOnly: true });
+              todayUsers = enrichTimesheetUserAvatars(todayUsers, normalizeApprovedUsersList(authRes));
+            } catch {
+              /* use attendance profile_image only */
+            }
+          }
+          setTimesheetUsers(todayUsers);
+          setTimesheetLogs([]);
+        }
+
+        if (user?.role === 'Employee' || user?.role === 'Team Leader') {
+          const history = await getClockHistory(token);
+          setTimesheetLogs(history.map((row) => mapClockHistoryToLog(row)));
+        } else if (timesheetWindow === 'today' && user?.role === 'Team Leader') {
+          const rows = await getClockRecords(token, { from: rangeFrom, to: rangeTo });
+          setTimesheetLogs(rows.map((row) => mapRecordRowToTimesheetLog(row, 'clock')));
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load attendance data';
+      setAttendanceError(msg);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [
+    token,
+    slug,
+    timesheetWindow,
+    timesheetRoleFilter,
+    timesheetSearch,
+    recordSearch,
+    timesheetDays,
+    recordFromDate,
+    recordToDate,
+    recordProviderFilter,
+    recordDepartmentFilter,
+    recordStatusFilter,
+    availabilityRoleFilter,
+    user?.role,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!ATTENDANCE_ROUTE_SLUGS.has(slug) || !token) return undefined;
+      void loadAttendanceScreen();
+      const timer = setInterval(() => {
+        void loadAttendanceScreen();
+      }, DATA_POLL_INTERVAL_MS);
+      return () => clearInterval(timer);
+    }, [slug, token, loadAttendanceScreen]),
+  );
+
+  useEffect(() => {
+    if (!ATTENDANCE_ROUTE_SLUGS.has(slug) || !token) return;
+    void loadAttendanceScreen();
+  }, [
+    slug,
+    token,
+    timesheetWindow,
+    timesheetRoleFilter,
+    recordFromDate,
+    recordToDate,
+    recordProviderFilter,
+    recordDepartmentFilter,
+    recordStatusFilter,
+    recordSearch,
+    availabilityRoleFilter,
+    loadAttendanceScreen,
+  ]);
+
   const filteredTimesheetUsers = useMemo(() => {
     const q = timesheetSearch.trim().toLowerCase();
-    return TIMESHEET_USERS.filter((u) => {
+    return filterAttendanceOverviewUsers(timesheetUsers).filter((u) => {
       if (timesheetRoleFilter !== 'all' && u.role !== timesheetRoleFilter) return false;
       if (!q) return true;
       return `${u.name} ${u.gdcId} ${u.team} ${u.role}`.toLowerCase().includes(q);
     });
-  }, [timesheetRoleFilter, timesheetSearch]);
+  }, [timesheetRoleFilter, timesheetSearch, timesheetUsers]);
 
   const attendanceRows = useMemo(() => {
-    return filteredTimesheetUsers.map((u) => {
-      const cells = timesheetDays.map((day) => {
-        const log = TIMESHEET_LOGS.find((l) => l.gdcId === u.gdcId && l.date === day);
-        return log ? log.status : 'A';
-      });
-      const counts = cells.reduce(
-        (acc, st) => {
-          if (st === 'P') acc.present += 1;
-          else if (st === 'L') acc.late += 1;
-          else acc.absent += 1;
-          return acc;
-        },
-        { present: 0, late: 0, absent: 0 }
-      );
-      return { ...u, cells, counts };
-    });
-  }, [filteredTimesheetUsers, timesheetDays]);
+    if (timesheetWindow === '30d') {
+      return filteredTimesheetUsers.map((u) => ({
+        ...u,
+        cells: [],
+        counts: u.counts || { present: 0, late: 0, absent: 0 },
+      }));
+    }
+    return buildAttendanceRows(filteredTimesheetUsers, timesheetDays, timesheetLogs);
+  }, [filteredTimesheetUsers, timesheetDays, timesheetLogs, timesheetWindow]);
 
   const recordRouteTab = slug === 'clock-records' ? 'clock' : slug === 'manual-records' ? 'manual' : 'clock';
   const providerOptions = ['all', 'Employee', 'HR', 'Team Leader'];
   const providerFilterOptions = user?.role === 'HR' ? ['all', 'Employee', 'Team Leader'] : providerOptions;
 
+  const recordDepartmentOptions = useMemo(() => {
+    const depts = new Set();
+    timesheetUsers.forEach((u) => {
+      const t = String(u.team || '').trim();
+      if (t && t !== '—') depts.add(t);
+    });
+    timesheetLogs.forEach((l) => {
+      const t = String(l.department || l.team || '').trim();
+      if (t && t !== '—') depts.add(t);
+    });
+    return ['all', ...Array.from(depts).sort((a, b) => a.localeCompare(b))];
+  }, [timesheetLogs, timesheetUsers]);
+
+  const recordExportQuery = useMemo(() => {
+    const recordRole =
+      recordProviderFilter !== 'all' ? apiRoleFromDisplayFilter(recordProviderFilter) : undefined;
+    const q = recordSearch.trim();
+    return {
+      ...(recordFromDate ? { from: recordFromDate } : {}),
+      ...(recordToDate ? { to: recordToDate } : {}),
+      ...(recordRole && recordRole !== 'ALL' ? { role: recordRole } : {}),
+      ...(q ? { gdc_id: q } : {}),
+      ...(recordDepartmentFilter !== 'all' ? { department: recordDepartmentFilter } : {}),
+      ...(slug === 'manual-records' && recordStatusFilter !== 'all'
+        ? { status: recordStatusFilter }
+        : {}),
+    };
+  }, [
+    recordDepartmentFilter,
+    recordFromDate,
+    recordProviderFilter,
+    recordSearch,
+    recordStatusFilter,
+    recordToDate,
+    slug,
+  ]);
+
   const filteredRecords = useMemo(() => {
-    const usersById = new Map(TIMESHEET_USERS.map((u) => [u.gdcId, u]));
-    return TIMESHEET_LOGS.filter((rec) => {
-      if (recordRouteTab !== rec.source) return false;
-      const u = usersById.get(rec.gdcId);
-      if (!u) return false;
-      if (recordProviderFilter !== 'all' && u.role !== recordProviderFilter) return false;
-      if (recordFromDate && rec.date < recordFromDate) return false;
-      if (recordToDate && rec.date > recordToDate) return false;
-      const q = recordSearch.trim().toLowerCase();
-      if (!q) return true;
-      return `${u.name} ${u.gdcId} ${u.team} ${rec.id}`.toLowerCase().includes(q);
-    }).map((rec) => ({ ...rec, user: usersById.get(rec.gdcId) }));
-  }, [recordFromDate, recordProviderFilter, recordRouteTab, recordSearch, recordToDate]);
+    const usersById = new Map(timesheetUsers.map((u) => [u.gdcId, u]));
+    return timesheetLogs
+      .filter((rec) => {
+        if (recordRouteTab !== rec.source) return false;
+        const u = usersById.get(rec.gdcId);
+        if (!u) return false;
+        if (recordProviderFilter !== 'all' && u.role !== recordProviderFilter) return false;
+        const dept = String(u.team || rec.department || '').trim();
+        if (recordDepartmentFilter !== 'all' && dept !== recordDepartmentFilter) return false;
+        if (recordFromDate && rec.date < recordFromDate) return false;
+        if (recordToDate && rec.date > recordToDate) return false;
+        const q = recordSearch.trim().toLowerCase();
+        if (!q) return true;
+        return `${u.name} ${u.gdcId} ${dept} ${rec.id}`.toLowerCase().includes(q);
+      })
+      .map((rec) => ({ ...rec, user: usersById.get(rec.gdcId) }));
+  }, [
+    recordDepartmentFilter,
+    recordFromDate,
+    recordProviderFilter,
+    recordRouteTab,
+    recordSearch,
+    recordToDate,
+    timesheetLogs,
+    timesheetUsers,
+  ]);
   const employeeProfile = useMemo(() => {
     if (user?.role !== 'Employee') return null;
-    return TIMESHEET_USERS.find((u) => u.role === 'Employee' && u.name === user.name) || TIMESHEET_USERS.find((u) => u.role === 'Employee') || null;
-  }, [user?.name, user?.role]);
+    const authAvatar = resolveProfileImageUri(user?.avatar);
+    const gid = user?.gdc_id ? String(user.gdc_id) : '';
+    if (gid) {
+      const match = timesheetUsers.find((u) => u.gdcId === gid);
+      if (match) return { ...match, avatarUrl: match.avatarUrl || authAvatar };
+    }
+    const fallback =
+      timesheetUsers.find((u) => u.role === 'Employee' && u.name === user.name) ||
+      timesheetUsers.find((u) => u.role === 'Employee') || {
+        gdcId: gid || 'me',
+        name: user?.name || 'Employee',
+        role: 'Employee',
+        team: user?.team_name || '—',
+        avatarUrl: authAvatar,
+      };
+    return fallback.avatarUrl ? fallback : { ...fallback, avatarUrl: authAvatar };
+  }, [timesheetUsers, user?.avatar, user?.gdc_id, user?.name, user?.role, user?.team_name]);
   const employeeAttendanceLogs = useMemo(() => {
     if (!employeeProfile) return [];
-    return TIMESHEET_LOGS.filter((log) => log.gdcId === employeeProfile.gdcId && timesheetDays.includes(log.date)).sort((a, b) => b.date.localeCompare(a.date));
-  }, [employeeProfile, timesheetDays]);
+    return timesheetLogs
+      .filter((log) => log.gdcId === employeeProfile.gdcId && timesheetDays.includes(log.date))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [employeeProfile, timesheetDays, timesheetLogs]);
   const employeeAttendanceSummary = useMemo(() => {
     const totalHours = employeeAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
     const overtime = employeeAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
@@ -716,34 +1022,39 @@ export default function RouteDetailScreen() {
   }, [employeeAttendanceLogs]);
   const employeeAttendanceEntry = useMemo(() => {
     if (!employeeProfile) return null;
-    const cells = timesheetDays.map((day) => {
-      const log = TIMESHEET_LOGS.find((l) => l.gdcId === employeeProfile.gdcId && l.date === day);
-      return log ? log.status : 'A';
-    });
-    const counts = cells.reduce(
-      (acc, st) => {
-        if (st === 'P') acc.present += 1;
-        else if (st === 'L') acc.late += 1;
-        else acc.absent += 1;
-        return acc;
-      },
-      { present: 0, late: 0, absent: 0 }
-    );
-    return { ...employeeProfile, cells, counts };
-  }, [employeeProfile, timesheetDays]);
+    const rows = buildAttendanceRows([employeeProfile], timesheetDays, timesheetLogs);
+    return rows[0] || null;
+  }, [employeeProfile, timesheetDays, timesheetLogs]);
   const tlProfile = useMemo(() => {
     if (user?.role !== 'Team Leader') return null;
-    return TIMESHEET_USERS.find((u) => u.role === 'Team Leader' && u.name === user.name) || TIMESHEET_USERS.find((u) => u.role === 'Team Leader') || null;
-  }, [user?.name, user?.role]);
+    const authAvatar = resolveProfileImageUri(user?.avatar);
+    const gid = user?.gdc_id ? String(user.gdc_id) : '';
+    if (gid) {
+      const match = timesheetUsers.find((u) => u.gdcId === gid);
+      if (match) return { ...match, avatarUrl: match.avatarUrl || authAvatar };
+    }
+    const fallback =
+      timesheetUsers.find((u) => u.role === 'Team Leader' && u.name === user.name) ||
+      timesheetUsers.find((u) => u.role === 'Team Leader') || {
+        gdcId: gid || 'me',
+        name: user?.name || 'Team Leader',
+        role: 'Team Leader',
+        team: user?.team_name || '—',
+        avatarUrl: authAvatar,
+      };
+    return fallback.avatarUrl ? fallback : { ...fallback, avatarUrl: authAvatar };
+  }, [timesheetUsers, user?.avatar, user?.gdc_id, user?.name, user?.role, user?.team_name]);
   const tlTeamMembers = useMemo(() => {
     if (!tlProfile) return [];
-    return TIMESHEET_USERS.filter((u) => u.team === tlProfile.team && u.role !== 'Team Leader');
-  }, [tlProfile]);
+    return timesheetUsers.filter((u) => u.team === tlProfile.team && u.role !== 'Team Leader');
+  }, [tlProfile, timesheetUsers]);
   const tlTeamMemberIds = useMemo(() => new Set(tlTeamMembers.map((m) => m.gdcId)), [tlTeamMembers]);
   const tlMyAttendanceLogs = useMemo(() => {
     if (!tlProfile) return [];
-    return TIMESHEET_LOGS.filter((log) => log.gdcId === tlProfile.gdcId && timesheetDays.includes(log.date)).sort((a, b) => b.date.localeCompare(a.date));
-  }, [timesheetDays, tlProfile]);
+    return timesheetLogs
+      .filter((log) => log.gdcId === tlProfile.gdcId && timesheetDays.includes(log.date))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [timesheetDays, tlProfile, timesheetLogs]);
   const tlMyAttendanceSummary = useMemo(() => {
     const totalHours = tlMyAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
     const overtime = tlMyAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
@@ -752,21 +1063,9 @@ export default function RouteDetailScreen() {
   }, [tlMyAttendanceLogs]);
   const tlMyAttendanceEntry = useMemo(() => {
     if (!tlProfile) return null;
-    const cells = timesheetDays.map((day) => {
-      const log = TIMESHEET_LOGS.find((l) => l.gdcId === tlProfile.gdcId && l.date === day);
-      return log ? log.status : 'A';
-    });
-    const counts = cells.reduce(
-      (acc, st) => {
-        if (st === 'P') acc.present += 1;
-        else if (st === 'L') acc.late += 1;
-        else acc.absent += 1;
-        return acc;
-      },
-      { present: 0, late: 0, absent: 0 }
-    );
-    return { ...tlProfile, cells, counts };
-  }, [timesheetDays, tlProfile]);
+    const rows = buildAttendanceRows([tlProfile], timesheetDays, timesheetLogs);
+    return rows[0] || null;
+  }, [timesheetDays, tlProfile, timesheetLogs]);
   const tlTeamOverviewRows = useMemo(() => {
     const q = tlTeamSearch.trim().toLowerCase();
     return attendanceRows
@@ -775,8 +1074,9 @@ export default function RouteDetailScreen() {
   }, [attendanceRows, tlTeamMemberIds, tlTeamSearch]);
   const tlTeamRecordRows = useMemo(() => {
     const q = tlRecordSearch.trim().toLowerCase();
-    const usersById = new Map(TIMESHEET_USERS.map((u) => [u.gdcId, u]));
-    return TIMESHEET_LOGS.filter((log) => tlTeamMemberIds.has(log.gdcId) && timesheetDays.includes(log.date))
+    const usersById = new Map(timesheetUsers.map((u) => [u.gdcId, u]));
+    return timesheetLogs
+      .filter((log) => tlTeamMemberIds.has(log.gdcId) && timesheetDays.includes(log.date))
       .filter((log) => {
         if (!q) return true;
         const u = usersById.get(log.gdcId);
@@ -784,17 +1084,26 @@ export default function RouteDetailScreen() {
       })
       .map((log) => ({ ...log, user: usersById.get(log.gdcId) }))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [timesheetDays, tlRecordSearch, tlTeamMemberIds]);
+  }, [timesheetDays, tlRecordSearch, tlTeamMemberIds, timesheetLogs, timesheetUsers]);
 
   const filteredAvailabilityUsers = useMemo(() => {
     const q = availabilitySearch.trim().toLowerCase();
     return availabilityUsers.filter((u) => {
       if (availabilityRoleFilter !== 'all' && u.role !== availabilityRoleFilter) return false;
       if (availabilityStatusFilter !== 'all' && u.status !== availabilityStatusFilter) return false;
+      if (availabilityQuickFilter === 'present' && u.status !== 'Available') return false;
+      if (availabilityQuickFilter === 'absent' && u.status !== 'Unavailable') return false;
+      if (availabilityQuickFilter === 'leave' && u.status !== 'Leave') return false;
       if (!q) return true;
       return `${u.name} ${u.gdcId} ${u.team} ${u.role} ${u.status}`.toLowerCase().includes(q);
     });
-  }, [availabilityRoleFilter, availabilitySearch, availabilityStatusFilter, availabilityUsers]);
+  }, [
+    availabilityQuickFilter,
+    availabilityRoleFilter,
+    availabilitySearch,
+    availabilityStatusFilter,
+    availabilityUsers,
+  ]);
 
   const availabilitySummary = useMemo(() => {
     const present = filteredAvailabilityUsers.filter((u) => u.status === 'Available').length;
@@ -804,13 +1113,14 @@ export default function RouteDetailScreen() {
   }, [filteredAvailabilityUsers]);
 
   const filteredMyAvailabilityLog = useMemo(
-    () => MY_AVAILABILITY_LOG.filter((r) => r.date >= availabilityFromDate && r.date <= availabilityToDate),
-    [availabilityFromDate, availabilityToDate]
+    () => myAvailabilityLog.filter((r) => r.date >= availabilityFromDate && r.date <= availabilityToDate),
+    [availabilityFromDate, availabilityToDate, myAvailabilityLog],
   );
 
   const myLeaveRequests = useMemo(() => {
     if (!user) return [];
-    return leaveRequests.filter((r) => r.role === user.role);
+    if (user.role === 'Employee' || user.role === 'Team Leader') return leaveRequests;
+    return leaveRequests.filter((r) => r.employee === user.name);
   }, [leaveRequests, user]);
 
   const filteredAdminLeaveRequests = useMemo(() => {
@@ -825,7 +1135,8 @@ export default function RouteDetailScreen() {
 
   const myManualRequests = useMemo(() => {
     if (!user) return [];
-    return manualRequests.filter((r) => r.role === user.role);
+    if (user.role === 'Employee' || user.role === 'Team Leader') return manualRequests;
+    return manualRequests.filter((r) => r.employee === user.name);
   }, [manualRequests, user]);
 
   const filteredMyManualRequests = useMemo(() => {
@@ -843,63 +1154,77 @@ export default function RouteDetailScreen() {
     });
   }, [adminRoleFilter, adminUserSearch, adminUsers]);
 
-  const submitLeaveRequest = () => {
-    if (!leaveFromDate || !leaveToDate) return;
-    setLeaveRequests((prev) => [
-      {
-        id: `LR-${String(prev.length + 1).padStart(3, '0')}`,
-        employee: user?.name || 'Employee',
-        role: user?.role || 'Employee',
-        type: leaveType,
-        from: leaveFromDate,
-        to: leaveToDate,
-        reason: leaveReason || 'No reason',
-        status: 'Pending',
-      },
-      ...prev,
-    ]);
-    setLeaveModalOpen(false);
-    setLeaveType('Leave');
-    setLeaveFromDate('');
-    setLeaveToDate('');
-    setLeaveReason('');
-    setLeaveTypeDropdownOpen(false);
+  const submitLeaveRequest = async () => {
+    if (!token || !leaveFromDate || !leaveToDate) return;
+    try {
+      await createLeaveRequestApi(token, {
+        leave_type: apiLeaveTypeFromUi(leaveType),
+        start_date: leaveFromDate,
+        end_date: leaveToDate,
+        reason: leaveReason || undefined,
+      });
+      await loadAttendanceScreen();
+      setLeaveModalOpen(false);
+      setLeaveType('Leave');
+      setLeaveFromDate('');
+      setLeaveToDate('');
+      setLeaveReason('');
+      setLeaveTypeDropdownOpen(false);
+      Alert.alert('Submitted', 'Leave request sent for approval.');
+    } catch (err) {
+      Alert.alert('Leave request failed', err instanceof Error ? err.message : 'Could not submit leave');
+    }
   };
 
-  const submitManualRequest = () => {
-    if (!manualDate || !manualClockIn || !manualClockOut) return;
-    setManualRequests((prev) => [
-      {
-        id: `MR-${String(prev.length + 1).padStart(3, '0')}`,
-        employee: user?.name || 'Employee',
-        role: user?.role || 'Employee',
+  const submitManualRequest = async () => {
+    if (!token || !manualDate || !manualClockIn || !manualClockOut) return;
+    try {
+      await createManualTimeRequestApi(token, {
         date: manualDate,
-        clockIn: manualClockIn,
-        clockOut: manualClockOut,
-        breakOut: manualBreakOut,
-        reason: manualReason || 'No reason',
-        status: 'Pending',
-      },
-      ...prev,
-    ]);
-    setManualModalOpen(false);
-    setManualDate('');
-    setManualClockIn('');
-    setManualClockOut('');
-    setManualBreakOut('');
-    setManualReason('');
+        check_in: apiTimeFromAmPm(manualClockIn),
+        check_out: apiTimeFromAmPm(manualClockOut),
+        break_out: manualBreakOut ? apiTimeFromAmPm(manualBreakOut) : undefined,
+        reason: manualReason || undefined,
+      });
+      await loadAttendanceScreen();
+      setManualModalOpen(false);
+      setManualDate('');
+      setManualClockIn('');
+      setManualClockOut('');
+      setManualBreakOut('');
+      setManualReason('');
+      Alert.alert('Submitted', 'Manual time request sent for approval.');
+    } catch (err) {
+      Alert.alert('Manual request failed', err instanceof Error ? err.message : 'Could not submit request');
+    }
   };
 
-  const updateLeaveStatus = (id, status, adminReason = '') => {
-    setLeaveRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status, adminReason: adminReason || r.adminReason || '' } : r))
-    );
+  const updateLeaveStatus = async (id, status, adminReason = '') => {
+    if (!token) return;
+    try {
+      if (status === 'Approved') {
+        await approveLeaveRequestApi(token, id);
+      } else if (status === 'Rejected') {
+        await rejectLeaveRequestApi(token, id, { rejection_reason: adminReason || 'Rejected' });
+      }
+      await loadAttendanceScreen();
+    } catch (err) {
+      Alert.alert('Leave update failed', err instanceof Error ? err.message : 'Could not update leave');
+    }
   };
 
-  const updateManualStatus = (id, status, adminReason = '') => {
-    setManualRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status, adminReason: adminReason || r.adminReason || '' } : r))
-    );
+  const updateManualStatus = async (id, status, adminReason = '') => {
+    if (!token) return;
+    try {
+      if (status === 'Approved') {
+        await approveManualTimeRequestApi(token, id);
+      } else if (status === 'Rejected') {
+        await rejectManualTimeRequestApi(token, id, { rejection_reason: adminReason || 'Rejected' });
+      }
+      await loadAttendanceScreen();
+    } catch (err) {
+      Alert.alert('Manual update failed', err instanceof Error ? err.message : 'Could not update request');
+    }
   };
 
   const openRejectModal = (id, type = 'leave') => {
@@ -913,14 +1238,28 @@ export default function RouteDetailScreen() {
     const reason = rejectReason.trim();
     if (!rejectTargetId || !reason) return;
     if (rejectTargetType === 'manual') {
-      updateManualStatus(rejectTargetId, 'Rejected', reason);
+      void updateManualStatus(rejectTargetId, 'Rejected', reason);
     } else {
-      updateLeaveStatus(rejectTargetId, 'Rejected', reason);
+      void updateLeaveStatus(rejectTargetId, 'Rejected', reason);
     }
     setRejectModalOpen(false);
     setRejectTargetId(null);
     setRejectTargetType('leave');
     setRejectReason('');
+  };
+
+  const handleSaveShiftTiming = async () => {
+    if (!token || !shiftDate || !shiftStart || !shiftEnd) return;
+    try {
+      await saveShiftTiming(token, {
+        shift_start: apiTimeFromAmPm(shiftStart),
+        shift_end: apiTimeFromAmPm(shiftEnd),
+        effective_date: shiftDate,
+      });
+      Alert.alert('Saved', 'Shift timing updated.');
+    } catch (err) {
+      Alert.alert('Shift save failed', err instanceof Error ? err.message : 'Could not save shift');
+    }
   };
 
   const openAvailabilityDatePicker = (target) => {
@@ -1675,7 +2014,17 @@ export default function RouteDetailScreen() {
           setRecordFromDate,
           recordToDate,
           setRecordToDate,
+          recordDepartmentFilter,
+          setRecordDepartmentFilter,
+          recordDepartmentOptions,
+          recordStatusFilter,
+          setRecordStatusFilter,
+          token,
+          recordExportQuery,
           filteredRecords,
+          attendanceLoading,
+          attendanceError,
+          onRetryAttendance: loadAttendanceScreen,
         }}
       />
     );
@@ -1691,6 +2040,8 @@ export default function RouteDetailScreen() {
           availabilityRoleFilter,
           setAvailabilityStatusFilter,
           availabilityStatusFilter,
+          availabilityQuickFilter,
+          setAvailabilityQuickFilter,
           availabilitySearch,
           setAvailabilitySearch,
           filteredAvailabilityUsers,
@@ -1703,6 +2054,9 @@ export default function RouteDetailScreen() {
           availabilityFromDate,
           availabilityToDate,
           filteredMyAvailabilityLog,
+          attendanceLoading,
+          attendanceError,
+          onRetryAttendance: loadAttendanceScreen,
         }}
       />
     );
@@ -1737,6 +2091,7 @@ export default function RouteDetailScreen() {
           setShiftEnd,
           openShiftDatePicker,
           openShiftTimePicker,
+          handleSaveShiftTiming,
           newDepartment,
           setNewDepartment,
           handleAddDepartment,
@@ -1806,6 +2161,9 @@ export default function RouteDetailScreen() {
           rejectReason,
           setRejectReason,
           submitRejectRequest,
+          attendanceLoading,
+          attendanceError,
+          onRetryAttendance: loadAttendanceScreen,
         }}
       />
     );

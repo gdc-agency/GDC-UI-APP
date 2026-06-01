@@ -64,7 +64,9 @@
       "apiBaseUrl": "http://192.168.1.7:3000",
       "apiPort": 3000,
       "taskApiPort": 4000,
-      "chatApiPort": 5003
+      "chatApiPort": 5003,
+      "attendanceApiPort": 5000,
+      "attendanceApiBaseUrl": "http://192.168.1.25:5000"
     }
   }
 }

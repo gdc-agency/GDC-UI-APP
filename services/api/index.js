@@ -61,4 +61,24 @@ export {
   postChatMessage,
 } from '@/services/api/chat-api';
 export { ChatApiError, chatApiRequest } from '@/services/api/chat-http';
+export {
+  approveLeaveRequest,
+  approveManualTimeRequest,
+  createLeaveRequest,
+  createManualTimeRequest,
+  getAttendance30Days,
+  getAttendance7Days,
+  getAttendanceSummary,
+  getClockHistory,
+  getClockRecords,
+  getCurrentShift,
+  getManualTimesheetRecords,
+  getWorkStats,
+  listLeaveRequests,
+  listManualTimeRequests,
+  rejectLeaveRequest,
+  rejectManualTimeRequest,
+  saveShiftTiming,
+} from '@/services/api/attendance-api';
+export { AttendanceApiError, attendanceApiRequest } from '@/services/api/attendance-http';
 export { apiRequest, ApiError } from '@/services/api/http';

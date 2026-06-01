@@ -1,10 +1,253 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import React from 'react';
+import { Image } from 'expo-image';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { initialsFromName } from '@/components/dashboard/route-modules/timesheet-user-avatar';
 import { isAdminRole } from '@/utils/roles';
+
+import { AvColors, availabilityStyles as av } from './availability-styles';
+
+const ROLE_OPTIONS = [
+  { key: 'all', label: 'All Roles' },
+  { key: 'Employee', label: 'Employee' },
+  { key: 'HR', label: 'HR' },
+  { key: 'Team Leader', label: 'Team Leader' },
+];
+
+const STATUS_OPTIONS = [
+  { key: 'all', label: 'All Status' },
+  { key: 'Available', label: 'Present' },
+  { key: 'Unavailable', label: 'Absent' },
+  { key: 'Leave', label: 'Leave' },
+];
+
+const QUICK_PILLS = [
+  { key: 'all', label: 'All' },
+  { key: 'present', label: 'Present', dot: AvColors.green },
+  { key: 'absent', label: 'Absent', dot: '#EF4444' },
+  { key: 'leave', label: 'Leave', dot: AvColors.orange },
+];
+
+function FilterDropdown({ label, value, options, onChange, openKey, setOpenKey, fieldKey, icon }) {
+  const open = openKey === fieldKey;
+  const display = options.find((o) => o.key === value)?.label || value;
+
+  return (
+    <View style={[av.filterField, { zIndex: open ? 50 : 1 }]}>
+      {label ? <Text style={av.filterLabel}>{label}</Text> : null}
+      <Pressable style={av.filterInput} onPress={() => setOpenKey(open ? null : fieldKey)}>
+        {icon ? <MaterialCommunityIcons name={icon} size={18} color={AvColors.textMuted} /> : null}
+        <Text style={display ? av.filterInputText : av.filterPlaceholder} numberOfLines={1}>
+          {display}
+        </Text>
+        <MaterialCommunityIcons name="chevron-down" size={18} color={AvColors.textMuted} />
+      </Pressable>
+      {open ? (
+        <View style={av.dropdownMenu}>
+          {options.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={av.dropdownItem}
+              onPress={() => {
+                onChange(opt.key);
+                setOpenKey(null);
+              }}
+            >
+              <Text style={av.dropdownItemText}>{opt.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function AvSquareAvatar({ name, avatarUrl }) {
+  if (avatarUrl) {
+    return (
+      <Image
+        source={{ uri: avatarUrl }}
+        style={av.squareAvatarImage}
+        contentFit="cover"
+        recyclingKey={avatarUrl}
+        accessibilityLabel={name ? `${name} profile` : 'Profile photo'}
+      />
+    );
+  }
+  return (
+    <View style={av.squareAvatar}>
+      <Text style={av.squareAvatarText}>{initialsFromName(name).slice(0, 1)}</Text>
+    </View>
+  );
+}
+
+function statusBadgeStyle(label) {
+  if (label === 'Present') {
+    return { box: av.statusBadgePresent, text: av.statusBadgeTextPresent };
+  }
+  if (label === 'Leave') {
+    return { box: av.statusBadgeLeave, text: av.statusBadgeTextLeave };
+  }
+  return { box: av.statusBadgeAbsent, text: av.statusBadgeTextAbsent };
+}
+
+function activityDotColor(activityLabel) {
+  if (activityLabel === 'Working') return AvColors.green;
+  if (activityLabel === 'Leave') return AvColors.orange;
+  return '#EF4444';
+}
+
+function PersonCard({ member }) {
+  const attendanceLabel = member.attendanceLabel || (member.status === 'Available' ? 'Present' : member.status === 'Leave' ? 'Leave' : 'Absent');
+  const badge = statusBadgeStyle(attendanceLabel);
+  const activityLabel =
+    member.activityLabel ||
+    (attendanceLabel === 'Present' ? 'Working' : attendanceLabel === 'Leave' ? 'Leave' : 'Away');
+  const activityColor = activityDotColor(activityLabel);
+
+  return (
+    <View style={av.personCard}>
+      <AvSquareAvatar name={member.name} avatarUrl={member.avatarUrl} />
+      <View style={av.personMain}>
+        <Text style={av.personName} numberOfLines={1}>
+          {member.name}
+        </Text>
+        <View style={av.personRoleRow}>
+          <MaterialCommunityIcons name="briefcase-outline" size={14} color={AvColors.textMuted} />
+          <Text style={av.personRole} numberOfLines={1}>
+            {member.role}
+          </Text>
+        </View>
+        <Text style={av.personGdc} numberOfLines={1}>
+          {member.gdcId}
+        </Text>
+      </View>
+      <View style={av.personRight}>
+        <View style={[av.statusBadge, badge.box]}>
+          <Text style={[av.statusBadgeText, badge.text]}>{attendanceLabel}</Text>
+        </View>
+        <View style={av.activityRow}>
+          <View style={[av.activityDot, { backgroundColor: activityColor }]} />
+          <Text style={av.activityText}>{activityLabel}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function AdminAvailabilityBoard({
+  availabilityRoleFilter,
+  setAvailabilityRoleFilter,
+  availabilityStatusFilter,
+  setAvailabilityStatusFilter,
+  availabilityQuickFilter,
+  setAvailabilityQuickFilter,
+  availabilitySearch,
+  setAvailabilitySearch,
+  filteredAvailabilityUsers,
+}) {
+  const [openMenu, setOpenMenu] = useState(null);
+
+  const memberLabel =
+    filteredAvailabilityUsers.length === 1 ? '1 Member' : `${filteredAvailabilityUsers.length} Members`;
+
+  return (
+    <>
+      <View style={av.boardHero}>
+        <View style={av.boardHeroIconWrap}>
+          <MaterialCommunityIcons name="account-group-outline" size={24} color={AvColors.white} />
+        </View>
+        <Text style={av.boardHeroTitle}>Team Status Board</Text>
+      </View>
+
+      <View style={av.card}>
+        <View style={av.filtersHead}>
+          <MaterialCommunityIcons name="tune-variant" size={20} color={AvColors.blue} />
+          <Text style={av.filtersTitle}>Filters</Text>
+        </View>
+        <Text style={av.filtersSub}>Filter by role, status, or search member.</Text>
+
+        <View style={av.filterRow}>
+          <FilterDropdown
+            value={availabilityRoleFilter}
+            options={ROLE_OPTIONS}
+            onChange={(key) => {
+              setAvailabilityQuickFilter('all');
+              setAvailabilityRoleFilter(key);
+            }}
+            openKey={openMenu}
+            setOpenKey={setOpenMenu}
+            fieldKey="role"
+            icon="account-outline"
+          />
+          <FilterDropdown
+            value={availabilityStatusFilter}
+            options={STATUS_OPTIONS}
+            onChange={(key) => {
+              setAvailabilityQuickFilter('all');
+              setAvailabilityStatusFilter(key);
+            }}
+            openKey={openMenu}
+            setOpenKey={setOpenMenu}
+            fieldKey="status"
+            icon="filter-outline"
+          />
+        </View>
+
+        <View style={av.pillsRow}>
+          {QUICK_PILLS.map((pill) => {
+            const active = availabilityQuickFilter === pill.key;
+            return (
+              <Pressable
+                key={pill.key}
+                style={[av.pill, active && av.pillActive]}
+                onPress={() => {
+                  setOpenMenu(null);
+                  setAvailabilityQuickFilter(pill.key);
+                  if (pill.key === 'present') setAvailabilityStatusFilter('Available');
+                  else if (pill.key === 'absent') setAvailabilityStatusFilter('Unavailable');
+                  else if (pill.key === 'leave') setAvailabilityStatusFilter('Leave');
+                  else setAvailabilityStatusFilter('all');
+                }}
+              >
+                {pill.dot ? <View style={[av.pillDot, { backgroundColor: pill.dot }]} /> : null}
+                <Text style={[av.pillText, active && av.pillTextActive]}>{pill.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={av.searchWrap}>
+          <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" />
+          <TextInput
+            value={availabilitySearch}
+            onChangeText={setAvailabilitySearch}
+            placeholder="Search name, GDC ID, team..."
+            placeholderTextColor="#94A3B8"
+            style={av.searchInput}
+          />
+        </View>
+      </View>
+
+      <View style={av.card}>
+        <View style={av.peopleHead}>
+          <Text style={av.peopleTitle}>People</Text>
+          <Text style={av.peopleCount}>{memberLabel}</Text>
+        </View>
+        {filteredAvailabilityUsers.length === 0 ? (
+          <View style={av.emptyBox}>
+            <Text style={av.emptyText}>No people match filters.</Text>
+          </View>
+        ) : (
+          filteredAvailabilityUsers.map((member) => <PersonCard key={member.gdcId} member={member} />)
+        )}
+      </View>
+    </>
+  );
+}
 
 export function AvailabilitySection({ styles, ctx }) {
   const {
@@ -13,6 +256,8 @@ export function AvailabilitySection({ styles, ctx }) {
     availabilityRoleFilter,
     setAvailabilityStatusFilter,
     availabilityStatusFilter,
+    availabilityQuickFilter,
+    setAvailabilityQuickFilter,
     availabilitySearch,
     setAvailabilitySearch,
     filteredAvailabilityUsers,
@@ -29,6 +274,27 @@ export function AvailabilitySection({ styles, ctx }) {
 
   const isAdminBoard = isAdminRole(user?.role);
 
+  if (isAdminBoard) {
+    return (
+      <SafeAreaView style={av.safe} edges={['top']}>
+        <DashboardTopbar />
+        <ScrollView contentContainerStyle={av.scroll} showsVerticalScrollIndicator={false}>
+          <AdminAvailabilityBoard
+            availabilityRoleFilter={availabilityRoleFilter}
+            setAvailabilityRoleFilter={setAvailabilityRoleFilter}
+            availabilityStatusFilter={availabilityStatusFilter}
+            setAvailabilityStatusFilter={setAvailabilityStatusFilter}
+            availabilityQuickFilter={availabilityQuickFilter}
+            setAvailabilityQuickFilter={setAvailabilityQuickFilter}
+            availabilitySearch={availabilitySearch}
+            setAvailabilitySearch={setAvailabilitySearch}
+            filteredAvailabilityUsers={filteredAvailabilityUsers}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
@@ -38,225 +304,151 @@ export function AvailabilitySection({ styles, ctx }) {
             <MaterialCommunityIcons name="calendar-clock-outline" size={20} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>{isAdminBoard ? 'Team Status Board' : 'My Availability'}</Text>
-            {isAdminBoard ? <Text style={styles.heroSub}>Website-style live roster with quick status filters.</Text> : null}
+            <Text style={styles.heroTitle}>My Availability</Text>
           </View>
         </View>
 
-        {isAdminBoard ? (
-          <>
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Filters</Text>
-              <Text style={styles.panelSub}>Filter by role, status, or search member.</Text>
-              <View style={styles.chipRow}>
-                {['all', 'Employee', 'HR', 'Team Leader'].map((role) => (
-                  <Pressable
-                    key={role}
-                    onPress={() => setAvailabilityRoleFilter(role)}
-                    style={[styles.filterChip, availabilityRoleFilter === role && styles.filterChipActive]}>
-                    <Text style={[styles.filterChipText, availabilityRoleFilter === role && styles.filterChipTextActive]}>
-                      {role === 'all' ? 'All roles' : role}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={[styles.chipRow, { marginTop: 8 }]}>
-                {['all', 'Available', 'Unavailable', 'Leave'].map((st) => (
-                  <Pressable
-                    key={st}
-                    onPress={() => setAvailabilityStatusFilter(st)}
-                    style={[styles.filterChip, availabilityStatusFilter === st && styles.filterChipActive]}>
-                    <Text style={[styles.filterChipText, availabilityStatusFilter === st && styles.filterChipTextActive]}>
-                      {st === 'Available' ? 'Present' : st === 'Unavailable' ? 'Absent' : st}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={[styles.searchWrap, { marginTop: 10 }]}>
-                <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
-                <TextInput
-                  value={availabilitySearch}
-                  onChangeText={setAvailabilitySearch}
-                  placeholder="Search name, GDC ID, team..."
-                  placeholderTextColor="#94a3b8"
-                  style={styles.searchInput}
-                />
-              </View>
-            </View>
+        <View style={styles.panel}>
+          <View style={styles.currentStatusTitleRow}>
+            <MaterialCommunityIcons name="pulse" size={24} color="#10b981" />
+            <Text style={styles.currentStatusTitleText}>Current status</Text>
+          </View>
+          <View style={styles.currentStatusChipRow}>
+            {[
+              ['Present', 'Available'],
+              ['Absent', 'Unavailable'],
+              ['Leave', 'Leave'],
+            ].map(([label, value]) => (
+              <Pressable
+                key={label}
+                onPress={() => updateMyAvailabilityStatus(value)}
+                onHoverIn={() => setHoveredAvailabilityStatus(value)}
+                onHoverOut={() => setHoveredAvailabilityStatus(null)}
+                style={[
+                  styles.currentStatusChip,
+                  hoveredAvailabilityStatus === value && styles.currentStatusChipHover,
+                  currentAvailabilityStatus === value &&
+                    (value === 'Available'
+                      ? styles.currentStatusChipPresent
+                      : value === 'Unavailable'
+                        ? styles.currentStatusChipAbsent
+                        : styles.currentStatusChipLeave),
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[styles.currentStatusChipText, currentAvailabilityStatus === value && styles.currentStatusChipTextActive]}
+                >
+                  {label.toUpperCase()}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
 
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>People</Text>
-              {filteredAvailabilityUsers.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Text style={styles.emptyText}>No people match filters.</Text>
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Attendance Log</Text>
+          <View style={styles.availabilitySummaryGrid}>
+            <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryPresent]}>
+              <Text style={styles.availabilitySummaryLabel}>Present</Text>
+              <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.present}</Text>
+            </View>
+            <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryAbsent]}>
+              <Text style={styles.availabilitySummaryLabel}>Absent</Text>
+              <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.absent}</Text>
+            </View>
+            <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryLeave]}>
+              <Text style={styles.availabilitySummaryLabel}>Leave</Text>
+              <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.leave}</Text>
+            </View>
+            <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryHours]}>
+              <Text style={styles.availabilitySummaryLabel}>T.HOURS</Text>
+              <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.totalHours.toFixed(2)}</Text>
+            </View>
+          </View>
+          <View style={styles.dateFilterRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recordFieldLabel}>From</Text>
+              <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('from')}>
+                <Text style={styles.dateSelectText}>{availabilityFromDate || 'Select date'}</Text>
+                <View style={styles.dateSelectIconWrap}>
+                  <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
                 </View>
-              ) : (
-                filteredAvailabilityUsers.map((member) => (
-                  <View key={member.gdcId} style={styles.availabilityCard}>
-                    <View style={styles.availabilityTop}>
-                      <View style={styles.availabilityAvatar}>
-                        <Text style={styles.availabilityAvatarText}>{member.name.slice(0, 1)}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.availabilityName}>{member.name}</Text>
-                        <Text style={styles.availabilityMeta}>{member.team} - {member.role}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.availabilityStatusPill,
-                          member.status === 'Available'
-                            ? styles.availabilityPresent
-                            : member.status === 'Unavailable'
-                              ? styles.availabilityAbsent
-                              : styles.availabilityLeave,
-                        ]}>
-                        <Text style={styles.availabilityStatusText}>
-                          {member.status === 'Available' ? 'Present' : member.status === 'Unavailable' ? 'Absent' : 'Leave'}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.availabilityBottom}>
-                      <Text style={styles.availabilityId}>{member.gdcId}</Text>
-                      <Text style={[styles.availabilityActivity, member.active ? styles.timesheetOnTime : styles.timesheetLate]}>
-                        {member.active ? 'Working' : 'Away'}
+              </Pressable>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recordFieldLabel}>To</Text>
+              <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('to')}>
+                <Text style={styles.dateSelectText}>{availabilityToDate || 'Select date'}</Text>
+                <View style={styles.dateSelectIconWrap}>
+                  <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
+                </View>
+              </Pressable>
+            </View>
+          </View>
+          <View style={{ marginTop: 8 }}>
+            {filteredMyAvailabilityLog.map((row) => (
+              <View
+                key={row.date}
+                style={[
+                  styles.availabilityLogRow,
+                  row.status === 'Present'
+                    ? styles.availabilityLogPresent
+                    : row.status === 'Leave'
+                      ? styles.availabilityLogLeave
+                      : styles.availabilityLogAbsent,
+                ]}
+              >
+                <View style={styles.availabilityLogHeader}>
+                  <View style={styles.availabilityDateBadge}>
+                    <Text style={styles.availabilityDateDay}>
+                      {new Date(`${row.date}T00:00:00`).toLocaleDateString([], { weekday: 'short' })}
+                    </Text>
+                    <Text style={styles.availabilityDateNumber}>{new Date(`${row.date}T00:00:00`).getDate()}</Text>
+                    <Text style={styles.availabilityDateMonth}>
+                      {new Date(`${row.date}T00:00:00`).toLocaleDateString([], { month: 'short' })}
+                    </Text>
+                  </View>
+                  <View style={styles.availabilityStatusBlock}>
+                    <View
+                      style={[
+                        styles.availabilityStatusPill,
+                        row.status === 'Present'
+                          ? styles.availabilityPresent
+                          : row.status === 'Leave'
+                            ? styles.availabilityLeave
+                            : styles.availabilityAbsent,
+                      ]}
+                    >
+                      <Text style={styles.availabilityStatusText}>
+                        {row.status === 'Present' ? 'ACTIVE' : row.status.toUpperCase()}
                       </Text>
                     </View>
+                    <Text style={styles.availabilityTodayText}>TODAY</Text>
                   </View>
-                ))
-              )}
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.panel}>
-              <View style={styles.currentStatusTitleRow}>
-                <MaterialCommunityIcons name="pulse" size={24} color="#10b981" />
-                <Text style={styles.currentStatusTitleText}>Current status</Text>
-              </View>
-              <View style={styles.currentStatusChipRow}>
-                {[
-                  ['Present', 'Available'],
-                  ['Absent', 'Unavailable'],
-                  ['Leave', 'Leave'],
-                ].map(([label, value]) => (
-                  <Pressable
-                    key={label}
-                    onPress={() => updateMyAvailabilityStatus(value)}
-                    onHoverIn={() => setHoveredAvailabilityStatus(value)}
-                    onHoverOut={() => setHoveredAvailabilityStatus(null)}
-                    style={[
-                      styles.currentStatusChip,
-                      hoveredAvailabilityStatus === value && styles.currentStatusChipHover,
-                      currentAvailabilityStatus === value &&
-                        (value === 'Available'
-                          ? styles.currentStatusChipPresent
-                          : value === 'Unavailable'
-                            ? styles.currentStatusChipAbsent
-                            : styles.currentStatusChipLeave),
-                    ]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.currentStatusChipText, currentAvailabilityStatus === value && styles.currentStatusChipTextActive]}>
-                      {label.toUpperCase()}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Attendance Log</Text>
-              <View style={styles.availabilitySummaryGrid}>
-                <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryPresent]}>
-                  <Text style={styles.availabilitySummaryLabel}>Present</Text>
-                  <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.present}</Text>
                 </View>
-                <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryAbsent]}>
-                  <Text style={styles.availabilitySummaryLabel}>Absent</Text>
-                  <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.absent}</Text>
-                </View>
-                <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryLeave]}>
-                  <Text style={styles.availabilitySummaryLabel}>Leave</Text>
-                  <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.leave}</Text>
-                </View>
-                <View style={[styles.availabilitySummaryCard, styles.availabilitySummaryHours]}>
-                  <Text style={styles.availabilitySummaryLabel}>T.HOURS</Text>
-                  <Text style={styles.availabilitySummaryValue}>{myAvailabilitySummary.totalHours.toFixed(2)}</Text>
-                </View>
-              </View>
-              <View style={styles.dateFilterRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recordFieldLabel}>From</Text>
-                  <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('from')}>
-                    <Text style={styles.dateSelectText}>{availabilityFromDate || 'Select date'}</Text>
-                    <View style={styles.dateSelectIconWrap}>
-                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
-                    </View>
-                  </Pressable>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recordFieldLabel}>To</Text>
-                  <Pressable style={styles.dateSelectField} onPress={() => openAvailabilityDatePicker('to')}>
-                    <Text style={styles.dateSelectText}>{availabilityToDate || 'Select date'}</Text>
-                    <View style={styles.dateSelectIconWrap}>
-                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#4f46e5" />
-                    </View>
-                  </Pressable>
-                </View>
-              </View>
-              <View style={{ marginTop: 8 }}>
-                {filteredMyAvailabilityLog.map((row) => (
-                  <View
-                    key={row.date}
-                    style={[
-                      styles.availabilityLogRow,
-                      row.status === 'Present'
-                        ? styles.availabilityLogPresent
-                        : row.status === 'Leave'
-                          ? styles.availabilityLogLeave
-                          : styles.availabilityLogAbsent,
-                    ]}>
-                    <View style={styles.availabilityLogHeader}>
-                      <View style={styles.availabilityDateBadge}>
-                        <Text style={styles.availabilityDateDay}>{new Date(`${row.date}T00:00:00`).toLocaleDateString([], { weekday: 'short' })}</Text>
-                        <Text style={styles.availabilityDateNumber}>{new Date(`${row.date}T00:00:00`).getDate()}</Text>
-                        <Text style={styles.availabilityDateMonth}>{new Date(`${row.date}T00:00:00`).toLocaleDateString([], { month: 'short' })}</Text>
-                      </View>
-                      <View style={styles.availabilityStatusBlock}>
-                        <View
-                          style={[
-                            styles.availabilityStatusPill,
-                            row.status === 'Present' ? styles.availabilityPresent : row.status === 'Leave' ? styles.availabilityLeave : styles.availabilityAbsent,
-                          ]}>
-                          <Text style={styles.availabilityStatusText}>{row.status === 'Present' ? 'ACTIVE' : row.status.toUpperCase()}</Text>
-                        </View>
-                        <Text style={styles.availabilityTodayText}>TODAY</Text>
-                      </View>
-                    </View>
-                    <View style={styles.availabilityMetricsGrid}>
-                      <View style={styles.availabilityMetricPill}>
-                        <Text style={styles.availabilityMetricLabel}>IN</Text>
-                        <Text style={styles.availabilityMetricValue}>{row.in}</Text>
-                      </View>
-                      <View style={styles.availabilityMetricPill}>
-                        <Text style={styles.availabilityMetricLabel}>OUT</Text>
-                        <Text style={styles.availabilityMetricValue}>{row.out}</Text>
-                      </View>
-                      <View style={styles.availabilityMetricPill}>
-                        <Text style={styles.availabilityMetricLabel}>BREAKS</Text>
-                        <Text style={styles.availabilityMetricValue}>{row.breaks}</Text>
-                      </View>
-                      <View style={[styles.availabilityMetricPill, styles.availabilityHoursPill]}>
-                        <Text style={styles.availabilityMetricLabel}>HOURS</Text>
-                        <Text style={[styles.availabilityMetricValue, styles.availabilityLogHours]}>{row.hours.toFixed(2)}</Text>
-                      </View>
-                    </View>
+                <View style={styles.availabilityMetricsGrid}>
+                  <View style={styles.availabilityMetricPill}>
+                    <Text style={styles.availabilityMetricLabel}>IN</Text>
+                    <Text style={styles.availabilityMetricValue}>{row.in}</Text>
                   </View>
-                ))}
+                  <View style={styles.availabilityMetricPill}>
+                    <Text style={styles.availabilityMetricLabel}>OUT</Text>
+                    <Text style={styles.availabilityMetricValue}>{row.out}</Text>
+                  </View>
+                  <View style={styles.availabilityMetricPill}>
+                    <Text style={styles.availabilityMetricLabel}>BREAKS</Text>
+                    <Text style={styles.availabilityMetricValue}>{row.breaks}</Text>
+                  </View>
+                  <View style={[styles.availabilityMetricPill, styles.availabilityHoursPill]}>
+                    <Text style={styles.availabilityMetricLabel}>HOURS</Text>
+                    <Text style={[styles.availabilityMetricValue, styles.availabilityLogHours]}>{row.hours.toFixed(2)}</Text>
+                  </View>
+                </View>
               </View>
-            </View>
-          </>
-        )}
+            ))}
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

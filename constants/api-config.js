@@ -342,6 +342,126 @@ export function getChatApiBaseUrl() {
   return applyWebDevLoopbackForSameMachineAuth(rewriteLoopbackUrlToMetroLan(resolveChatApiBaseFromExtra(ex, getApiBaseUrl())));
 }
 
+/**
+ * Attendance service base URL. `expo.extra.attendanceApiBaseUrl` overrides; else Auth host + `attendanceApiPort` (default 5000).
+ * @param {Record<string, unknown>} ex
+ * @param {string} apiBase
+ */
+function resolveAttendanceApiBaseFromExtra(ex, apiBase) {
+  let configuredUrl = stripUrlWhitespace(String(ex.attendanceApiBaseUrl ?? '').replace(/^\uFEFF/, ''));
+  const rawPort = ex.attendanceApiPort != null && ex.attendanceApiPort !== '' ? Number(ex.attendanceApiPort) : NaN;
+  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5000';
+
+  let out;
+  if (configuredUrl) {
+    try {
+      void new URL(configuredUrl);
+      out = stripUrlWhitespace(configuredUrl).replace(/\/+$/, '');
+    } catch {
+      out = configuredUrl;
+    }
+  } else {
+    out = taskBaseFromAuthHost(apiBase, attendanceApiPort);
+  }
+
+  const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+  const isWeb = Platform.OS === 'web';
+  if ((isNative || isWeb) && isLoopbackUrl(out) && !isLoopbackUrl(apiBase)) {
+    out = taskBaseFromAuthHost(apiBase, attendanceApiPort);
+  }
+
+  return stripUrlWhitespace(out).replace(/\/+$/, '');
+}
+
+/** Attendance service API base (no trailing slash). Same JWT as Auth login. */
+export function getAttendanceApiBaseUrl() {
+  const ex = getExpoExtra();
+  const authBase = getApiBaseUrl();
+  const rawPort = ex.attendanceApiPort != null && ex.attendanceApiPort !== '' ? Number(ex.attendanceApiPort) : NaN;
+  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5000';
+  const forceConfigured =
+    String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1';
+  const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
+  const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+  const isWeb = Platform.OS === 'web';
+  const isDevClient = isNative || isWeb;
+
+  let out = rewriteLoopbackUrlToMetroLan(resolveAttendanceApiBaseFromExtra(ex, authBase));
+
+  const configuredAttendanceUrl = stripUrlWhitespace(String(ex.attendanceApiBaseUrl ?? ''));
+
+  /**
+   * Dev: `attendanceApiBaseUrl` in app.json often stays on an old LAN IP while Metro moves Auth to the
+   * current PC host — phones then fail clock/manual fetches while web (127.0.0.1) still works.
+   */
+  if (isDev && isDevClient && !forceConfigured) {
+    const lan = resolveDevLanHost();
+    if (lan && configuredAttendanceUrl && !isLoopbackUrl(configuredAttendanceUrl)) {
+      try {
+        const host = new URL(configuredAttendanceUrl).hostname.replace(/\s+/g, '');
+        if (host !== lan) {
+          out = stripUrlWhitespace(`http://${lan}:${attendanceApiPort}`).replace(/\/+$/, '');
+          logApiConfigOnce(
+            'warn',
+            `attendance-host-mismatch:${out}:${configuredAttendanceUrl}`,
+            `[api-config] Dev: Attendance → ${out} (Metro LAN) instead of configured ${configuredAttendanceUrl}.`,
+          );
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    try {
+      const authHost = new URL(authBase).hostname.replace(/\s+/g, '');
+      const outHost = new URL(out).hostname.replace(/\s+/g, '');
+      if (authHost && outHost && authHost !== outHost && !isLoopbackUrl(authBase)) {
+        const u = new URL(out);
+        u.hostname = authHost;
+        out = stripUrlWhitespace(u.toString()).replace(/\/+$/, '');
+        logApiConfigOnce(
+          'warn',
+          `attendance-auth-host-sync:${out}`,
+          `[api-config] Dev: Attendance host synced with Auth → ${out}`,
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const isPhysicalDevice = isNative && Device.isDevice === true;
+
+  /** Real phone cannot reach the dev PC via 127.0.0.1 / localhost. */
+  if (isPhysicalDevice && isLoopbackUrl(out)) {
+    const lan = resolveDevLanHost();
+    if (lan) {
+      out = stripUrlWhitespace(`http://${lan}:${attendanceApiPort}`).replace(/\/+$/, '');
+      logApiConfigOnce(
+        'warn',
+        `attendance-device-lan:${out}`,
+        `[api-config] Attendance → ${out} (device cannot use loopback; using Metro LAN host)`,
+      );
+    }
+  }
+
+  /**
+   * Expo web on the same PC: use loopback for Attendance (like Auth) — avoids Windows LAN fetch issues.
+   * Expo web on phone browser keeps LAN IP (hostname is 192.168.x.x).
+   */
+  if (Platform.OS === 'web' && typeof __DEV__ !== 'undefined' && __DEV__) {
+    const webHost =
+      typeof window !== 'undefined' && window.location?.hostname
+        ? String(window.location.hostname).toLowerCase()
+        : '';
+    const webDevOnSamePc = webHost === 'localhost' || webHost === '127.0.0.1';
+    if (webDevOnSamePc) {
+      out = applyWebDevLoopbackForSameMachineAuth(out);
+    }
+  }
+
+  return stripUrlWhitespace(out).replace(/\/+$/, '');
+}
+
 /** True when the API URL cannot work on this physical device (localhost, or 10.0.2.2 on a real phone). */
 export function isLoopbackApiOnNativeDevice() {
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -364,6 +484,7 @@ if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.log(`[api-config] Auth API → ${getApiBaseUrl()}`);
     console.log(`[api-config] Task API → ${getTaskApiBaseUrl()}`);
     console.log(`[api-config] Chat API → ${getChatApiBaseUrl()}`);
+    console.log(`[api-config] Attendance API → ${getAttendanceApiBaseUrl()}`);
   } catch (_) {
     /* ignore */
   }

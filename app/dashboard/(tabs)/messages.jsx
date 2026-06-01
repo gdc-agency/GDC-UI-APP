@@ -7,54 +7,51 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Alert,
-  FlatList,
-  InteractionManager,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    Animated,
+    FlatList,
+    InteractionManager,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatAttachmentSheet } from '@/components/chat/chat-attachment-sheet';
 import { ChatImagePreview } from '@/components/chat/chat-image-preview';
 import { ChatImageSendPreview } from '@/components/chat/chat-image-send-preview';
-import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banner';
-import { CreateGroupFlow } from '@/components/chat/create-group-flow';
-import { NewChatPicker } from '@/components/chat/new-chat-picker';
-import { groupSenderColor } from '@/utils/group-sender-style';
-import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
-import { threadIdEquals } from '@/utils/chat-thread-inbox';
-import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
 import { ChatWallpaper } from '@/components/chat/chat-wallpaper';
-import { CHAT_BUBBLE_MAX_WIDTH, CHAT_GROUP_BUBBLE_MAX_WIDTH, CHAT_IMAGE_MAX_WIDTH, CHAT_MSG_EDGE } from '@/constants/chat-layout';
-import { ChatTheme } from '@/constants/chat-theme';
 import { CircularProgressRing } from '@/components/chat/circular-progress-ring';
+import { CreateGroupFlow } from '@/components/chat/create-group-flow';
 import { DocumentMessageCard } from '@/components/chat/document-message-card';
+import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banner';
 import { MessageActionMenu } from '@/components/chat/message-action-menu';
+import { NewChatPicker } from '@/components/chat/new-chat-picker';
 import { TypingDots } from '@/components/chat/typing-dots';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { BrandColors } from '@/constants/brand';
-import { useChatChrome } from '@/context/chat-chrome-context';
+import { CHAT_BUBBLE_MAX_WIDTH, CHAT_GROUP_BUBBLE_MAX_WIDTH, CHAT_IMAGE_MAX_WIDTH, CHAT_MSG_EDGE } from '@/constants/chat-layout';
+import { ChatTheme } from '@/constants/chat-theme';
 import { useAuth } from '@/context/auth-context';
+import { useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcInbox } from '@/context/gdc-inbox-context';
-import { isAdminRole } from '@/utils/roles';
+import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
 import {
-  formatFileSize,
-  isChatDisplayNamePending,
-  resolveChatPeerDisplayName,
+    isChatDisplayNamePending,
+    resolveChatPeerDisplayName
 } from '@/utils/chat-directory';
 import { isMessageUploading, statusIconColor, statusIconName } from '@/utils/chat-message-status';
+import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
+import { threadIdEquals } from '@/utils/chat-thread-inbox';
 import { canComposeInChat } from '@/utils/group-compose-permissions';
+import { groupSenderColor } from '@/utils/group-sender-style';
+import { isAdminRole } from '@/utils/roles';
 
 const HOME_TAB_BAR_STYLE = {
   position: 'absolute',

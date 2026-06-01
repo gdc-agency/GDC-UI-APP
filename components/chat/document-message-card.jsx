@@ -1,5 +1,5 @@
-import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { CircularProgressRing } from '@/components/chat/circular-progress-ring';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { BrandColors } from '@/constants/brand';
 import { CHAT_BUBBLE_MAX_WIDTH, CHAT_DOC_BUBBLE_WIDTH } from '@/constants/chat-layout';
 import { ChatTheme } from '@/constants/chat-theme';

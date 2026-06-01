@@ -41,6 +41,7 @@ export function AdminSection({ styles, ctx }) {
     setShiftEnd,
     openShiftDatePicker,
     openShiftTimePicker,
+    handleSaveShiftTiming,
     newDepartment,
     setNewDepartment,
     handleAddDepartment,
@@ -290,7 +291,7 @@ export function AdminSection({ styles, ctx }) {
               </View>
             </View>
             <View style={styles.timeSaveRow}>
-              <Pressable style={styles.timeSaveBtn}>
+              <Pressable style={styles.timeSaveBtn} onPress={handleSaveShiftTiming}>
                 <Text style={styles.timeSaveText}>Save shift timing</Text>
               </Pressable>
             </View>
