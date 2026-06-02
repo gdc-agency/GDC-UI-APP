@@ -9,9 +9,10 @@ import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
-import { getMyTeamRoster, getPendingUsersCount, getWorkforceCount, listTasks } from '@/services/api';
+import { getAttendanceSummary, getMyTeamRoster, getPendingUsersCount, getWorkforceCount, listTasks } from '@/services/api';
 import { buildDashboardTaskSnapshot, countTeamEmployeesInRoster } from '@/utils/dashboard-task-stats';
 import { extractPendingUsersCount, extractWorkforceCount } from '@/utils/admin-api-response';
+import { isExcludedAttendanceOverviewRole } from '@/utils/attendance-ui-map';
 import { isAdminRole } from '@/utils/roles';
 
 function StatCard({ label, value, icon, color, onPress }) {
@@ -95,13 +96,25 @@ function fmtCount(n) {
   return n != null && Number.isFinite(Number(n)) ? String(n) : '—';
 }
 
+function countActiveNowFromSummary(summary) {
+  const rows = Array.isArray(summary?.users) ? summary.users : [];
+  return rows.filter((row) => {
+    if (isExcludedAttendanceOverviewRole(row.role)) return false;
+    const att = String(row.attendance_status ?? '').toUpperCase();
+    const live = String(row.live_status ?? '').toUpperCase();
+    return att === 'PRESENT' || live === 'WORKING' || live === 'BREAK';
+  }).length;
+}
+
 function RolePanel({
   role,
   onOpenPendingApprovals,
   onOpenPendingLeave,
   onOpenProjectStatus,
+  onOpenActiveNow,
   workforceCount,
   pendingUsersCount,
+  activeNowCount,
   taskBoard,
 }) {
   const wf = workforceCount != null ? String(workforceCount) : '—';
@@ -122,7 +135,13 @@ function RolePanel({
         <Text style={styles.roleSub}>System overview, approvals, and policy control.</Text>
         <View style={styles.statGrid}>
           <StatCard label="Workforce" value={wf} icon="account-group-outline" color="#2563eb" />
-          <StatCard label="Active Now" value="—" icon="pulse" color="#16a34a" />
+          <StatCard
+            label="Active Now"
+            value={fmtCount(activeNowCount)}
+            icon="pulse"
+            color="#16a34a"
+            onPress={onOpenActiveNow}
+          />
           <StatCard label="Pending Leave" value="0" icon="calendar-clock-outline" color="#f59e0b" onPress={onOpenPendingLeave} />
           <StatCard label="Pending Tasks" value={p} icon="bullseye-arrow" color="#6366f1" onPress={() => onOpenProjectStatus?.('pending')} />
           <StatCard label="Overdue" value={od} icon="alert-circle-outline" color="#dc2626" onPress={() => onOpenProjectStatus?.('overdue')} />
@@ -252,7 +271,7 @@ export default function DashboardHomeScreen() {
   const { user, token } = useAuth();
   const router = useRouter();
   const nowText = React.useMemo(() => new Date().toLocaleString(), []);
-  const [adminStats, setAdminStats] = React.useState({ workforce: null, pendingUsers: null });
+  const [adminStats, setAdminStats] = React.useState({ workforce: null, pendingUsers: null, activeNow: null });
   const [taskBoard, setTaskBoard] = React.useState(EMPTY_TASK_BOARD);
 
   const loadDashboardTaskBoard = React.useCallback(async () => {
@@ -287,20 +306,25 @@ export default function DashboardHomeScreen() {
 
   const loadAdminStats = useCallback(async () => {
     if (!isAdminRole(user?.role) || !token) {
-      setAdminStats({ workforce: null, pendingUsers: null });
+      setAdminStats({ workforce: null, pendingUsers: null, activeNow: null });
       return;
     }
     try {
-      const [w, p] = await Promise.all([getWorkforceCount(token), getPendingUsersCount(token)]);
+      const [w, p, attendance] = await Promise.all([
+        getWorkforceCount(token),
+        getPendingUsersCount(token),
+        getAttendanceSummary(token),
+      ]);
       setAdminStats({
         workforce: parseStatCount(extractWorkforceCount(w)),
         pendingUsers: parseStatCount(extractPendingUsersCount(p)),
+        activeNow: countActiveNowFromSummary(attendance),
       });
     } catch (e) {
       if (__DEV__ && e && typeof e.message === 'string') {
         console.warn('[dashboard] admin stats fetch failed:', e.message);
       }
-      setAdminStats({ workforce: null, pendingUsers: null });
+      setAdminStats({ workforce: null, pendingUsers: null, activeNow: null });
     }
   }, [user?.role, token]);
 
@@ -371,9 +395,11 @@ export default function DashboardHomeScreen() {
           role={user?.role}
           workforceCount={adminStats.workforce}
           pendingUsersCount={adminStats.pendingUsers}
+          activeNowCount={adminStats.activeNow}
           taskBoard={taskBoard}
           onOpenPendingApprovals={() => router.push('/dashboard/(tabs)/route/admin?tab=employees&filter=Pending')}
           onOpenPendingLeave={() => router.push('/dashboard/(tabs)/route/request-management?status=Pending')}
+          onOpenActiveNow={() => router.push('/dashboard/(tabs)/route/availability?filter=present')}
           onOpenProjectStatus={(status) => router.push(`/dashboard/(tabs)/route/project-manager?status=${encodeURIComponent(status)}`)}
         />
       </ScrollView>

@@ -17,3 +17,11 @@ export function formatTabBadgeCount(n) {
   if (total > 99) return '99+';
   return String(total);
 }
+
+/** Shared red pill for bottom-tab badges (Chat + Alerts). */
+export const tabBarBadgeStyle = {
+  backgroundColor: '#ef4444',
+  color: '#ffffff',
+  fontSize: 11,
+  fontWeight: '700',
+};

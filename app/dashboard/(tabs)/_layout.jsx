@@ -12,6 +12,8 @@ import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcNotificationRealtime } from '@/hooks/useGdcNotificationRealtime';
+import { formatTabBadgeCount, tabBarBadgeStyle } from '@/utils/compute-total-chat-unread';
+import { subscribeChatUnreadTotal } from '@/utils/chat-unread-bus';
 
 /** Content row above home indicator; total bar height = this + insets.bottom */
 const TAB_BAR_BASE_HEIGHT = 70;
@@ -160,7 +162,14 @@ function DashboardTabsLayoutInner() {
   const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const { badge: notificationTabBadge } = useGdcNotificationRealtime();
+  const [chatTabBadge, setChatTabBadge] = useState(/** @type {string | undefined} */ (undefined));
   const shimmerX = useRef(new Animated.Value(-140)).current;
+
+  useEffect(() => {
+    return subscribeChatUnreadTotal((total) => {
+      setChatTabBadge(formatTabBadgeCount(total));
+    });
+  }, []);
   const skeletonCardCount = skeletonCardCountForPath(pathname);
 
   useEffect(() => {
@@ -219,6 +228,8 @@ function DashboardTabsLayoutInner() {
           name="messages"
           options={{
             title: 'Chat',
+            tabBarBadge: chatTabBadge,
+            tabBarBadgeStyle: tabBarBadgeStyle,
             tabBarIcon: ({ color, focused }) => (
               <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
             ),
@@ -229,6 +240,7 @@ function DashboardTabsLayoutInner() {
           options={{
             title: 'Alerts',
             tabBarBadge: notificationTabBadge,
+            tabBarBadgeStyle: tabBarBadgeStyle,
             tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} />,
           }}
         />

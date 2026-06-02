@@ -1,12 +1,19 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { isAdminOrHrRole } from '@/utils/roles';
 
+import { AdminRequestsBoard } from './admin-requests-board';
+import { RqColors, requestStyles as rq } from './request-styles';
+import { PrettyRequestCard } from './pretty-request-card';
+
 export function RequestsSection({ styles, ctx }) {
+  const { width } = useWindowDimensions();
+  const isSmallMobile = width < 360;
+  const isTinyMobile = width < 320;
   const {
     slug,
     user,
@@ -19,6 +26,9 @@ export function RequestsSection({ styles, ctx }) {
     setLeaveStatusFilter,
     manualRequests,
     filteredAdminLeaveRequests,
+    filteredAdminManualRequests,
+    requestAdminSearch,
+    setRequestAdminSearch,
     updateManualStatus,
     updateLeaveStatus,
     openRejectModal,
@@ -61,6 +71,86 @@ export function RequestsSection({ styles, ctx }) {
   const isAdminReviewer = !isMyRequestsRoute && isAdminOrHrRole(user?.role);
   const isManualTab = slug === 'manual-time-requests' || (isMyRequestsRoute && myRequestsTab === 'manual');
 
+  if (isAdminReviewer) {
+    const leaveLabel = width > 400 ? 'Leave Requests' : isTinyMobile ? '' : 'Leave';
+    const manualLabel = width > 400 ? 'Manual Time Requests' : isTinyMobile ? '' : 'Manual Time';
+    return (
+      <SafeAreaView style={rq.safe} edges={['top']}>
+        <DashboardTopbar />
+        <ScrollView contentContainerStyle={rq.scroll} showsVerticalScrollIndicator={false}>
+          <View style={rq.hero}>
+            <View style={rq.heroIconWrap}>
+              <MaterialCommunityIcons name="clipboard-check-outline" size={24} color={RqColors.blue} />
+            </View>
+            <View style={rq.heroTextWrap}>
+              <Text style={rq.heroTitle}>Request Management</Text>
+            </View>
+          </View>
+
+          <View style={rq.tabsCard}>
+            <View style={rq.tabsRow}>
+              <Pressable
+                onPress={() => router.push('/dashboard/(tabs)/route/request-management')}
+                style={[rq.tabBtn, isSmallMobile && { paddingVertical: 10 }, !isManualTab && rq.tabBtnActive]}
+              >
+                <MaterialCommunityIcons
+                  name="account-outline"
+                  size={isTinyMobile ? 18 : 20}
+                  color={!isManualTab ? RqColors.blue : RqColors.textMuted}
+                />
+                {leaveLabel ? (
+                  <Text style={[rq.tabText, isSmallMobile && { fontSize: 12 }, !isManualTab && rq.tabTextActive]} numberOfLines={1}>
+                    {leaveLabel}
+                  </Text>
+                ) : null}
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/dashboard/(tabs)/route/manual-time-requests')}
+                style={[rq.tabBtn, isSmallMobile && { paddingVertical: 10 }, isManualTab && rq.tabBtnActive]}
+              >
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={isTinyMobile ? 18 : 20}
+                  color={isManualTab ? RqColors.blue : RqColors.textMuted}
+                />
+                {manualLabel ? (
+                  <Text style={[rq.tabText, isSmallMobile && { fontSize: 12 }, isManualTab && rq.tabTextActive]} numberOfLines={1}>
+                    {manualLabel}
+                  </Text>
+                ) : null}
+              </Pressable>
+            </View>
+          </View>
+
+          <AdminRequestsBoard
+            isManualTab={isManualTab}
+            leaveStatusFilter={leaveStatusFilter}
+            setLeaveStatusFilter={setLeaveStatusFilter}
+            manualStatusFilter={manualStatusFilter}
+            setManualStatusFilter={setManualStatusFilter}
+            requestAdminSearch={requestAdminSearch}
+            setRequestAdminSearch={setRequestAdminSearch}
+            filteredAdminLeaveRequests={filteredAdminLeaveRequests}
+            filteredAdminManualRequests={filteredAdminManualRequests}
+            updateLeaveStatus={updateLeaveStatus}
+            updateManualStatus={updateManualStatus}
+            openRejectModal={openRejectModal}
+          />
+        </ScrollView>
+
+        <RejectModal
+          rejectModalOpen={rejectModalOpen}
+          setRejectModalOpen={setRejectModalOpen}
+          rejectTargetType={rejectTargetType}
+          rejectReason={rejectReason}
+          setRejectReason={setRejectReason}
+          submitRejectRequest={submitRejectRequest}
+          styles={styles}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
@@ -70,93 +160,28 @@ export function RequestsSection({ styles, ctx }) {
             <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>{isMyRequestsRoute ? 'My Requests' : 'Request Management'}</Text>
+            <Text style={styles.heroTitle}>My Requests</Text>
           </View>
         </View>
 
         <View style={styles.requestTabsPanel}>
           <View style={styles.requestTabsBar}>
             <Pressable
-              onPress={() => {
-                if (isMyRequestsRoute) setMyRequestsTab('leave');
-                else router.push('/dashboard/(tabs)/route/request-management');
-              }}
-              style={[styles.requestTabBtn, !isManualTab && styles.requestTabBtnActive]}>
+              onPress={() => setMyRequestsTab('leave')}
+              style={[styles.requestTabBtn, !isManualTab && styles.requestTabBtnActive]}
+            >
               <Text style={[styles.requestTabText, !isManualTab && styles.requestTabTextActive]}>Leave requests</Text>
             </Pressable>
             <Pressable
-              onPress={() => {
-                if (isMyRequestsRoute) setMyRequestsTab('manual');
-                else router.push('/dashboard/(tabs)/route/manual-time-requests');
-              }}
-              style={[styles.requestTabBtn, isManualTab && styles.requestTabBtnActive]}>
+              onPress={() => setMyRequestsTab('manual')}
+              style={[styles.requestTabBtn, isManualTab && styles.requestTabBtnActive]}
+            >
               <Text style={[styles.requestTabText, isManualTab && styles.requestTabTextActive]}>Manual time requests</Text>
             </Pressable>
           </View>
         </View>
 
-        {isAdminReviewer ? (
-          <View style={styles.panel}>
-            <View style={styles.requestHeaderRow}>
-              <Text style={styles.panelTitle}>{isManualTab ? 'Manual Time Requests' : 'Leave Requests'}</Text>
-            </View>
-            <View style={[styles.chipRow, { marginBottom: 8 }]}>
-              {['All', 'Pending', 'Approved', 'Rejected'].map((st) => (
-                <Pressable
-                  key={st}
-                  onPress={() => (isManualTab ? setManualStatusFilter(st) : setLeaveStatusFilter(st))}
-                  style={[styles.filterChip, (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.filterChipActive]}>
-                  <Text style={[styles.filterChipText, (isManualTab ? manualStatusFilter : leaveStatusFilter) === st && styles.filterChipTextActive]}>{st}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.panelSub}>{isManualTab ? 'View manual time requests by status.' : 'Approve or reject employee/TL/HR leave requests.'}</Text>
-            {(isManualTab ? (manualStatusFilter === 'All' ? manualRequests : manualRequests.filter((r) => r.status === manualStatusFilter)) : filteredAdminLeaveRequests).map(
-              (req) => (
-                <View key={req.id} style={styles.requestCard}>
-                  <View style={styles.requestTopRow}>
-                    <Text style={styles.requestName}>{req.employee}</Text>
-                    <Text style={styles.requestDate}>{isManualTab ? req.date : `${req.from} -> ${req.to}`}</Text>
-                  </View>
-                  <Text style={styles.requestMeta}>{req.role} - {isManualTab ? 'Manual Time' : req.type}</Text>
-                  {isManualTab ? (
-                    <>
-                      <Text style={styles.requestMeta}>
-                        {req.clockIn} {'->'} {req.clockOut}
-                      </Text>
-                      {req.breakOut ? <Text style={styles.requestMeta}>Break-out: {req.breakOut}</Text> : null}
-                    </>
-                  ) : null}
-                  <Text style={styles.requestReason}>{req.reason}</Text>
-                  {req.status === 'Rejected' && req.adminReason ? (
-                    <View style={styles.rejectReasonBox}>
-                      <Text style={styles.rejectReasonTitle}>Reject reason</Text>
-                      <Text style={styles.rejectReasonText}>{req.adminReason}</Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.requestFooter}>
-                    <View style={[styles.filterChip, req.status === 'Approved' && styles.approvedChip, req.status === 'Rejected' && styles.rejectedChip]}>
-                      <Text style={[styles.filterChipText, req.status === 'Approved' && styles.approvedChipText, req.status === 'Rejected' && styles.rejectedChipText]}>
-                        {req.status}
-                      </Text>
-                    </View>
-                    {req.status === 'Pending' ? (
-                      <View style={styles.taskActionRow}>
-                        <Pressable style={styles.requestApproveBtn} onPress={() => (isManualTab ? updateManualStatus(req.id, 'Approved') : updateLeaveStatus(req.id, 'Approved'))}>
-                          <Text style={styles.requestBtnText}>Approve</Text>
-                        </Pressable>
-                        <Pressable style={styles.requestRejectBtn} onPress={() => openRejectModal(req.id, isManualTab ? 'manual' : 'leave')}>
-                          <Text style={styles.requestBtnText}>Reject</Text>
-                        </Pressable>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              )
-            )}
-          </View>
-        ) : (
-          <>
+        <>
             <View style={styles.myRequestsHeaderCard}>
               <View style={styles.myRequestsHeaderTop}>
                 <Text style={styles.myRequestsHeaderTitle}>
@@ -205,44 +230,19 @@ export function RequestsSection({ styles, ctx }) {
                 </View>
               ) : (
                 (isManualTab ? filteredMyManualRequests : filteredMyLeaveRequests).map((req) => (
-                  <View
-                    key={req.id}
-                    style={[
-                      styles.myRequestCard,
-                      req.status === 'Approved' ? styles.myRequestCardApproved : req.status === 'Rejected' ? styles.myRequestCardRejected : styles.myRequestCardPending,
-                    ]}>
-                    <View style={styles.myRequestTopRow}>
-                      <Text style={styles.myRequestName}>{isManualTab ? 'Manual Time' : req.type}</Text>
-                      <Text style={styles.myRequestDate}>{isManualTab ? req.date : `${req.from} -> ${req.to}`}</Text>
-                    </View>
-                    {isManualTab ? (
-                      <>
-                        <Text style={styles.myRequestMeta}>
-                          {req.clockIn} {'->'} {req.clockOut}
-                        </Text>
-                        {req.breakOut ? <Text style={styles.myRequestMeta}>Break-out: {req.breakOut}</Text> : null}
-                      </>
-                    ) : null}
-                    <Text style={styles.myRequestReason}>{req.reason}</Text>
+                  <View key={req.id}>
+                    <PrettyRequestCard req={req} isManual={isManualTab} showActions={false} />
                     {req.status === 'Rejected' && req.adminReason ? (
                       <View style={styles.myRejectReasonBox}>
                         <Text style={styles.rejectReasonTitle}>Admin feedback</Text>
                         <Text style={styles.rejectReasonText}>{req.adminReason}</Text>
                       </View>
                     ) : null}
-                    <View style={styles.myRequestFooter}>
-                      <View style={[styles.filterChip, req.status === 'Approved' && styles.approvedChip, req.status === 'Rejected' && styles.rejectedChip]}>
-                        <Text style={[styles.filterChipText, req.status === 'Approved' && styles.approvedChipText, req.status === 'Rejected' && styles.rejectedChipText]}>
-                          {req.status}
-                        </Text>
-                      </View>
-                    </View>
                   </View>
                 ))
               )}
             </View>
           </>
-        )}
       </ScrollView>
 
       <Modal visible={leaveModalOpen} transparent animationType="slide" onRequestClose={() => setLeaveModalOpen(false)}>
@@ -377,35 +377,61 @@ export function RequestsSection({ styles, ctx }) {
         </View>
       </Modal>
 
-      <Modal visible={rejectModalOpen} transparent animationType="slide" onRequestClose={() => setRejectModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
-              <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>Reject {rejectTargetType === 'manual' ? 'Manual Time Request' : 'Leave Request'}</Text>
-                <Text style={styles.panelSub}>Please provide reason for rejection.</Text>
-                <TextInput
-                  value={rejectReason}
-                  onChangeText={setRejectReason}
-                  placeholder="Write rejection reason..."
-                  placeholderTextColor="#94a3b8"
-                  style={[styles.input, styles.textAreaSm]}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <View style={styles.modalActions}>
-                  <Pressable style={styles.cancelBtn} onPress={() => setRejectModalOpen(false)}>
-                    <Text style={styles.cancelBtnText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable style={[styles.modalPrimaryBtn, !rejectReason.trim() && styles.modalPrimaryBtnDisabled]} onPress={submitRejectRequest} disabled={!rejectReason.trim()}>
-                    <Text style={styles.actionBtnText}>Confirm Reject</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <RejectModal
+        rejectModalOpen={rejectModalOpen}
+        setRejectModalOpen={setRejectModalOpen}
+        rejectTargetType={rejectTargetType}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        submitRejectRequest={submitRejectRequest}
+        styles={styles}
+      />
     </SafeAreaView>
+  );
+}
+
+function RejectModal({
+  rejectModalOpen,
+  setRejectModalOpen,
+  rejectTargetType,
+  rejectReason,
+  setRejectReason,
+  submitRejectRequest,
+  styles,
+}) {
+  return (
+    <Modal visible={rejectModalOpen} transparent animationType="slide" onRequestClose={() => setRejectModalOpen(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCardShell}>
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Reject {rejectTargetType === 'manual' ? 'Manual Time Request' : 'Leave Request'}</Text>
+              <Text style={styles.panelSub}>Please provide reason for rejection.</Text>
+              <TextInput
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="Write rejection reason..."
+                placeholderTextColor="#94a3b8"
+                style={[styles.input, styles.textAreaSm]}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={styles.modalActions}>
+                <Pressable style={styles.cancelBtn} onPress={() => setRejectModalOpen(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.modalPrimaryBtn, !rejectReason.trim() && styles.modalPrimaryBtnDisabled]}
+                  onPress={submitRejectRequest}
+                  disabled={!rejectReason.trim()}
+                >
+                  <Text style={styles.actionBtnText}>Confirm Reject</Text>
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }

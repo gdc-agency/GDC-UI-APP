@@ -1609,10 +1609,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#25D366',
+    backgroundColor: '#ef4444',
   },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  chatCardTimeUnread: { color: '#25D366', fontWeight: '600' },
+  chatCardTimeUnread: { color: '#ef4444', fontWeight: '700' },
   chatCardMsgUnread: { color: '#111b21', fontWeight: '700' },
   chatHeader: {
     flexDirection: 'row',

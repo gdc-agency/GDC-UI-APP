@@ -27,6 +27,7 @@ import { deleteNotificationByEventKey } from '@/services/api/notifications-api';
 import { getMyTeamRoster, getVisibleDirectory } from '@/services/api/teams-api';
 import { ensureGdcSocketConnected, getGdcSocket } from '@/services/realtime/gdc-socket';
 import { computeTotalChatUnread } from '@/utils/compute-total-chat-unread';
+import { publishChatUnreadTotal, resetChatUnreadBus } from '@/utils/chat-unread-bus';
 import { clearChatInAppNotice, messagePreviewLabel, publishChatInAppNotice } from '@/utils/chat-in-app-notice';
 import { invalidateNotificationInbox } from '@/utils/notification-invalidate';
 import { syncChatInAppNotification } from '@/utils/sync-chat-in-app-notification';
@@ -401,6 +402,14 @@ export function useGdcChatInbox({ token, user }) {
   useEffect(() => {
     threadsRef.current = threads;
   }, [threads]);
+
+  useEffect(() => {
+    if (!token) {
+      resetChatUnreadBus();
+      return;
+    }
+    publishChatUnreadTotal(computeTotalChatUnread(threads));
+  }, [token, threads]);
 
   useEffect(() => {
     onlineUserIdsRef.current = onlineUserIds;

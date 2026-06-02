@@ -343,19 +343,78 @@ export function mapClockHistoryToAvailabilityLog(row) {
 /**
  * @param {Record<string, unknown>} row
  */
+export function formatRequestDisplayDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+export function leaveDayCount(fromIso, toIso) {
+  const a = new Date(`${fromIso}T12:00:00`);
+  const b = new Date(`${toIso}T12:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 1;
+  return Math.max(1, Math.round((b.getTime() - a.getTime()) / 86400000) + 1);
+}
+
+export function requestStatusTimestamp(req) {
+  const raw = req.createdAt || req.statusAt || '';
+  const label = formatRequestDisplayDate(String(raw).slice(0, 10));
+  if (!label || label === '—') return '';
+  if (req.status === 'Approved') return `Approved on ${label}`;
+  if (req.status === 'Rejected') return `Rejected on ${label}`;
+  return `Requested on ${label}`;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} requests
+ * @param {Array<Record<string, unknown>>} profileRows
+ */
+export function enrichRequestsWithAvatars(requests, profileRows = []) {
+  const byName = new Map();
+  const byGdc = new Map();
+  for (const row of profileRows) {
+    const url = avatarUrlFromRow(row);
+    if (!url) continue;
+    const name = String(row.name ?? '').trim().toLowerCase();
+    const gdc = String(row.gdc_id ?? row.gdcId ?? '').trim();
+    if (name) byName.set(name, url);
+    if (gdc) byGdc.set(gdc, url);
+  }
+  return requests.map((r) => {
+    const key = String(r.employee ?? '').trim().toLowerCase();
+    return {
+      ...r,
+      avatarUrl:
+        r.avatarUrl ||
+        (r.gdcId && byGdc.get(r.gdcId)) ||
+        (key && byName.get(key)) ||
+        null,
+    };
+  });
+}
+
 export function mapLeaveRowToUi(row) {
   const status = String(row.status ?? 'PENDING');
   const cap = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  const from = dateOnlyFromTimestamp(row.start_date);
+  const to = dateOnlyFromTimestamp(row.end_date);
   return {
     id: String(row.id ?? ''),
     employee: String(row.requester_name ?? row.employee ?? ''),
-    role: displayRoleFromApi(row.role_snapshot ?? row.role ?? ''),
+    role: displayRoleFromApi(row.role_snapshot ?? row.requester_role ?? row.role ?? ''),
+    team: String(row.department ?? row.team ?? '—'),
+    gdcId: String(row.gdc_id ?? ''),
     type: uiLeaveTypeFromApi(row.leave_type),
-    from: dateOnlyFromTimestamp(row.start_date),
-    to: dateOnlyFromTimestamp(row.end_date),
+    from,
+    to,
     reason: String(row.reason ?? ''),
     status: cap === 'Pending' ? 'Pending' : cap === 'Approved' ? 'Approved' : cap === 'Rejected' ? 'Rejected' : cap,
     adminReason: String(row.rejection_reason ?? ''),
+    avatarUrl: avatarUrlFromRow(row),
+    dayCount: leaveDayCount(from, to),
+    createdAt: row.created_at ?? null,
+    statusAt: dateOnlyFromTimestamp(row.created_at),
   };
 }
 
@@ -365,17 +424,23 @@ export function mapLeaveRowToUi(row) {
 export function mapManualRowToUi(row) {
   const status = String(row.status ?? 'PENDING');
   const cap = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  const date = dateOnlyFromTimestamp(row.date);
   return {
     id: String(row.id ?? ''),
     employee: String(row.requester_name ?? row.employee ?? ''),
-    role: displayRoleFromApi(row.role ?? row.role_snapshot ?? ''),
-    date: dateOnlyFromTimestamp(row.date),
+    role: displayRoleFromApi(row.role ?? row.role_snapshot ?? row.requester_role ?? ''),
+    team: String(row.user_department ?? row.department ?? row.team ?? '—'),
+    gdcId: String(row.user_gdc_id ?? row.gdc_id ?? ''),
+    date,
     clockIn: timeLabelFromTimestamp(row.check_in),
     clockOut: row.check_out ? timeLabelFromTimestamp(row.check_out) : '--',
     breakOut: row.break_out ? timeLabelFromTimestamp(row.break_out) : '',
     reason: String(row.reason ?? ''),
     status: cap === 'Pending' ? 'Pending' : cap === 'Approved' ? 'Approved' : cap === 'Rejected' ? 'Rejected' : cap,
     adminReason: String(row.rejection_reason ?? ''),
+    avatarUrl: avatarUrlFromRow(row),
+    createdAt: row.created_at ?? null,
+    statusAt: dateOnlyFromTimestamp(row.created_at),
   };
 }
 

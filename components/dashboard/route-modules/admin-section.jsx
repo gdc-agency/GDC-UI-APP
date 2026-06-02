@@ -42,9 +42,11 @@ export function AdminSection({ styles, ctx }) {
     openShiftDatePicker,
     openShiftTimePicker,
     handleSaveShiftTiming,
+    shiftSaveLoading = false,
     newDepartment,
     setNewDepartment,
     handleAddDepartment,
+    deptAddLoading = false,
     departments,
     setDepartments,
     roleModalOpen,
@@ -62,10 +64,47 @@ export function AdminSection({ styles, ctx }) {
     [selectedAdminUser?.role],
   );
 
+  const closeRoleModal = React.useCallback(() => {
+    if (adminRoleSavingTarget) return;
+    setRoleModalOpen(false);
+    setSelectedAdminUserId(null);
+  }, [adminRoleSavingTarget, setRoleModalOpen, setSelectedAdminUserId]);
+
+  const roleModalIconFor = React.useCallback((roleLabel) => {
+    if (roleLabel === 'Team Leader') return 'account-group-outline';
+    if (roleLabel === 'HR') return 'shield-check-outline';
+    if (roleLabel === 'Admin') return 'shield-account-outline';
+    return 'account-star-outline';
+  }, []);
+
   const adminTabs = [
-    { id: 'employees', title: 'Employees management', icon: 'account-group-outline', color: '#4f46e5', note: 'Create employees, edit profiles, and assign roles.' },
-    { id: 'time', title: 'Time control', icon: 'timer-outline', color: '#f97316', note: 'Manage attendance windows, shifts, and overtime rules.' },
-    { id: 'departments', title: 'Departments control', icon: 'office-building-outline', color: '#0d9488', note: 'Manage departments, hierarchy, and reporting lines.' },
+    {
+      id: 'employees',
+      label: 'Employees',
+      title: 'Employees management',
+      icon: 'account-group-outline',
+      color: '#7c3aed',
+      tintBg: '#f5f3ff',
+      tintBgActive: '#ede9fe',
+    },
+    {
+      id: 'time',
+      label: 'Time Control',
+      title: 'Time control',
+      icon: 'timer-outline',
+      color: '#f97316',
+      tintBg: '#fff7ed',
+      tintBgActive: '#ffedd5',
+    },
+    {
+      id: 'departments',
+      label: 'Departments',
+      title: 'Departments control',
+      icon: 'office-building-outline',
+      color: '#0d9488',
+      tintBg: '#f0fdfa',
+      tintBgActive: '#ccfbf1',
+    },
   ];
   const activeAdminTab = adminTabs.find((tab) => tab.id === adminControlTab) ?? adminTabs[0];
 
@@ -97,58 +136,40 @@ export function AdminSection({ styles, ctx }) {
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Admin Panels</Text>
-          {isCompactMobile ? (
-            <View style={styles.adminTabBar}>
-              <View style={styles.adminTabRow}>
-                {adminTabs.map((tab) => {
-                  const active = adminControlTab === tab.id;
-                  return (
-                    <Pressable
-                      key={tab.id}
-                      onPress={() => onSelectAdminTab(tab.id)}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: active }}
-                      style={[styles.adminTabIconCell, active && styles.adminTabIconCellActive]}>
-                      <View style={[styles.adminTabIconCircle, { backgroundColor: `${tab.color}22` }]}>
-                        <MaterialCommunityIcons name={tab.icon} size={22} color={tab.color} />
-                      </View>
-                      {active ? <View style={styles.adminTabUnderline} /> : <View style={styles.adminTabUnderlineSpacer} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={styles.adminTabActiveLabel} numberOfLines={1}>
-                {activeAdminTab.title}
-              </Text>
+          <View style={styles.adminPanelTabsWrap}>
+            <View style={styles.adminPanelTabsRow}>
+              {adminTabs.map((tab) => {
+                const active = adminControlTab === tab.id;
+                return (
+                  <Pressable
+                    key={tab.id}
+                    onPress={() => onSelectAdminTab(tab.id)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={tab.label}
+                    style={styles.adminPanelTab}>
+                    <View
+                      style={[
+                        styles.adminPanelTabIconWrap,
+                        { backgroundColor: active ? tab.tintBgActive : tab.tintBg },
+                      ]}>
+                      <MaterialCommunityIcons name={tab.icon} size={28} color={tab.color} />
+                    </View>
+                    {active ? (
+                      <View style={[styles.adminPanelTabIndicator, { backgroundColor: tab.color }]} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
             </View>
-          ) : (
-            <View style={styles.adminGrid}>
-              {adminTabs.map((tab) => (
-                <Pressable
-                  key={tab.id}
-                  onPress={() => onSelectAdminTab(tab.id)}
-                  style={[styles.adminCard, adminControlTab === tab.id && styles.adminCardActive]}>
-                  <View style={[styles.adminIconWrap, { backgroundColor: `${tab.color}22` }]}>
-                    <MaterialCommunityIcons name={tab.icon} size={20} color={tab.color} />
-                  </View>
-                  <Text style={styles.adminCardTitle}>{tab.title}</Text>
-                  <MaterialCommunityIcons
-                    name={adminControlTab === tab.id ? 'check-circle' : 'chevron-right-circle-outline'}
-                    size={20}
-                    color={adminControlTab === tab.id ? '#2563eb' : '#94a3b8'}
-                    style={styles.adminCardStatusIcon}
-                  />
-                </Pressable>
-              ))}
-            </View>
-          )}
+          </View>
         </View>
 
         {activeAdminTab.id === 'employees' ? (
-          <View style={styles.panel}>
+          <View style={[styles.panel, styles.adminTabContentPanel]}>
             <Text style={styles.panelTitle}>Employees Management</Text>
             <View style={styles.adminFilterCard}>
-              <View style={styles.chipRow}>
+              <View style={styles.adminRoleChipRow}>
                 {['All', 'Employee', 'Team Leader', 'HR', 'Pending'].map((filter) => (
                   <Pressable key={filter} onPress={() => setAdminRoleFilter(filter)} style={[styles.filterChip, adminRoleFilter === filter && styles.filterChipActive]}>
                     <Text style={[styles.filterChipText, adminRoleFilter === filter && styles.filterChipTextActive]}>{filter}</Text>
@@ -156,7 +177,6 @@ export function AdminSection({ styles, ctx }) {
                 ))}
               </View>
               <View style={[styles.searchWrap, { marginTop: 10 }]}>
-                <MaterialCommunityIcons name="identifier" size={16} color="#94a3b8" />
                 <TextInput
                   value={adminUserSearch}
                   onChangeText={setAdminUserSearch}
@@ -249,16 +269,17 @@ export function AdminSection({ styles, ctx }) {
         ) : null}
 
         {activeAdminTab.id === 'time' ? (
-          <View style={styles.panel}>
+          <View style={[styles.panel, styles.adminTabContentPanel]}>
             <Text style={styles.panelTitle}>Time Control</Text>
-            <View style={styles.timeHeroCard}>
-              <View style={styles.timeHeroIconWrap}>
-                <MaterialCommunityIcons name="timer-sand" size={20} color="#f97316" />
+            <View style={styles.timeControlStack}>
+              <View style={styles.timeHeroCard}>
+                <MaterialCommunityIcons name="calendar-clock" size={36} color="#f97316" />
+                <View style={styles.timeHeroTextCol}>
+                  <Text style={styles.timeHeroTitle}>Company office shift</Text>
+                  <Text style={styles.timeHeroSub}>Set office working hours for selected date</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.timeHeroTitle}>Company office shift by date</Text>
-              </View>
-            </View>
+              <View style={styles.timeControlFormBlock}>
             <View style={styles.timeFormRow}>
               <View style={styles.timeField}>
                 <Text style={styles.timeFieldLabel}>Date</Text>
@@ -291,103 +312,146 @@ export function AdminSection({ styles, ctx }) {
               </View>
             </View>
             <View style={styles.timeSaveRow}>
-              <Pressable style={styles.timeSaveBtn} onPress={handleSaveShiftTiming}>
-                <Text style={styles.timeSaveText}>Save shift timing</Text>
+              <Pressable
+                style={[styles.timeSaveBtn, shiftSaveLoading && styles.adminPrimaryBtnDisabled]}
+                onPress={handleSaveShiftTiming}
+                disabled={shiftSaveLoading}>
+                {shiftSaveLoading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <MaterialCommunityIcons name="calendar-blank-outline" size={20} color="#ffffff" />
+                )}
+                <Text style={styles.timeSaveText}>{shiftSaveLoading ? 'Saving…' : 'Save Shift Timing'}</Text>
               </Pressable>
+            </View>
+              </View>
             </View>
           </View>
         ) : null}
 
         {activeAdminTab.id === 'departments' ? (
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Departments control</Text>
-            <Text style={styles.panelSub}>Manage the departments shown in forms and filters.</Text>
-            <View style={styles.deptAddCard}>
-              <Text style={styles.deptSectionLabel}>Add department</Text>
-              <View style={styles.deptAddRow}>
-                <View style={styles.deptInputWrap}>
-                  <TextInput
-                    value={newDepartment}
-                    onChangeText={setNewDepartment}
-                    placeholder="e.g. Graphic Design"
-                    placeholderTextColor="#94a3b8"
-                    style={styles.deptInput}
-                  />
+          <View style={[styles.panel, styles.adminTabContentPanel]}>
+            <View style={styles.deptHeaderRow}>
+              <View style={styles.deptHeaderTextCol}>
+                <Text style={styles.deptHeaderTitle}>Departments</Text>
+                <Text style={styles.deptHeaderSub}>Manage all company departments.</Text>
+              </View>
+              <View style={styles.deptTotalBadge}>
+                <Text style={styles.deptTotalBadgeText}>{departments.length} Total</Text>
+              </View>
+            </View>
+
+            <View style={styles.deptNameInputWrap}>
+              <TextInput
+                value={newDepartment}
+                onChangeText={setNewDepartment}
+                placeholder="e.g. Graphic Design"
+                placeholderTextColor="#94a3b8"
+                style={styles.deptNameInput}
+              />
+            </View>
+
+            <Pressable
+              style={[styles.deptAddPrimaryBtn, deptAddLoading && styles.adminPrimaryBtnDisabled]}
+              onPress={handleAddDepartment}
+              disabled={deptAddLoading}>
+              {deptAddLoading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <MaterialCommunityIcons name="plus" size={22} color="#ffffff" />
+              )}
+              <Text style={styles.deptAddPrimaryText}>{deptAddLoading ? 'Adding…' : 'Add Department'}</Text>
+            </Pressable>
+
+            {departments.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyText}>No departments yet.</Text>
+              </View>
+            ) : (
+              departments.map((dept) => (
+                <View key={dept} style={styles.deptRow}>
+                  <Text style={styles.deptName}>{dept}</Text>
+                  <Pressable
+                    style={styles.deptRemoveBtn}
+                    onPress={() => handleRemoveDepartment?.(dept)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${dept}`}
+                    hitSlop={8}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={18} color="#ef4444" />
+                  </Pressable>
                 </View>
-                <Pressable style={styles.deptAddBtn} onPress={handleAddDepartment}>
-                  <MaterialCommunityIcons name="plus" size={16} color="#fff" />
-                  <Text style={styles.deptAddText}>Add</Text>
-                </Pressable>
-              </View>
-            </View>
-            <View style={styles.deptListHeader}>
-              <Text style={styles.deptSectionLabel}>Current departments</Text>
-              <Text style={styles.deptTotalText}>{departments.length} total</Text>
-            </View>
-            {departments.map((dept) => (
-              <View key={dept} style={styles.deptRow}>
-                <Text style={styles.deptName}>{dept}</Text>
-                <Pressable style={styles.deptRemoveBtn} onPress={() => handleRemoveDepartment?.(dept)}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
-                  <Text style={styles.deptRemoveText}>Remove</Text>
-                </Pressable>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         ) : null}
       </ScrollView>
-      <Modal
-        visible={roleModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (adminRoleSavingTarget) return;
-          setRoleModalOpen(false);
-          setSelectedAdminUserId(null);
-        }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.adminRoleModal}>
+      <Modal visible={roleModalOpen} transparent animationType="fade" onRequestClose={closeRoleModal}>
+        <Pressable style={styles.modalOverlay} onPress={closeRoleModal}>
+          <Pressable style={styles.adminRoleModal} onPress={(e) => e.stopPropagation()}>
             <View style={styles.adminRoleModalHead}>
               <View style={styles.adminRoleModalIcon}>
-                <MaterialCommunityIcons name="shield-account-outline" size={22} color="#2563eb" />
+                <MaterialCommunityIcons name="account-star-outline" size={24} color="#2563eb" />
               </View>
               <Pressable
-                onPress={() => {
-                  if (adminRoleSavingTarget) return;
-                  setRoleModalOpen(false);
-                  setSelectedAdminUserId(null);
-                }}
-                disabled={Boolean(adminRoleSavingTarget)}>
-                <MaterialCommunityIcons name="close" size={20} color="#94a3b8" />
+                style={styles.adminRoleModalClose}
+                onPress={closeRoleModal}
+                disabled={Boolean(adminRoleSavingTarget)}
+                hitSlop={8}>
+                <MaterialCommunityIcons name="close" size={22} color="#94a3b8" />
               </Pressable>
             </View>
+
             <Text style={styles.adminRoleTitle}>Promote or change role</Text>
             <Text style={styles.adminRoleUserName}>{selectedAdminUser?.name ?? 'Employee'}</Text>
-            <Text style={styles.adminRoleUserId}>{selectedAdminUser?.gdcId ?? ''}</Text>
-            <View style={{ marginTop: 10, gap: 8 }}>
-              {promoteRoleOptions.map((roleOption) => (
-                <Pressable
-                  key={roleOption}
-                  style={[styles.adminRoleOption, adminRoleSavingTarget === roleOption && { opacity: 0.92 }]}
-                  disabled={Boolean(adminRoleSavingTarget)}
-                  onPress={() => applyAdminRole(roleOption)}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    {adminRoleSavingTarget === roleOption ? (
-                      <ActivityIndicator size="small" color="#2563eb" />
-                    ) : null}
-                    <Text
+            <Text style={styles.adminRoleUserId}>
+              {selectedAdminUser?.gdcId ? `ID: ${selectedAdminUser.gdcId}` : ''}
+            </Text>
+
+            <View style={styles.adminRoleOptionsList}>
+              {promoteRoleOptions.map((roleOption) => {
+                const selected = selectedAdminUser?.role === roleOption;
+                const saving = adminRoleSavingTarget === roleOption;
+                const iconName = roleModalIconFor(roleOption);
+                return (
+                  <Pressable
+                    key={roleOption}
+                    style={[
+                      styles.adminRoleOption,
+                      selected && styles.adminRoleOptionSelected,
+                      adminRoleSavingTarget && adminRoleSavingTarget !== roleOption && { opacity: 0.45 },
+                    ]}
+                    disabled={Boolean(adminRoleSavingTarget)}
+                    onPress={() => applyAdminRole(roleOption)}>
+                    <View
                       style={[
-                        styles.adminRoleOptionText,
-                        adminRoleSavingTarget && adminRoleSavingTarget !== roleOption ? { opacity: 0.4 } : undefined,
+                        styles.adminRoleOptionIconWrap,
+                        selected && styles.adminRoleOptionIconWrapSelected,
                       ]}>
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#2563eb" />
+                      ) : (
+                        <MaterialCommunityIcons
+                          name={iconName}
+                          size={20}
+                          color={selected ? '#2563eb' : '#94a3b8'}
+                        />
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.adminRoleOptionText, selected && styles.adminRoleOptionTextSelected]}
+                      numberOfLines={1}>
                       {roleOption}
                     </Text>
-                  </View>
-                </Pressable>
-              ))}
+                  </Pressable>
+                );
+              })}
             </View>
-          </View>
-        </View>
+
+            <Pressable style={styles.adminRoleCancelBtn} onPress={closeRoleModal} disabled={Boolean(adminRoleSavingTarget)}>
+              <Text style={styles.adminRoleCancelBtnText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );

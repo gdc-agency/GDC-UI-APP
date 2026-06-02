@@ -137,22 +137,6 @@ export function TeamsManagementSection({
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {typeof onSearchChange === 'function' ? (
-          <View style={styles.searchPanel}>
-            <Text style={styles.searchPanelTitle}>Search & filter</Text>
-            <View style={styles.searchRow}>
-              <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
-              <TextInput
-                value={searchQuery}
-                onChangeText={onSearchChange}
-                placeholder="Name, email, team, leader, department…"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-              />
-            </View>
-          </View>
-        ) : null}
-
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="account-group-outline" size={20} color="#fff" />
@@ -164,10 +148,25 @@ export function TeamsManagementSection({
                 ? 'Loading teams…'
                 : error
                   ? 'Could not load roster'
-                  : `${rosterSummary.nTeams} team${rosterSummary.nTeams !== 1 ? 's' : ''} · ${rosterSummary.nPeople} people`}
+                  : `${rosterSummary.nTeams} team${rosterSummary.nTeams !== 1 ? 's' : ''}`}
             </Text>
           </View>
         </View>
+
+        {typeof onSearchChange === 'function' ? (
+          <View style={styles.searchPanel}>
+            <View style={styles.searchRow}>
+              <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+              <TextInput
+                value={searchQuery}
+                onChangeText={onSearchChange}
+                placeholder="Search team name…"
+                placeholderTextColor="#94a3b8"
+                style={styles.searchInput}
+              />
+            </View>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -286,13 +285,6 @@ export function TeamsManagementSection({
                               </Text>
                             </View>
                             <View style={styles.collapsedVBar} />
-                            <View style={styles.collapsedSeg}>
-                              <MaterialCommunityIcons name="shield-check-outline" size={15} color="#94a3b8" />
-                              <Text style={styles.collapsedSegText} numberOfLines={1}>
-                                {abbrevRole(team.lineRoleLabel ?? team.leaderRole)}
-                              </Text>
-                            </View>
-                            <View style={styles.collapsedVBar} />
                             <View style={[styles.collapsedSeg, styles.collapsedSegMembers]}>
                               <MaterialCommunityIcons name="account-outline" size={15} color="#94a3b8" />
                               <Text style={styles.collapsedSegText} numberOfLines={1}>
@@ -326,14 +318,6 @@ export function TeamsManagementSection({
                         <View style={styles.gridValueRow}>
                           <MaterialCommunityIcons name="office-building-outline" size={16} color="#0d9488" />
                           <Text style={styles.gridValue}>{team.department}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.gridDivider} />
-                      <View style={styles.gridCell}>
-                        <Text style={styles.gridLabel}>ROLE</Text>
-                        <View style={styles.gridValueRow}>
-                          <MaterialCommunityIcons name="shield-account-outline" size={16} color="#6366f1" />
-                          <Text style={styles.gridValue}>{abbrevRole(team.leaderRole)}</Text>
                         </View>
                       </View>
                       <View style={styles.gridDivider} />
@@ -421,7 +405,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
-  searchPanelTitle: { fontSize: 13, fontWeight: '800', color: BrandColors.text, marginBottom: 8 },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',

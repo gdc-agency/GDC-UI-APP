@@ -2,20 +2,21 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Animated,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { isAdminRole } from '@/utils/roles';
+import { promptTaskAttachmentActions } from '@/utils/task-document-open';
 
 export function ProjectManagerSection({
   styles,
@@ -31,7 +32,8 @@ export function ProjectManagerSection({
   setProjectFromDate,
   projectToDate,
   setProjectToDate,
-  setCreateTaskOpen,
+  openCreateProjectTaskModal,
+  closeProjectTaskModal,
   projectTasksLoading,
   filteredProjectTasks,
   setSelectedProjectTask,
@@ -181,7 +183,7 @@ export function ProjectManagerSection({
           </View>
         </View>
 
-        <View style={styles.panel}>
+        <View style={[styles.panel, { marginTop: 8 }]}>
           <Text style={styles.panelTitle}>Filters</Text>
           <Text style={styles.panelSub}>Search by task, filter by status and deadline range.</Text>
           <View style={styles.searchWrap}>
@@ -245,7 +247,6 @@ export function ProjectManagerSection({
                 ellipsizeMode="tail">
                 {projectFromDate?.trim() && /^\d{4}-\d{2}-\d{2}$/.test(projectFromDate.trim()) ? projectFromDate.trim() : 'From'}
               </Text>
-              <MaterialCommunityIcons name="chevron-down" size={18} color="#94a3b8" />
             </Pressable>
             <Pressable
               style={styles.filterDateField}
@@ -262,7 +263,6 @@ export function ProjectManagerSection({
                 ellipsizeMode="tail">
                 {projectToDate?.trim() && /^\d{4}-\d{2}-\d{2}$/.test(projectToDate.trim()) ? projectToDate.trim() : 'To'}
               </Text>
-              <MaterialCommunityIcons name="chevron-down" size={18} color="#94a3b8" />
             </Pressable>
           </View>
           {projectFromDate?.trim() || projectToDate?.trim() ? (
@@ -278,13 +278,13 @@ export function ProjectManagerSection({
             </Pressable>
           ) : null}
           {isAdminRole(user?.role) ? (
-            <Pressable style={styles.actionBtn} onPress={() => setCreateTaskOpen(true)}>
+            <Pressable style={[styles.actionBtn, { alignSelf: 'stretch', alignItems: 'center' }]} onPress={openCreateProjectTaskModal}>
               <Text style={styles.actionBtnText}>Create Task</Text>
             </Pressable>
           ) : null}
         </View>
 
-        <View style={styles.panel}>
+        <View style={[styles.panel, { marginTop: 12 }]}>
           <Text style={styles.panelTitle}>Task List</Text>
           <Text style={styles.panelSub}>Project tasks matching current filters.</Text>
           {projectTasksLoading ? (
@@ -306,7 +306,7 @@ export function ProjectManagerSection({
                 </View>
                 <View style={styles.projectMainCol}>
                   <View style={styles.projectCardTop}>
-                    <Text style={styles.projectTitle} numberOfLines={isCompactMobile ? 2 : 1}>
+                    <Text style={styles.projectTitle} numberOfLines={1} ellipsizeMode="tail">
                       {task.title}
                     </Text>
                     {isAdminRole(user?.role) ? (
@@ -332,8 +332,8 @@ export function ProjectManagerSection({
                   </View>
                   <View style={styles.projectInfoLine}>
                     <MaterialCommunityIcons name="briefcase-outline" size={17} color="#f97316" />
-                    <Text style={styles.projectInfoText} numberOfLines={1}>
-                      {task.description || 'Web Development'}
+                    <Text style={styles.projectInfoText} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit={false}>
+                      {task.description || '—'}
                     </Text>
                   </View>
                   <View style={styles.projectInfoLine}>
@@ -344,7 +344,19 @@ export function ProjectManagerSection({
                     <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
                     <Text style={styles.projectDueText}>{formatProjectDueDate(task.deadline)}</Text>
                   </View>
-                  {task.attachmentName ? <Text style={styles.projectLinkText}>Attachment: {task.attachmentName}</Text> : null}
+                  {task.attachmentName ? (
+                    <View style={styles.projectAttachmentRow}>
+                      <View style={styles.projectAttachmentIconWrap}>
+                        <MaterialCommunityIcons name="paperclip" size={16} color="#2563eb" />
+                      </View>
+                      <View style={styles.projectAttachmentTextWrap}>
+                        <Text style={styles.projectAttachmentLabel}>Attachment</Text>
+                        <Text style={styles.projectAttachmentName} numberOfLines={1} ellipsizeMode="tail">
+                          {task.attachmentName}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               </Pressable>
             ))
@@ -352,7 +364,7 @@ export function ProjectManagerSection({
         </View>
       </ScrollView>
 
-      <Modal visible={createTaskOpen} transparent animationType="slide" onRequestClose={() => setCreateTaskOpen(false)}>
+      <Modal visible={createTaskOpen} transparent animationType="slide" onRequestClose={closeProjectTaskModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
             <ScrollView
@@ -493,7 +505,7 @@ export function ProjectManagerSection({
                     <Pressable style={styles.attachmentBtn} onPress={handlePickTaskAttachment}>
                       <Text style={styles.attachmentBtnText}>Choose file</Text>
                     </Pressable>
-                    <Text style={styles.attachmentFileText} numberOfLines={1}>
+                    <Text style={styles.attachmentFileText} numberOfLines={1} ellipsizeMode="middle">
                       {taskAttachmentName || 'No file chosen'}
                     </Text>
                   </View>
@@ -521,7 +533,7 @@ export function ProjectManagerSection({
                       (saveProjectTaskPhase === 'saving' || saveProjectTaskPhase === 'success') && styles.modalPrimaryBtnDisabled,
                     ]}
                     disabled={saveProjectTaskPhase === 'saving' || saveProjectTaskPhase === 'success'}
-                    onPress={() => setCreateTaskOpen(false)}>
+                    onPress={closeProjectTaskModal}>
                     <Text style={styles.cancelBtnText}>Cancel</Text>
                   </Pressable>
                   <Pressable
@@ -680,13 +692,17 @@ export function ProjectManagerSection({
                     <Text style={styles.detailTitle}>{selectedProjectTask?.title}</Text>
                     <Text style={styles.detailBody}>{selectedProjectTask?.description || 'No description'}</Text>
                     {selectedProjectTask?.attachmentName ? (
-                      <View style={styles.taskDetailAttachmentCard}>
+                      <Pressable
+                        style={styles.taskDetailAttachmentCard}
+                        onPress={() => promptTaskAttachmentActions(selectedProjectTask)}>
                         <Text style={styles.taskDetailAttachmentLabel}>Attachment</Text>
                         <View style={styles.taskDetailAttachmentRow}>
                           <MaterialCommunityIcons name="paperclip" size={18} color="#2563eb" />
-                          <Text style={styles.taskDetailAttachmentName}>{selectedProjectTask.attachmentName}</Text>
+                          <Text style={styles.taskDetailAttachmentName} numberOfLines={2} ellipsizeMode="tail">
+                            {selectedProjectTask.attachmentName}
+                          </Text>
                         </View>
-                      </View>
+                      </Pressable>
                     ) : null}
                     <View style={styles.projectIdentityRow}>
                       <View style={styles.forwardTeamPill}>

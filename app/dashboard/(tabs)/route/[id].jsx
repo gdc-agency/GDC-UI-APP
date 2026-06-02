@@ -1,96 +1,95 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { DashboardTopbar } from '@/components/dashboard/topbar';
-import { AvailabilitySection } from '@/components/dashboard/route-modules/availability-section';
 import { AdminSection } from '@/components/dashboard/route-modules/admin-section';
+import { AvailabilitySection } from '@/components/dashboard/route-modules/availability-section';
 import { DailyUpdatesSection } from '@/components/dashboard/route-modules/daily-updates-section';
 import { ProjectManagerSection } from '@/components/dashboard/route-modules/project-manager-section';
 import { RequestsSection } from '@/components/dashboard/route-modules/requests-section';
 import routeDetailStyles from '@/components/dashboard/route-modules/route-detail-styles';
 import { TeamsManagementSection } from '@/components/dashboard/route-modules/teams-management-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
+import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { GDC_MODULES } from '@/constants/gdc-modules';
 import { useAuth } from '@/context/auth-context';
 import {
-  approveTask as approveTaskApi,
-  approveUser,
-  createDepartment,
-  createTask as createTaskApi,
-  deleteDepartment,
-  deleteTask as deleteTaskApi,
-  forwardTaskToTeamLeader,
-  getAllUsers,
-  getLeadershipDailyOverview,
-  getPendingUsersList,
-  getTaskAssignableUsers,
-  getTeamLeaderDailyBundle,
-  getTeams,
-  listDepartments,
-  listMyEmployeeDailyUpdates,
-  listTasks,
-  rejectUser,
-  sendTaskToReview,
-  startTaskWork,
-  submitTask as submitTaskApi,
-  updateTask as updateTaskApi,
-  updateUserRole,
-  upsertHrDailySummary,
-  upsertMyEmployeeDailyUpdate,
-  upsertTeamLeaderDailySummary,
-  approveLeaveRequest as approveLeaveRequestApi,
-  approveManualTimeRequest as approveManualTimeRequestApi,
-  createLeaveRequest as createLeaveRequestApi,
-  createManualTimeRequest as createManualTimeRequestApi,
-  getAttendance30Days,
-  getAttendance7Days,
-  getAttendanceSummary,
-  getClockHistory,
-  getClockRecords,
-  getCurrentShift,
-  getManualTimesheetRecords,
-  listLeaveRequests,
-  listManualTimeRequests,
-  rejectLeaveRequest as rejectLeaveRequestApi,
-  rejectManualTimeRequest as rejectManualTimeRequestApi,
-  saveShiftTiming,
+    approveLeaveRequest as approveLeaveRequestApi,
+    approveManualTimeRequest as approveManualTimeRequestApi,
+    approveTask as approveTaskApi,
+    approveUser,
+    createDepartment,
+    createLeaveRequest as createLeaveRequestApi,
+    createManualTimeRequest as createManualTimeRequestApi,
+    createTask as createTaskApi,
+    deleteDepartment,
+    deleteTask as deleteTaskApi,
+    forwardTaskToTeamLeader,
+    getAllUsers,
+    getAttendance30Days,
+    getAttendance7Days,
+    getAttendanceSummary,
+    getClockHistory,
+    getClockRecords,
+    getCurrentShift,
+    getLeadershipDailyOverview,
+    getManualTimesheetRecords,
+    getPendingUsersList,
+    getTaskAssignableUsers,
+    getTeamLeaderDailyBundle,
+    getTeams,
+    listDepartments,
+    listLeaveRequests,
+    listManualTimeRequests,
+    listMyEmployeeDailyUpdates,
+    listTasks,
+    rejectLeaveRequest as rejectLeaveRequestApi,
+    rejectManualTimeRequest as rejectManualTimeRequestApi,
+    rejectUser,
+    saveShiftTiming,
+    sendTaskToReview,
+    startTaskWork,
+    submitTask as submitTaskApi,
+    updateTask as updateTaskApi,
+    updateUserRole,
+    upsertHrDailySummary,
+    upsertMyEmployeeDailyUpdate,
+    upsertTeamLeaderDailySummary,
 } from '@/services/api';
 import {
-  apiLeaveTypeFromUi,
-  apiRoleFromDisplayFilter,
-  apiTimeFromAmPm,
-  buildAttendanceRows,
-  displayRoleFromApi,
-  filterAttendanceOverviewUsers,
-  isExcludedAttendanceOverviewRole,
-  mapClockHistoryToAvailabilityLog,
-  mapClockHistoryToLog,
-  mapLeaveRowToUi,
-  mapManualRowToUi,
-  mapRecordRowToTimesheetLog,
-  mapSevenDayUserRow,
-  mapSummaryUserToAvailability,
-  mapThirtyDayUserRow,
-  mapTodaySummaryUserRow,
-  enrichTimesheetUserAvatars,
-  amPmFromApiTime,
-  timeLabelFromTimestamp,
-} from '@/utils/attendance-ui-map';
-import { resolveProfileImageUri } from '@/utils/chat-directory';
-import {
-  isApprovedRow,
-  isVerifiedRow,
-  normalizeApprovedUsersList,
-  normalizePendingUsersList,
+    isApprovedRow,
+    isVerifiedRow,
+    normalizeApprovedUsersList,
+    normalizePendingUsersList,
 } from '@/utils/admin-api-response';
 import { apiRoleFromDisplay, isRolePromotionAllowed, mapApprovedUserRow, mapPendingUserRow } from '@/utils/admin-directory';
+import {
+    amPmFromApiTime,
+    apiLeaveTypeFromUi,
+    apiRoleFromDisplayFilter,
+    apiTimeFromAmPm,
+    buildAttendanceRows,
+    enrichRequestsWithAvatars,
+    enrichTimesheetUserAvatars,
+    filterAttendanceOverviewUsers,
+    isExcludedAttendanceOverviewRole,
+    mapClockHistoryToAvailabilityLog,
+    mapClockHistoryToLog,
+    mapLeaveRowToUi,
+    mapManualRowToUi,
+    mapRecordRowToTimesheetLog,
+    mapSevenDayUserRow,
+    mapSummaryUserToAvailability,
+    mapThirtyDayUserRow,
+    mapTodaySummaryUserRow
+} from '@/utils/attendance-ui-map';
 import { buildTeamsManagementGroups } from '@/utils/build-team-assignments';
-import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
+import { resolveProfileImageUri } from '@/utils/chat-directory';
 import { isAdminOrHrRole, isAdminRole } from '@/utils/roles';
+import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
 import { normalizeTeamsList } from '@/utils/teams-api-response';
 
 /** Background refresh while Task / Daily Updates routes are open (same cadence as dashboard home). */
@@ -186,6 +185,8 @@ export default function RouteDetailScreen() {
   const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [newDepartment, setNewDepartment] = useState('');
+  const [shiftSaveLoading, setShiftSaveLoading] = useState(false);
+  const [deptAddLoading, setDeptAddLoading] = useState(false);
   const [timesheetWindow, setTimesheetWindow] = useState('7d');
   const [tlTimesheetTab, setTlTimesheetTab] = useState('my-attendance');
   const [myRequestsTab, setMyRequestsTab] = useState('leave');
@@ -228,6 +229,7 @@ export default function RouteDetailScreen() {
   const [manualReason, setManualReason] = useState('');
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('All');
   const [manualStatusFilter, setManualStatusFilter] = useState('All');
+  const [requestAdminSearch, setRequestAdminSearch] = useState('');
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState(null);
   const [rejectTargetType, setRejectTargetType] = useState('leave');
@@ -437,6 +439,22 @@ export default function RouteDetailScreen() {
     if (slug === 'project-manager' && status) {
       setProjectStatusFilter(String(status).toLowerCase());
       setProjectStatusMenuOpen(false);
+    }
+    if (slug === 'availability' && filter) {
+      const q = String(filter).toLowerCase();
+      if (q === 'present') {
+        setAvailabilityQuickFilter('present');
+        setAvailabilityStatusFilter('Available');
+      } else if (q === 'absent') {
+        setAvailabilityQuickFilter('absent');
+        setAvailabilityStatusFilter('Unavailable');
+      } else if (q === 'leave') {
+        setAvailabilityQuickFilter('leave');
+        setAvailabilityStatusFilter('Leave');
+      } else if (q === 'all') {
+        setAvailabilityQuickFilter('all');
+        setAvailabilityStatusFilter('all');
+      }
     }
   }, [params.filter, params.status, params.tab, slug]);
   const reportingYmd = useMemo(() => {
@@ -684,8 +702,7 @@ export default function RouteDetailScreen() {
     const q = teamAssignSearch.trim().toLowerCase();
     if (!q) return teamsManagementGroups;
     return teamsManagementGroups.filter((t) => {
-      const hay = `${t.name} ${t.leaderName} ${t.department} ${t.members.map((m) => `${m.name} ${m.email} ${m.role}`).join(' ')}`.toLowerCase();
-      return hay.includes(q);
+      return String(t.name || '').toLowerCase().includes(q);
     });
   }, [teamsManagementGroups, teamAssignSearch]);
 
@@ -717,8 +734,20 @@ export default function RouteDetailScreen() {
 
       if (slug === 'request-management' || slug === 'my-requests') {
         const [leaves, manuals] = await Promise.all([listLeaveRequests(token), listManualTimeRequests(token)]);
-        setLeaveRequests(leaves.map((row) => mapLeaveRowToUi(row)));
-        setManualRequests(manuals.map((row) => mapManualRowToUi(row)));
+        let leaveUi = leaves.map((row) => mapLeaveRowToUi(row));
+        let manualUi = manuals.map((row) => mapManualRowToUi(row));
+        if (leaveUi.some((r) => !r.avatarUrl) || manualUi.some((r) => !r.avatarUrl)) {
+          try {
+            const authRes = await getAllUsers(token, { approvedOnly: true });
+            const profileRows = normalizeApprovedUsersList(authRes);
+            leaveUi = enrichRequestsWithAvatars(leaveUi, profileRows);
+            manualUi = enrichRequestsWithAvatars(manualUi, profileRows);
+          } catch {
+            /* use requester_avatar from attendance DB */
+          }
+        }
+        setLeaveRequests(leaveUi);
+        setManualRequests(manualUi);
         return;
       }
 
@@ -1124,9 +1153,22 @@ export default function RouteDetailScreen() {
   }, [leaveRequests, user]);
 
   const filteredAdminLeaveRequests = useMemo(() => {
-    if (leaveStatusFilter === 'All') return leaveRequests;
-    return leaveRequests.filter((r) => r.status === leaveStatusFilter);
-  }, [leaveRequests, leaveStatusFilter]);
+    const q = requestAdminSearch.trim().toLowerCase();
+    let list = leaveStatusFilter === 'All' ? leaveRequests : leaveRequests.filter((r) => r.status === leaveStatusFilter);
+    if (!q) return list;
+    return list.filter((r) =>
+      `${r.employee} ${r.role} ${r.team} ${r.type} ${r.reason} ${r.gdcId}`.toLowerCase().includes(q),
+    );
+  }, [leaveRequests, leaveStatusFilter, requestAdminSearch]);
+
+  const filteredAdminManualRequests = useMemo(() => {
+    const q = requestAdminSearch.trim().toLowerCase();
+    let list = manualStatusFilter === 'All' ? manualRequests : manualRequests.filter((r) => r.status === manualStatusFilter);
+    if (!q) return list;
+    return list.filter((r) =>
+      `${r.employee} ${r.role} ${r.team} ${r.reason} ${r.gdcId} ${r.date}`.toLowerCase().includes(q),
+    );
+  }, [manualRequests, manualStatusFilter, requestAdminSearch]);
 
   const filteredMyLeaveRequests = useMemo(() => {
     if (leaveStatusFilter === 'All') return myLeaveRequests;
@@ -1249,7 +1291,8 @@ export default function RouteDetailScreen() {
   };
 
   const handleSaveShiftTiming = async () => {
-    if (!token || !shiftDate || !shiftStart || !shiftEnd) return;
+    if (!token || !shiftDate || !shiftStart || !shiftEnd || shiftSaveLoading) return;
+    setShiftSaveLoading(true);
     try {
       await saveShiftTiming(token, {
         shift_start: apiTimeFromAmPm(shiftStart),
@@ -1259,6 +1302,8 @@ export default function RouteDetailScreen() {
       Alert.alert('Saved', 'Shift timing updated.');
     } catch (err) {
       Alert.alert('Shift save failed', err instanceof Error ? err.message : 'Could not save shift');
+    } finally {
+      setShiftSaveLoading(false);
     }
   };
 
@@ -1520,13 +1565,16 @@ export default function RouteDetailScreen() {
 
   const handleAddDepartment = async () => {
     const name = newDepartment.trim();
-    if (!name || !token) return;
+    if (!name || !token || deptAddLoading) return;
+    setDeptAddLoading(true);
     try {
       await createDepartment(token, name);
       setNewDepartment('');
       await fetchDepartments();
     } catch (e) {
       Alert.alert('Add department', e?.message ?? 'Could not add department');
+    } finally {
+      setDeptAddLoading(false);
     }
   };
 
@@ -1564,6 +1612,17 @@ export default function RouteDetailScreen() {
     setForwardTlName('');
     setForwardTlId(null);
     setEditingTaskId(null);
+    setSaveProjectTaskPhase('idle');
+  };
+
+  const closeProjectTaskModal = () => {
+    setCreateTaskOpen(false);
+    resetProjectForm();
+  };
+
+  const openCreateProjectTaskModal = () => {
+    resetProjectForm();
+    setCreateTaskOpen(true);
   };
 
   const handlePickTaskAttachment = async () => {
@@ -1620,8 +1679,7 @@ export default function RouteDetailScreen() {
         await loadProjectTasks();
         setSaveProjectTaskPhase('success');
         await new Promise((r) => setTimeout(r, 480));
-        setCreateTaskOpen(false);
-        resetProjectForm();
+        closeProjectTaskModal();
       } catch (e) {
         Alert.alert('Tasks', e?.message ?? 'Update failed');
       } finally {
@@ -1653,8 +1711,7 @@ export default function RouteDetailScreen() {
       setSaveProjectTaskPhase('success');
       await new Promise((r) => setTimeout(r, 480));
       setProjectStatusFilter('pending');
-      setCreateTaskOpen(false);
-      resetProjectForm();
+      closeProjectTaskModal();
     } catch (e) {
       Alert.alert('Tasks', e?.message ?? 'Could not create task');
     } finally {
@@ -1918,7 +1975,8 @@ export default function RouteDetailScreen() {
         setProjectFromDate={setProjectFromDate}
         projectToDate={projectToDate}
         setProjectToDate={setProjectToDate}
-        setCreateTaskOpen={setCreateTaskOpen}
+        openCreateProjectTaskModal={openCreateProjectTaskModal}
+        closeProjectTaskModal={closeProjectTaskModal}
         projectTasksLoading={projectTasksLoading}
         filteredProjectTasks={filteredProjectTasks}
         setSelectedProjectTask={setSelectedProjectTask}
@@ -2092,9 +2150,11 @@ export default function RouteDetailScreen() {
           openShiftDatePicker,
           openShiftTimePicker,
           handleSaveShiftTiming,
+          shiftSaveLoading,
           newDepartment,
           setNewDepartment,
           handleAddDepartment,
+          deptAddLoading,
           departments,
           setDepartments,
           roleModalOpen,
@@ -2125,6 +2185,9 @@ export default function RouteDetailScreen() {
           setLeaveStatusFilter,
           manualRequests,
           filteredAdminLeaveRequests,
+          filteredAdminManualRequests,
+          requestAdminSearch,
+          setRequestAdminSearch,
           updateManualStatus,
           updateLeaveStatus,
           openRejectModal,

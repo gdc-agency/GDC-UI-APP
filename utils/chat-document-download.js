@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  createDownloadResumable,
-  documentDirectory,
-  downloadAsync,
-  getInfoAsync,
-  makeDirectoryAsync,
-  writeAsStringAsync,
+    createDownloadResumable,
+    documentDirectory,
+    downloadAsync,
+    getInfoAsync,
+    makeDirectoryAsync,
+    writeAsStringAsync,
 } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
