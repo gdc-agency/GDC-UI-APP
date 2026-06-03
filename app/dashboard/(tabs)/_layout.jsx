@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, usePathname } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlobalChatNotice } from '@/components/chat/global-chat-notice';
@@ -12,7 +12,7 @@ import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcNotificationRealtime } from '@/hooks/useGdcNotificationRealtime';
-import { formatTabBadgeCount, tabBarBadgeStyle } from '@/utils/compute-total-chat-unread';
+import { formatTabBadgeCount } from '@/utils/compute-total-chat-unread';
 import { subscribeChatUnreadTotal } from '@/utils/chat-unread-bus';
 
 /** Content row above home indicator; total bar height = this + insets.bottom */
@@ -105,7 +105,19 @@ function TabBarBackground() {
   );
 }
 
-function TabPillIcon({ icon, label, color, focused }) {
+/** Fixed 44×44 anchor so tab badges stay top-right when the tab becomes active. */
+function TabBadge({ value }) {
+  if (!value) return null;
+  return (
+    <View style={styles.tabBadge}>
+      <Text style={styles.tabBadgeText} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function TabPillIcon({ icon, label, color, focused, badge }) {
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -130,16 +142,19 @@ function TabPillIcon({ icon, label, color, focused }) {
   if (focused) {
     return (
       <View style={styles.tabIconSlot}>
-        <Animated.View style={[styles.activeOrbLift, { transform: [{ scale: orbScale }] }]}>
-          <LinearGradient
-            colors={[BrandColors.primaryLight, BrandColors.primaryMid, BrandColors.primary]}
-            locations={[0, 0.5, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.activeOrbGradient}>
-            <MaterialCommunityIcons name={icon} size={20} color="#ffffff" />
-          </LinearGradient>
-        </Animated.View>
+        <View style={styles.tabBadgeAnchor}>
+          <Animated.View style={[styles.activeOrbLift, { transform: [{ scale: orbScale }] }]}>
+            <LinearGradient
+              colors={[BrandColors.primaryLight, BrandColors.primaryMid, BrandColors.primary]}
+              locations={[0, 0.5, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.activeOrbGradient}>
+              <MaterialCommunityIcons name={icon} size={20} color="#ffffff" />
+            </LinearGradient>
+          </Animated.View>
+          <TabBadge value={badge} />
+        </View>
         <Animated.Text style={[styles.activeText, { opacity: textOpacity }]} numberOfLines={1} ellipsizeMode="clip">
           {label}
         </Animated.Text>
@@ -148,8 +163,11 @@ function TabPillIcon({ icon, label, color, focused }) {
   }
   return (
     <View style={styles.tabIconSlot}>
-      <View style={styles.tabIconOuter}>
-        <MaterialCommunityIcons name={icon} size={21} color={color} />
+      <View style={styles.tabBadgeAnchor}>
+        <View style={styles.tabIconOuter}>
+          <MaterialCommunityIcons name={icon} size={21} color={color} />
+        </View>
+        <TabBadge value={badge} />
       </View>
     </View>
   );
@@ -228,10 +246,14 @@ function DashboardTabsLayoutInner() {
           name="messages"
           options={{
             title: 'Chat',
-            tabBarBadge: chatTabBadge,
-            tabBarBadgeStyle: tabBarBadgeStyle,
             tabBarIcon: ({ color, focused }) => (
-              <TabPillIcon icon={focused ? 'message-text' : 'message-text-outline'} label="Chat" color={color} focused={focused} />
+              <TabPillIcon
+                icon={focused ? 'message-text' : 'message-text-outline'}
+                label="Chat"
+                color={color}
+                focused={focused}
+                badge={chatTabBadge}
+              />
             ),
           }}
         />
@@ -239,9 +261,9 @@ function DashboardTabsLayoutInner() {
           name="notifications"
           options={{
             title: 'Alerts',
-            tabBarBadge: notificationTabBadge,
-            tabBarBadgeStyle: tabBarBadgeStyle,
-            tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} />,
+            tabBarIcon: ({ color, focused }) => (
+              <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} badge={notificationTabBadge} />
+            ),
           }}
         />
         <Tabs.Screen
@@ -401,6 +423,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
+  tabBadgeAnchor: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: BrandColors.primary,
+    zIndex: 20,
+  },
+  tabBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
+  },
   tabIconOuter: {
     width: 44,
     height: 44,
@@ -412,7 +462,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   activeOrbLift: {
-    marginBottom: 2,
     borderRadius: 26,
     shadowColor: BrandColors.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -430,6 +479,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.95)',
   },
   activeText: {
+    marginTop: 6,
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '800',

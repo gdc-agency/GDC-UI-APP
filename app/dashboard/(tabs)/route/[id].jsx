@@ -11,7 +11,7 @@ import { DailyUpdatesSection } from '@/components/dashboard/route-modules/daily-
 import { ProjectManagerSection } from '@/components/dashboard/route-modules/project-manager-section';
 import { RequestsSection } from '@/components/dashboard/route-modules/requests-section';
 import routeDetailStyles from '@/components/dashboard/route-modules/route-detail-styles';
-import { TeamsManagementSection } from '@/components/dashboard/route-modules/teams-management-section';
+import { TeamTlSection } from '@/components/dashboard/route-modules/team-tl-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { GDC_MODULES } from '@/constants/gdc-modules';
@@ -33,6 +33,7 @@ import {
     getAttendance7Days,
     getAttendanceSummary,
     getClockHistory,
+    getMyTodayStatus,
     getClockRecords,
     getCurrentShift,
     getLeadershipDailyOverview,
@@ -40,6 +41,7 @@ import {
     getPendingUsersList,
     getTaskAssignableUsers,
     getTeamLeaderDailyBundle,
+    getMyTeamRoster,
     getTeams,
     listDepartments,
     listLeaveRequests,
@@ -72,11 +74,19 @@ import {
     apiRoleFromDisplayFilter,
     apiTimeFromAmPm,
     buildAttendanceRows,
+    buildMyAvailabilityLogFromSevenDays,
+    applyViewerAvatarToOwnRequests,
     enrichRequestsWithAvatars,
+    filterMyOwnRequests,
+    employeesFromTeamRoster,
+    enrichTimesheetLogsWithAvatars,
     enrichTimesheetUserAvatars,
     filterAttendanceOverviewUsers,
+    filterUsersForAttendanceViewer,
+    getDefaultAvailabilityDateRange,
     isExcludedAttendanceOverviewRole,
     mapClockHistoryToAvailabilityLog,
+    mapTodayStatusToAvailabilityStatus,
     mapClockHistoryToLog,
     mapLeaveRowToUi,
     mapManualRowToUi,
@@ -86,9 +96,13 @@ import {
     mapThirtyDayUserRow,
     mapTodaySummaryUserRow
 } from '@/utils/attendance-ui-map';
-import { buildTeamsManagementGroups } from '@/utils/build-team-assignments';
+import {
+  buildTeamAssignmentRows,
+  filterTeamAssignmentRows,
+  groupTeamAssignmentsByLeader,
+} from '@/utils/build-team-assignments';
 import { resolveProfileImageUri } from '@/utils/chat-directory';
-import { isAdminOrHrRole, isAdminRole } from '@/utils/roles';
+import { isAdminOrHrRole, isAdminRole, isEmployeeRole } from '@/utils/roles';
 import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
 import { normalizeTeamsList } from '@/utils/teams-api-response';
 
@@ -192,7 +206,6 @@ export default function RouteDetailScreen() {
   const [myRequestsTab, setMyRequestsTab] = useState('leave');
   const [timesheetSearch, setTimesheetSearch] = useState('');
   const [tlTeamSearch, setTlTeamSearch] = useState('');
-  const [tlRecordSearch, setTlRecordSearch] = useState('');
   const [timesheetRoleFilter, setTimesheetRoleFilter] = useState('all');
   const [recordProviderFilter, setRecordProviderFilter] = useState('all');
   const [recordSearch, setRecordSearch] = useState('');
@@ -202,6 +215,8 @@ export default function RouteDetailScreen() {
   const [recordStatusFilter, setRecordStatusFilter] = useState('all');
   const [requestStatusMenuOpen, setRequestStatusMenuOpen] = useState(false);
   const [timesheetUsers, setTimesheetUsers] = useState([]);
+  const [tlRosterEmployees, setTlRosterEmployees] = useState([]);
+  const [tlRosterTeamName, setTlRosterTeamName] = useState(/** @type {string | null} */ (null));
   const [timesheetLogs, setTimesheetLogs] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState(null);
@@ -212,8 +227,12 @@ export default function RouteDetailScreen() {
   const [availabilityQuickFilter, setAvailabilityQuickFilter] = useState('all');
   const [availabilitySearch, setAvailabilitySearch] = useState('');
   const [hoveredAvailabilityStatus, setHoveredAvailabilityStatus] = useState(null);
-  const [availabilityFromDate, setAvailabilityFromDate] = useState('2026-05-01');
-  const [availabilityToDate, setAvailabilityToDate] = useState('2026-05-31');
+  const [availabilityFromDate, setAvailabilityFromDate] = useState(
+    () => getDefaultAvailabilityDateRange().start,
+  );
+  const [availabilityToDate, setAvailabilityToDate] = useState(
+    () => getDefaultAvailabilityDateRange().end,
+  );
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [manualRequests, setManualRequests] = useState([]);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -413,7 +432,7 @@ export default function RouteDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (slug !== 'team-tl' && slug !== 'team-data') return;
+      if (slug !== 'team-tl') return;
       void loadTeamTlRoster();
     }, [slug, loadTeamTlRoster]),
   );
@@ -694,17 +713,18 @@ export default function RouteDetailScreen() {
     () => Object.fromEntries(timesheetUsers.map((entry) => [entry.gdcId, entry.name])),
     [timesheetUsers],
   );
-  const teamsManagementGroups = useMemo(
-    () => buildTeamsManagementGroups(teamRosterTeams, teamRosterUsers),
+  const teamAssignmentRows = useMemo(
+    () => buildTeamAssignmentRows(teamRosterTeams, teamRosterUsers),
     [teamRosterTeams, teamRosterUsers],
   );
-  const teamsFilteredByTlSearch = useMemo(() => {
-    const q = teamAssignSearch.trim().toLowerCase();
-    if (!q) return teamsManagementGroups;
-    return teamsManagementGroups.filter((t) => {
-      return String(t.name || '').toLowerCase().includes(q);
-    });
-  }, [teamsManagementGroups, teamAssignSearch]);
+  const filteredTeamAssignments = useMemo(
+    () => filterTeamAssignmentRows(teamAssignmentRows, teamAssignSearch),
+    [teamAssignmentRows, teamAssignSearch],
+  );
+  const groupedTeamAssignments = useMemo(
+    () => groupTeamAssignmentsByLeader(filteredTeamAssignments),
+    [filteredTeamAssignments],
+  );
 
   const timesheetDays = useMemo(() => {
     const days = [];
@@ -736,15 +756,17 @@ export default function RouteDetailScreen() {
         const [leaves, manuals] = await Promise.all([listLeaveRequests(token), listManualTimeRequests(token)]);
         let leaveUi = leaves.map((row) => mapLeaveRowToUi(row));
         let manualUi = manuals.map((row) => mapManualRowToUi(row));
-        if (leaveUi.some((r) => !r.avatarUrl) || manualUi.some((r) => !r.avatarUrl)) {
-          try {
-            const authRes = await getAllUsers(token, { approvedOnly: true });
-            const profileRows = normalizeApprovedUsersList(authRes);
-            leaveUi = enrichRequestsWithAvatars(leaveUi, profileRows);
-            manualUi = enrichRequestsWithAvatars(manualUi, profileRows);
-          } catch {
-            /* use requester_avatar from attendance DB */
-          }
+        try {
+          const authRes = await getAllUsers(token, { approvedOnly: true });
+          const profileRows = normalizeApprovedUsersList(authRes);
+          leaveUi = enrichRequestsWithAvatars(leaveUi, profileRows);
+          manualUi = enrichRequestsWithAvatars(manualUi, profileRows);
+        } catch {
+          /* use requester_avatar from attendance DB */
+        }
+        if (slug === 'my-requests' && user) {
+          leaveUi = applyViewerAvatarToOwnRequests(leaveUi, user);
+          manualUi = applyViewerAvatarToOwnRequests(manualUi, user);
         }
         setLeaveRequests(leaveUi);
         setManualRequests(manualUi);
@@ -752,25 +774,72 @@ export default function RouteDetailScreen() {
       }
 
       if (slug === 'availability') {
-        const summary = await getAttendanceSummary(token, {
-          role: apiRoleFromDisplayFilter(availabilityRoleFilter),
-        });
-        let availUsers = filterAttendanceOverviewUsers(
-          summary.users
-            .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
-            .map((row) => mapSummaryUserToAvailability(row)),
-        );
-        if (availUsers.some((u) => !u.avatarUrl)) {
-          try {
-            const authRes = await getAllUsers(token, { approvedOnly: true });
-            availUsers = enrichTimesheetUserAvatars(availUsers, normalizeApprovedUsersList(authRes));
-          } catch {
-            /* attendance profile_image only */
+        const showTeamBoard = isAdminRole(user?.role);
+        if (showTeamBoard) {
+          const summary = await getAttendanceSummary(token, {
+            role: apiRoleFromDisplayFilter(availabilityRoleFilter),
+          });
+          let availUsers = filterUsersForAttendanceViewer(
+            user?.role,
+            summary.users
+              .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+              .map((row) => mapSummaryUserToAvailability(row)),
+          );
+          if (availUsers.some((u) => !u.avatarUrl)) {
+            try {
+              const authRes = await getAllUsers(token, { approvedOnly: true });
+              availUsers = enrichTimesheetUserAvatars(availUsers, normalizeApprovedUsersList(authRes));
+            } catch {
+              /* attendance profile_image only */
+            }
           }
+          setAvailabilityUsers(availUsers);
+          setMyAvailabilityLog([]);
+        } else {
+          const gdc = user?.gdc_id ? String(user.gdc_id).trim() : '';
+          const [todayRow, sevenRows, history] = await Promise.all([
+            getMyTodayStatus(token).catch(() => null),
+            getAttendance7Days(token, gdc ? { search: gdc } : {}),
+            getClockHistory(token),
+          ]);
+          const meRow =
+            (gdc ? sevenRows.find((r) => String(r.gdc_id ?? '').trim() === gdc) : null) ||
+            sevenRows[0] ||
+            null;
+          const logByDate = new Map();
+          const baseLog = meRow
+            ? buildMyAvailabilityLogFromSevenDays(meRow, history)
+            : [];
+          for (const row of baseLog) {
+            if (row.date) logByDate.set(row.date, row);
+          }
+          for (const row of history) {
+            const mapped = mapClockHistoryToAvailabilityLog(row);
+            if (!mapped.date) continue;
+            if (!logByDate.has(mapped.date)) logByDate.set(mapped.date, mapped);
+          }
+          const log = [...logByDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+          setMyAvailabilityLog(log);
+          const todayStatus = mapTodayStatusToAvailabilityStatus(todayRow?.today_status);
+          setAvailabilityUsers([
+            {
+              gdcId: gdc || String(todayRow?.gdc_id ?? ''),
+              name: String(todayRow?.name ?? user?.name ?? ''),
+              role: user?.role ?? 'Employee',
+              team: String(user?.team_name ?? user?.department ?? '—'),
+              avatarUrl: resolveProfileImageUri(user?.avatar) || null,
+              status: todayStatus,
+              attendanceLabel:
+                todayStatus === 'Available'
+                  ? 'Present'
+                  : todayStatus === 'Leave'
+                    ? 'Leave'
+                    : 'Absent',
+              activityLabel: todayStatus === 'Available' ? 'Working' : todayStatus === 'Leave' ? 'Leave' : 'Away',
+              active: todayStatus === 'Available',
+            },
+          ]);
         }
-        setAvailabilityUsers(availUsers);
-        const history = await getClockHistory(token);
-        setMyAvailabilityLog(history.map((row) => mapClockHistoryToAvailabilityLog(row)));
         return;
       }
 
@@ -803,7 +872,7 @@ export default function RouteDetailScreen() {
           source === 'manual'
             ? await getManualTimesheetRecords(token, query)
             : await getClockRecords(token, query);
-        const logs = rows
+        let logs = rows
           .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
           .map((row) => mapRecordRowToTimesheetLog(row, source));
         const usersByGdc = new Map();
@@ -818,12 +887,30 @@ export default function RouteDetailScreen() {
             });
           }
         }
-        setTimesheetUsers(filterAttendanceOverviewUsers([...usersByGdc.values()]));
+        let recordUsers = filterAttendanceOverviewUsers([...usersByGdc.values()]);
+        if (
+          logs.some((l) => !l.avatarUrl) ||
+          recordUsers.some((u) => !u.avatarUrl)
+        ) {
+          try {
+            const authRes = await getAllUsers(token, { approvedOnly: true });
+            const profileRows = normalizeApprovedUsersList(authRes);
+            recordUsers = enrichTimesheetUserAvatars(recordUsers, profileRows);
+            logs = enrichTimesheetLogsWithAvatars(logs, profileRows);
+          } catch {
+            /* attendance profile_image only */
+          }
+        }
+        setTimesheetUsers(recordUsers);
         setTimesheetLogs(logs);
         return;
       }
 
       if (slug === 'timesheet') {
+        if (user?.role !== 'Team Leader') {
+          setTlRosterEmployees([]);
+          setTlRosterTeamName(null);
+        }
         if (timesheetWindow === '30d') {
           const data = await getAttendance30Days(token, {
             role: roleQ,
@@ -870,12 +957,92 @@ export default function RouteDetailScreen() {
           setTimesheetLogs([]);
         }
 
-        if (user?.role === 'Employee' || user?.role === 'Team Leader') {
+        if (user?.role === 'Employee') {
           const history = await getClockHistory(token);
-          setTimesheetLogs(history.map((row) => mapClockHistoryToLog(row)));
-        } else if (timesheetWindow === 'today' && user?.role === 'Team Leader') {
-          const rows = await getClockRecords(token, { from: rangeFrom, to: rangeTo });
-          setTimesheetLogs(rows.map((row) => mapRecordRowToTimesheetLog(row, 'clock')));
+          let historyLogs = history.map((row) => mapClockHistoryToLog(row));
+          const authAvatar = resolveProfileImageUri(user?.avatar);
+          if (authAvatar || user?.name) {
+            historyLogs = historyLogs.map((log) => ({
+              ...log,
+              avatarUrl: log.avatarUrl || authAvatar,
+              userName: log.userName || user?.name || '',
+              userRole: log.userRole || user?.role || 'Employee',
+              gdcId: log.gdcId || (user?.gdc_id ? String(user.gdc_id) : log.gdcId),
+              team: log.team || user?.team_name || user?.department || log.team,
+            }));
+          }
+          if (historyLogs.some((l) => !l.avatarUrl)) {
+            try {
+              const authRes = await getAllUsers(token, { approvedOnly: true });
+              historyLogs = enrichTimesheetLogsWithAvatars(
+                historyLogs,
+                normalizeApprovedUsersList(authRes),
+              );
+            } catch {
+              /* session avatar only */
+            }
+          }
+          setTimesheetLogs(historyLogs);
+        } else if (user?.role === 'Team Leader') {
+          try {
+            const roster = await getMyTeamRoster(token);
+            const { teamName, members } = employeesFromTeamRoster(roster);
+            let rosterUi = members;
+            if (rosterUi.some((u) => !u.avatarUrl)) {
+              try {
+                const authRes = await getAllUsers(token, { approvedOnly: true });
+                rosterUi = enrichTimesheetUserAvatars(
+                  rosterUi,
+                  normalizeApprovedUsersList(authRes),
+                );
+              } catch {
+                /* roster profile_image only */
+              }
+            }
+            setTlRosterEmployees(rosterUi);
+            setTlRosterTeamName(teamName || String(user?.team_name || '').trim() || null);
+          } catch {
+            setTlRosterEmployees([]);
+            setTlRosterTeamName(String(user?.team_name || '').trim() || null);
+          }
+
+          const history = await getClockHistory(token);
+          let personalLogs = history.map((row) => mapClockHistoryToLog(row));
+          const authAvatar = resolveProfileImageUri(user?.avatar);
+          if (authAvatar || user?.name) {
+            personalLogs = personalLogs.map((log) => ({
+              ...log,
+              avatarUrl: log.avatarUrl || authAvatar,
+              userName: log.userName || user?.name || '',
+              userRole: log.userRole || 'Team Leader',
+              gdcId: log.gdcId || (user?.gdc_id ? String(user.gdc_id) : log.gdcId),
+              team: log.team || user?.team_name || user?.department || log.team,
+            }));
+          }
+          let teamClockLogs = [];
+          if (rangeFrom && rangeTo) {
+            const teamLabel = String(user?.team_name || user?.department || '').trim();
+            const rows = await getClockRecords(token, {
+              from: rangeFrom,
+              to: rangeTo,
+              role: 'employee',
+              ...(teamLabel ? { department: teamLabel } : {}),
+            });
+            teamClockLogs = rows
+              .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
+              .map((row) => mapRecordRowToTimesheetLog(row, 'clock'));
+          }
+          let merged = [...personalLogs, ...teamClockLogs];
+          if (merged.some((l) => !l.avatarUrl)) {
+            try {
+              const authRes = await getAllUsers(token, { approvedOnly: true });
+              const profileRows = normalizeApprovedUsersList(authRes);
+              merged = enrichTimesheetLogsWithAvatars(merged, profileRows);
+            } catch {
+              /* session / attendance profile_image only */
+            }
+          }
+          setTimesheetLogs(merged);
         }
       }
     } catch (err) {
@@ -899,7 +1066,19 @@ export default function RouteDetailScreen() {
     recordStatusFilter,
     availabilityRoleFilter,
     user?.role,
+    user?.team_name,
+    user?.department,
+    user?.name,
+    user?.avatar,
+    user?.gdc_id,
   ]);
+
+  useEffect(() => {
+    if (user?.role !== 'Team Leader' || slug !== 'timesheet') return;
+    if (!timesheetDays.length) return;
+    setRecordFromDate(timesheetDays[0]);
+    setRecordToDate(timesheetDays[timesheetDays.length - 1]);
+  }, [user?.role, slug, timesheetDays]);
 
   useFocusEffect(
     useCallback(() => {
@@ -930,14 +1109,19 @@ export default function RouteDetailScreen() {
     loadAttendanceScreen,
   ]);
 
+  useEffect(() => {
+    if (user?.role !== 'HR') return;
+    if (timesheetRoleFilter === 'HR') setTimesheetRoleFilter('all');
+  }, [user?.role, timesheetRoleFilter]);
+
   const filteredTimesheetUsers = useMemo(() => {
     const q = timesheetSearch.trim().toLowerCase();
-    return filterAttendanceOverviewUsers(timesheetUsers).filter((u) => {
+    return filterUsersForAttendanceViewer(user?.role, timesheetUsers).filter((u) => {
       if (timesheetRoleFilter !== 'all' && u.role !== timesheetRoleFilter) return false;
       if (!q) return true;
       return `${u.name} ${u.gdcId} ${u.team} ${u.role}`.toLowerCase().includes(q);
     });
-  }, [timesheetRoleFilter, timesheetSearch, timesheetUsers]);
+  }, [timesheetRoleFilter, timesheetSearch, timesheetUsers, user?.role]);
 
   const attendanceRows = useMemo(() => {
     if (timesheetWindow === '30d') {
@@ -992,10 +1176,13 @@ export default function RouteDetailScreen() {
   ]);
 
   const filteredRecords = useMemo(() => {
-    const usersById = new Map(timesheetUsers.map((u) => [u.gdcId, u]));
+    const scopedUsers = filterUsersForAttendanceViewer(user?.role, timesheetUsers);
+    const usersById = new Map(scopedUsers.map((u) => [u.gdcId, u]));
+    const allowedGdc = new Set(scopedUsers.map((u) => u.gdcId));
     return timesheetLogs
       .filter((rec) => {
         if (recordRouteTab !== rec.source) return false;
+        if (!allowedGdc.has(rec.gdcId)) return false;
         const u = usersById.get(rec.gdcId);
         if (!u) return false;
         if (recordProviderFilter !== 'all' && u.role !== recordProviderFilter) return false;
@@ -1007,7 +1194,15 @@ export default function RouteDetailScreen() {
         if (!q) return true;
         return `${u.name} ${u.gdcId} ${dept} ${rec.id}`.toLowerCase().includes(q);
       })
-      .map((rec) => ({ ...rec, user: usersById.get(rec.gdcId) }));
+      .map((rec) => {
+        const u = usersById.get(rec.gdcId);
+        const avatarUrl = rec.avatarUrl || u?.avatarUrl || null;
+        return {
+          ...rec,
+          avatarUrl,
+          user: u ? { ...u, avatarUrl: u.avatarUrl || avatarUrl } : undefined,
+        };
+      });
   }, [
     recordDepartmentFilter,
     recordFromDate,
@@ -1017,6 +1212,7 @@ export default function RouteDetailScreen() {
     recordToDate,
     timesheetLogs,
     timesheetUsers,
+    user?.role,
   ]);
   const employeeProfile = useMemo(() => {
     if (user?.role !== 'Employee') return null;
@@ -1062,21 +1258,29 @@ export default function RouteDetailScreen() {
       const match = timesheetUsers.find((u) => u.gdcId === gid);
       if (match) return { ...match, avatarUrl: match.avatarUrl || authAvatar };
     }
+    const teamLabel =
+      tlRosterTeamName || String(user?.team_name || user?.department || '').trim() || '—';
     const fallback =
       timesheetUsers.find((u) => u.role === 'Team Leader' && u.name === user.name) ||
       timesheetUsers.find((u) => u.role === 'Team Leader') || {
         gdcId: gid || 'me',
         name: user?.name || 'Team Leader',
         role: 'Team Leader',
-        team: user?.team_name || '—',
+        team: teamLabel,
         avatarUrl: authAvatar,
       };
     return fallback.avatarUrl ? fallback : { ...fallback, avatarUrl: authAvatar };
-  }, [timesheetUsers, user?.avatar, user?.gdc_id, user?.name, user?.role, user?.team_name]);
-  const tlTeamMembers = useMemo(() => {
-    if (!tlProfile) return [];
-    return timesheetUsers.filter((u) => u.team === tlProfile.team && u.role !== 'Team Leader');
-  }, [tlProfile, timesheetUsers]);
+  }, [
+    timesheetUsers,
+    tlRosterTeamName,
+    user?.avatar,
+    user?.department,
+    user?.gdc_id,
+    user?.name,
+    user?.role,
+    user?.team_name,
+  ]);
+  const tlTeamMembers = useMemo(() => tlRosterEmployees, [tlRosterEmployees]);
   const tlTeamMemberIds = useMemo(() => new Set(tlTeamMembers.map((m) => m.gdcId)), [tlTeamMembers]);
   const tlMyAttendanceLogs = useMemo(() => {
     if (!tlProfile) return [];
@@ -1097,23 +1301,122 @@ export default function RouteDetailScreen() {
   }, [timesheetDays, tlProfile, timesheetLogs]);
   const tlTeamOverviewRows = useMemo(() => {
     const q = tlTeamSearch.trim().toLowerCase();
-    return attendanceRows
-      .filter((row) => tlTeamMemberIds.has(row.gdcId))
-      .filter((row) => (!q ? true : `${row.name} ${row.gdcId}`.toLowerCase().includes(q)));
-  }, [attendanceRows, tlTeamMemberIds, tlTeamSearch]);
-  const tlTeamRecordRows = useMemo(() => {
-    const q = tlRecordSearch.trim().toLowerCase();
-    const usersById = new Map(timesheetUsers.map((u) => [u.gdcId, u]));
+    const apiByGdc = new Map(attendanceRows.map((r) => [r.gdcId, r]));
+    const rows = tlTeamMembers.map((m) => {
+      const api = apiByGdc.get(m.gdcId);
+      if (api) {
+        return {
+          ...api,
+          name: m.name || api.name,
+          avatarUrl: m.avatarUrl || api.avatarUrl,
+          team: m.team || api.team,
+          role: m.role || api.role,
+        };
+      }
+      const built = buildAttendanceRows([m], timesheetDays, timesheetLogs)[0];
+      if (built) return built;
+      return {
+        ...m,
+        cells: timesheetWindow === '30d' ? [] : timesheetDays.map(() => 'A'),
+        counts:
+          timesheetWindow === '30d'
+            ? { present: 0, late: 0, absent: timesheetDays.length }
+            : undefined,
+      };
+    });
+    return rows.filter((row) =>
+      !q ? true : `${row.name} ${row.gdcId}`.toLowerCase().includes(q),
+    );
+  }, [
+    attendanceRows,
+    timesheetDays,
+    timesheetLogs,
+    timesheetWindow,
+    tlTeamMembers,
+    tlTeamSearch,
+  ]);
+  const tlProviderFilterOptions = useMemo(() => ['all', 'Employee'], []);
+
+  const tlTeamRecordDepartmentOptions = useMemo(() => {
+    const depts = new Set();
+    tlTeamMembers.forEach((u) => {
+      const t = String(u.team || '').trim();
+      if (t && t !== '—') depts.add(t);
+    });
+    timesheetLogs.forEach((l) => {
+      const t = String(l.team || l.department || '').trim();
+      if (t && t !== '—') depts.add(t);
+    });
+    return ['all', ...Array.from(depts).sort((a, b) => a.localeCompare(b))];
+  }, [tlTeamMembers, timesheetLogs]);
+
+  const tlFilteredTeamRecords = useMemo(() => {
+    const usersById = new Map(tlTeamMembers.map((u) => [u.gdcId, u]));
+    const rosterGdc = new Set(tlTeamMembers.map((m) => m.gdcId));
+    const from = recordFromDate || timesheetDays[0] || '';
+    const to = recordToDate || timesheetDays[timesheetDays.length - 1] || '';
+    const q = recordSearch.trim().toLowerCase();
     return timesheetLogs
-      .filter((log) => tlTeamMemberIds.has(log.gdcId) && timesheetDays.includes(log.date))
-      .filter((log) => {
+      .filter((rec) => rec.source === 'clock' && rosterGdc.has(rec.gdcId))
+      .filter((rec) => (!from || rec.date >= from) && (!to || rec.date <= to))
+      .filter((rec) => {
+        const u = usersById.get(rec.gdcId);
+        if (!u) return false;
+        if (recordProviderFilter !== 'all' && u.role !== recordProviderFilter) return false;
+        const dept = String(u.team || rec.department || '').trim();
+        if (recordDepartmentFilter !== 'all' && dept !== recordDepartmentFilter) return false;
         if (!q) return true;
-        const u = usersById.get(log.gdcId);
-        return `${u?.name ?? ''} ${u?.gdcId ?? ''} ${u?.team ?? ''}`.toLowerCase().includes(q);
+        return `${u.name} ${u.gdcId} ${dept} ${rec.id}`.toLowerCase().includes(q);
       })
-      .map((log) => ({ ...log, user: usersById.get(log.gdcId) }))
+      .map((rec) => {
+        const u = usersById.get(rec.gdcId);
+        const avatarUrl = rec.avatarUrl || u?.avatarUrl || null;
+        return {
+          ...rec,
+          avatarUrl,
+          user: u ? { ...u, avatarUrl } : undefined,
+        };
+      })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [timesheetDays, tlRecordSearch, tlTeamMemberIds, timesheetLogs, timesheetUsers]);
+  }, [
+    recordDepartmentFilter,
+    recordFromDate,
+    recordProviderFilter,
+    recordSearch,
+    recordToDate,
+    timesheetDays,
+    timesheetLogs,
+    tlTeamMembers,
+  ]);
+
+  const tlRecordExportQuery = useMemo(() => {
+    const recordRole =
+      recordProviderFilter !== 'all' ? apiRoleFromDisplayFilter(recordProviderFilter) : 'employee';
+    const teamDept = String(tlRosterTeamName || tlProfile?.team || '').trim();
+    const q = recordSearch.trim();
+    return {
+      ...(recordFromDate || timesheetDays[0] ? { from: recordFromDate || timesheetDays[0] } : {}),
+      ...(recordToDate || timesheetDays[timesheetDays.length - 1]
+        ? { to: recordToDate || timesheetDays[timesheetDays.length - 1] }
+        : {}),
+      ...(recordRole && recordRole !== 'ALL' ? { role: recordRole } : { role: 'employee' }),
+      ...(recordDepartmentFilter !== 'all'
+        ? { department: recordDepartmentFilter }
+        : teamDept
+          ? { department: teamDept }
+          : {}),
+      ...(q ? { gdc_id: q } : {}),
+    };
+  }, [
+    recordDepartmentFilter,
+    recordFromDate,
+    recordProviderFilter,
+    recordSearch,
+    recordToDate,
+    timesheetDays,
+    tlProfile?.team,
+    tlRosterTeamName,
+  ]);
 
   const filteredAvailabilityUsers = useMemo(() => {
     const q = availabilitySearch.trim().toLowerCase();
@@ -1148,8 +1451,7 @@ export default function RouteDetailScreen() {
 
   const myLeaveRequests = useMemo(() => {
     if (!user) return [];
-    if (user.role === 'Employee' || user.role === 'Team Leader') return leaveRequests;
-    return leaveRequests.filter((r) => r.employee === user.name);
+    return filterMyOwnRequests(leaveRequests, user);
   }, [leaveRequests, user]);
 
   const filteredAdminLeaveRequests = useMemo(() => {
@@ -1177,14 +1479,35 @@ export default function RouteDetailScreen() {
 
   const myManualRequests = useMemo(() => {
     if (!user) return [];
-    if (user.role === 'Employee' || user.role === 'Team Leader') return manualRequests;
-    return manualRequests.filter((r) => r.employee === user.name);
+    return filterMyOwnRequests(manualRequests, user);
   }, [manualRequests, user]);
 
   const filteredMyManualRequests = useMemo(() => {
     if (manualStatusFilter === 'All') return myManualRequests;
     return myManualRequests.filter((r) => r.status === manualStatusFilter);
   }, [manualStatusFilter, myManualRequests]);
+
+  const filteredMyLeaveRequestsBoard = useMemo(() => {
+    const q = requestAdminSearch.trim().toLowerCase();
+    let list =
+      leaveStatusFilter === 'All' ? myLeaveRequests : myLeaveRequests.filter((r) => r.status === leaveStatusFilter);
+    if (!q) return list;
+    return list.filter((r) =>
+      `${r.employee} ${r.role} ${r.team} ${r.type} ${r.reason} ${r.gdcId}`.toLowerCase().includes(q),
+    );
+  }, [leaveStatusFilter, myLeaveRequests, requestAdminSearch]);
+
+  const filteredMyManualRequestsBoard = useMemo(() => {
+    const q = requestAdminSearch.trim().toLowerCase();
+    let list =
+      manualStatusFilter === 'All'
+        ? myManualRequests
+        : myManualRequests.filter((r) => r.status === manualStatusFilter);
+    if (!q) return list;
+    return list.filter((r) =>
+      `${r.employee} ${r.role} ${r.team} ${r.reason} ${r.gdcId} ${r.date}`.toLowerCase().includes(q),
+    );
+  }, [manualStatusFilter, myManualRequests, requestAdminSearch]);
 
   const filteredAdminUsers = useMemo(() => {
     const q = adminUserSearch.trim().toLowerCase();
@@ -1907,11 +2230,13 @@ export default function RouteDetailScreen() {
   }, [filteredMyAvailabilityLog]);
   const currentAvailabilityStatus = useMemo(() => {
     if (!user?.role) return 'Available';
+    const gdc = user?.gdc_id ? String(user.gdc_id).trim() : '';
     const match =
+      (gdc ? availabilityUsers.find((u) => u.gdcId === gdc) : null) ||
       availabilityUsers.find((u) => u.name === user?.name && u.role === user.role) ||
-      availabilityUsers.find((u) => u.role === user.role);
+      availabilityUsers[0];
     return match?.status || 'Available';
-  }, [availabilityUsers, user?.name, user?.role]);
+  }, [availabilityUsers, user?.gdc_id, user?.name, user?.role]);
   const updateMyAvailabilityStatus = (nextStatus) => {
     if (!user?.role) return;
     setAvailabilityUsers((prev) => {
@@ -1926,6 +2251,10 @@ export default function RouteDetailScreen() {
       return prev;
     });
   };
+
+  if (slug === 'team-data') {
+    return <Redirect href="/dashboard/(tabs)/route/team-tl" />;
+  }
 
   if (slug === 'daily-updates') {
     return (
@@ -2050,9 +2379,10 @@ export default function RouteDetailScreen() {
           tlTeamSearch,
           setTlTeamSearch,
           tlTeamOverviewRows,
-          tlRecordSearch,
-          setTlRecordSearch,
-          tlTeamRecordRows,
+          tlFilteredTeamRecords,
+          tlRecordExportQuery,
+          tlTeamRecordDepartmentOptions,
+          tlProviderFilterOptions,
           employeeAttendanceSummary,
           employeeProfile,
           employeeAttendanceLogs,
@@ -2186,6 +2516,8 @@ export default function RouteDetailScreen() {
           manualRequests,
           filteredAdminLeaveRequests,
           filteredAdminManualRequests,
+          filteredMyLeaveRequestsBoard,
+          filteredMyManualRequestsBoard,
           requestAdminSearch,
           setRequestAdminSearch,
           updateManualStatus,
@@ -2232,30 +2564,19 @@ export default function RouteDetailScreen() {
     );
   }
 
-  if (slug === 'team-data') {
-    return (
-      <TeamsManagementSection
-        teams={teamsFilteredByTlSearch}
-        loading={teamTlRosterLoading}
-        error={teamTlRosterError}
-        onRetry={loadTeamTlRoster}
-        canView={isAdminOrHrRole(user?.role)}
-        searchQuery={teamAssignSearch}
-        onSearchChange={setTeamAssignSearch}
-      />
-    );
-  }
-
   if (slug === 'team-tl') {
     return (
-      <TeamsManagementSection
-        teams={teamsFilteredByTlSearch}
-        loading={teamTlRosterLoading}
-        error={teamTlRosterError}
-        onRetry={loadTeamTlRoster}
-        canView={isAdminOrHrRole(user?.role)}
-        searchQuery={teamAssignSearch}
-        onSearchChange={setTeamAssignSearch}
+      <TeamTlSection
+        styles={styles}
+        teamAssignSearch={teamAssignSearch}
+        setTeamAssignSearch={setTeamAssignSearch}
+        groupedTeamAssignments={groupedTeamAssignments}
+        filteredTeamAssignments={filteredTeamAssignments}
+        teamRosterTotal={teamAssignmentRows.length}
+        canViewTeamRoster={isAdminOrHrRole(user?.role)}
+        rosterLoading={teamTlRosterLoading}
+        rosterError={teamTlRosterError}
+        onRetryRoster={loadTeamTlRoster}
       />
     );
   }

@@ -1,5 +1,5 @@
-import { isAdminRole } from '@/utils/roles';
-import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
+import { isAdminRole, isEmployeeRole } from '@/utils/roles';
+import { displayRoleFromApi, mapTaskRowToProjectTask } from '@/utils/task-ui-map';
 
 /**
  * Same visibility as `RouteDetailScreen` project-manager `visibleProjectTasks`.
@@ -65,11 +65,8 @@ export function countTeamEmployeesInRoster(rosterRes) {
   if (!Array.isArray(members)) return null;
   let n = 0;
   for (const m of members) {
-    const r = String(m && typeof m === 'object' && m.role != null ? m.role : '')
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, '_');
-    if (r === 'employee') n += 1;
+    const r = m && typeof m === 'object' && m.role != null ? m.role : '';
+    if (isEmployeeRole(r)) n += 1;
   }
   return n;
 }
@@ -84,4 +81,46 @@ export function buildDashboardTaskSnapshot(listRes, user, todayYmd) {
   const mapped = rows.map((row) => mapTaskRowToProjectTask(row));
   const visible = filterVisibleProjectTasksForUser(mapped, user);
   return countDashboardTaskBuckets(visible, todayYmd);
+}
+
+/**
+ * HR home tiles (matches GDC web HR dashboard: team scope).
+ *
+ * @param {{
+ *   user?: { team_name?: string | null; department?: string | null } | null;
+ *   tasks?: Array<{ assignedToUserId?: number | null; createdByRole?: string; status?: string }>;
+ *   users?: Array<{ id?: number | string; role?: string; team?: string; team_name?: string }>;
+ *   leaveRequests?: Array<{ status?: string }>;
+ * }} input
+ */
+function userTeamLabel(u) {
+  return String(u?.team_name ?? u?.team ?? u?.department ?? '').trim();
+}
+
+export function buildHrDashboardSnapshot({ user, tasks = [], users = [], leaveRequests = [] }) {
+  const myTeam = userTeamLabel(user);
+  const teamMembers = users.filter((u) => {
+    const role = displayRoleFromApi(u.role);
+    if (role === 'Pending User' || role === 'Admin') return false;
+    if (!myTeam) return role === 'Employee' || role === 'Team Leader';
+    return userTeamLabel(u) === myTeam;
+  });
+  const memberIds = new Set(
+    teamMembers.map((u) => Number(u.id)).filter((id) => Number.isFinite(id)),
+  );
+  const teamTasks = tasks.filter((t) => {
+    if (t.createdByRole === 'Team Leader') return false;
+    const aid = t.assignedToUserId;
+    return aid != null && memberIds.has(aid);
+  });
+  const pendingLeave = leaveRequests.filter(
+    (l) => String(l.status || '').toLowerCase() === 'pending',
+  ).length;
+
+  return {
+    teamMembers: teamMembers.length,
+    teamTasks: teamTasks.length,
+    completed: teamTasks.filter((t) => String(t.status || '') === 'Approved').length,
+    pendingLeave,
+  };
 }

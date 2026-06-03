@@ -9,11 +9,25 @@ import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
-import { getAttendanceSummary, getMyTeamRoster, getPendingUsersCount, getWorkforceCount, listTasks } from '@/services/api';
-import { buildDashboardTaskSnapshot, countTeamEmployeesInRoster } from '@/utils/dashboard-task-stats';
-import { extractPendingUsersCount, extractWorkforceCount } from '@/utils/admin-api-response';
+import {
+  getAllUsers,
+  getAttendanceSummary,
+  getMyTeamRoster,
+  getPendingUsersCount,
+  getWorkforceCount,
+  listLeaveRequests,
+  listTasks,
+} from '@/services/api';
+import { buildDashboardTaskSnapshot, buildHrDashboardSnapshot, countTeamEmployeesInRoster } from '@/utils/dashboard-task-stats';
+import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
+import {
+  extractPendingUsersCount,
+  extractWorkforceCount,
+  normalizeApprovedUsersList,
+} from '@/utils/admin-api-response';
 import { isExcludedAttendanceOverviewRole } from '@/utils/attendance-ui-map';
-import { isAdminRole } from '@/utils/roles';
+import { isAdminRole, isHrRole } from '@/utils/roles';
+import { mapApprovedUserRow } from '@/utils/admin-directory';
 
 function StatCard({ label, value, icon, color, onPress }) {
   const Wrapper = onPress ? Pressable : View;
@@ -24,36 +38,6 @@ function StatCard({ label, value, icon, color, onPress }) {
       </View>
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statValue}>{value}</Text>
-    </Wrapper>
-  );
-}
-
-function HrWideCard({ label, value, icon, tint, iconColor, note, onPress }) {
-  const Wrapper = onPress ? Pressable : View;
-  return (
-    <Wrapper style={[styles.hrStatCard, { borderLeftColor: iconColor }]} onPress={onPress}>
-      <View style={styles.hrCardHead}>
-        <View style={[styles.hrStatIcon, { backgroundColor: tint }]}>
-          <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
-        </View>
-        <View style={[styles.hrStatusPill, { backgroundColor: tint }]}>
-          <Text style={[styles.hrStatusPillText, { color: iconColor }]}>Live</Text>
-        </View>
-      </View>
-
-      <View style={styles.hrCardBody}>
-        <View style={styles.hrCardMeta}>
-          <Text style={styles.hrStatLabel} numberOfLines={1}>
-            {label}
-          </Text>
-          <Text style={styles.hrStatNote} numberOfLines={1}>
-            {note}
-          </Text>
-        </View>
-        <View style={[styles.hrValueBadge, { borderColor: tint }]}>
-          <Text style={styles.hrStatValue}>{value}</Text>
-        </View>
-      </View>
     </Wrapper>
   );
 }
@@ -93,7 +77,8 @@ function parseStatCount(value) {
 }
 
 function fmtCount(n) {
-  return n != null && Number.isFinite(Number(n)) ? String(n) : '—';
+  if (n != null && Number.isFinite(Number(n))) return String(n);
+  return '0';
 }
 
 function countActiveNowFromSummary(summary) {
@@ -116,6 +101,7 @@ function RolePanel({
   pendingUsersCount,
   activeNowCount,
   taskBoard,
+  hrStats,
 }) {
   const wf = workforceCount != null ? String(workforceCount) : '—';
   const pend = pendingUsersCount != null ? String(pendingUsersCount) : '—';
@@ -151,65 +137,45 @@ function RolePanel({
     );
   }
 
-  if (role === 'HR') {
+  if (isHrRole(role)) {
+    const hm = fmtCount(hrStats?.teamMembers);
+    const tt = fmtCount(hrStats?.teamTasks);
+    const done = fmtCount(hrStats?.completed);
+    const pl = fmtCount(hrStats?.pendingLeave);
     return (
       <View style={styles.rolePanel}>
         <Text style={styles.roleTitle}>HR Dashboard</Text>
         <Text style={styles.roleSub}>Track requests, leaves, and people operations.</Text>
-        <View style={styles.hrStatGrid}>
-          <HrWideCard label="TEAM MEMBERS" value="2" icon="account-group-outline" tint="#ecf3ff" iconColor="#2563eb" note="Active people in roster" />
-          <HrWideCard
-            label="PENDING TASKS"
-            value={p}
+        <View style={styles.tlDashGrid}>
+          <TlDashboardCard
+            label="TEAM MEMBERS"
+            value={hm}
+            icon="account-group-outline"
+            tint="#eff6ff"
+            iconColor="#2563eb"
+          />
+          <TlDashboardCard
+            label="TEAM TASKS"
+            value={tt}
             icon="bullseye-arrow"
-            tint="#efefff"
+            tint="#eef2ff"
             iconColor="#6366f1"
-            note="Your visible tasks"
             onPress={() => onOpenProjectStatus?.('pending')}
           />
-          <HrWideCard
-            label="IN PROGRESS"
-            value={ip}
-            icon="chart-box-outline"
-            tint="#eef2ff"
-            iconColor="#4f46e5"
-            note="Your visible tasks"
-            onPress={() => onOpenProjectStatus?.('in progress')}
+          <TlDashboardCard
+            label="COMPLETED"
+            value={done}
+            icon="check-circle-outline"
+            tint="#ecfdf5"
+            iconColor="#10b981"
+            onPress={() => onOpenProjectStatus?.('completed')}
           />
-          <HrWideCard
-            label="REVIEW"
-            value={rv}
-            icon="timer-outline"
-            tint="#f5f3ff"
-            iconColor="#7c3aed"
-            note="Your visible tasks"
-            onPress={() => onOpenProjectStatus?.('review')}
-          />
-          <HrWideCard
-            label="SUBMITTED"
-            value={sb}
-            icon="arrow-top-right"
-            tint="#ecfeff"
-            iconColor="#0f766e"
-            note="Your visible tasks"
-            onPress={() => onOpenProjectStatus?.('submitted')}
-          />
-          <HrWideCard
-            label="OVERDUE TASKS"
-            value={od}
-            icon="alert-circle-outline"
-            tint="#fff1f2"
-            iconColor="#e11d48"
-            note="Past deadline (pending / in progress)"
-            onPress={() => onOpenProjectStatus?.('overdue')}
-          />
-          <HrWideCard
+          <TlDashboardCard
             label="PENDING LEAVE"
-            value="1"
+            value={pl}
             icon="calendar-month-outline"
             tint="#fff8e8"
             iconColor="#d4a017"
-            note="Awaiting manager decision"
             onPress={onOpenPendingLeave}
           />
         </View>
@@ -267,12 +233,66 @@ const EMPTY_TASK_BOARD = {
   tlTeamMemberCount: null,
 };
 
+const EMPTY_HR_STATS = {
+  teamMembers: 0,
+  teamTasks: 0,
+  completed: 0,
+  pendingLeave: 0,
+};
+
 export default function DashboardHomeScreen() {
   const { user, token } = useAuth();
   const router = useRouter();
   const nowText = React.useMemo(() => new Date().toLocaleString(), []);
   const [adminStats, setAdminStats] = React.useState({ workforce: null, pendingUsers: null, activeNow: null });
   const [taskBoard, setTaskBoard] = React.useState(EMPTY_TASK_BOARD);
+  const [hrStats, setHrStats] = React.useState(EMPTY_HR_STATS);
+
+  const loadHrDashboardStats = React.useCallback(async () => {
+    if (!isHrRole(user?.role) || !token) {
+      setHrStats(EMPTY_HR_STATS);
+      return;
+    }
+    const [tasksSettled, usersSettled, leavesSettled] = await Promise.allSettled([
+      listTasks(token, {}),
+      getAllUsers(token, { approvedOnly: true }),
+      listLeaveRequests(token),
+    ]);
+
+    let tasks = [];
+    if (tasksSettled.status === 'fulfilled') {
+      const tasksRes = tasksSettled.value;
+      tasks = (Array.isArray(tasksRes) ? tasksRes : []).map((row) => mapTaskRowToProjectTask(row));
+    } else if (__DEV__) {
+      const err = tasksSettled.reason;
+      console.warn('[dashboard] HR tasks fetch failed:', err?.message ?? err);
+    }
+
+    let users = [];
+    if (usersSettled.status === 'fulfilled') {
+      users = normalizeApprovedUsersList(usersSettled.value).map(mapApprovedUserRow);
+    } else if (__DEV__) {
+      const err = usersSettled.reason;
+      console.warn('[dashboard] HR users fetch failed:', err?.message ?? err);
+    }
+
+    let leaveRows = [];
+    if (leavesSettled.status === 'fulfilled') {
+      leaveRows = Array.isArray(leavesSettled.value) ? leavesSettled.value : [];
+    } else if (__DEV__) {
+      const err = leavesSettled.reason;
+      console.warn('[dashboard] HR leave fetch failed:', err?.message ?? err);
+    }
+
+    setHrStats(
+      buildHrDashboardSnapshot({
+        user,
+        tasks,
+        users,
+        leaveRequests: leaveRows.map((row) => ({ status: String(row.status ?? '') })),
+      }),
+    );
+  }, [token, user]);
 
   const loadDashboardTaskBoard = React.useCallback(async () => {
     if (!token) {
@@ -332,7 +352,8 @@ export default function DashboardHomeScreen() {
     React.useCallback(() => {
       void loadAdminStats();
       void loadDashboardTaskBoard();
-    }, [loadAdminStats, loadDashboardTaskBoard]),
+      void loadHrDashboardStats();
+    }, [loadAdminStats, loadDashboardTaskBoard, loadHrDashboardStats]),
   );
 
   React.useEffect(() => {
@@ -340,9 +361,10 @@ export default function DashboardHomeScreen() {
     const id = setInterval(() => {
       void loadDashboardTaskBoard();
       if (isAdminRole(user?.role)) void loadAdminStats();
+      if (isHrRole(user?.role)) void loadHrDashboardStats();
     }, 45000);
     return () => clearInterval(id);
-  }, [token, user?.role, loadDashboardTaskBoard, loadAdminStats]);
+  }, [token, user?.role, loadDashboardTaskBoard, loadAdminStats, loadHrDashboardStats]);
 
   const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '0001').toUpperCase()}`;
 
@@ -397,6 +419,7 @@ export default function DashboardHomeScreen() {
           pendingUsersCount={adminStats.pendingUsers}
           activeNowCount={adminStats.activeNow}
           taskBoard={taskBoard}
+          hrStats={hrStats}
           onOpenPendingApprovals={() => router.push('/dashboard/(tabs)/route/admin?tab=employees&filter=Pending')}
           onOpenPendingLeave={() => router.push('/dashboard/(tabs)/route/request-management?status=Pending')}
           onOpenActiveNow={() => router.push('/dashboard/(tabs)/route/availability?filter=present')}

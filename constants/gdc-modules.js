@@ -3,7 +3,6 @@ export const GDC_MODULES = [
   { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard-outline', description: 'Overview & quick actions' },
   { id: 'admin', label: 'Admin Control', icon: 'shield-check-outline', description: 'System roles & controls' },
   { id: 'daily-updates', label: 'Daily Updates', icon: 'text-box-outline', description: 'Daily standup & notes' },
-  { id: 'team-data', label: 'Teams Management', icon: 'account-group-outline', description: 'Teams, leaders & members' },
   { id: 'project-manager', label: 'Project Manager', icon: 'calendar-month', description: 'Projects & milestones' },
   { id: 'timesheet', label: 'Timesheet', icon: 'clock-outline', description: 'Hours & attendance' },
   { id: 'availability', label: 'Availability', icon: 'calendar-clock', description: 'Schedule & slots' },

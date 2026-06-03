@@ -167,6 +167,13 @@ export function PrettyRequestCard({
           </Pressable>
         </View>
       ) : null}
+
+      {!showActions && req?.status === 'Rejected' && req?.adminReason ? (
+        <View style={p.feedbackBox}>
+          <Text style={p.feedbackTitle}>Admin feedback</Text>
+          <Text style={p.feedbackText}>{req.adminReason}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -232,5 +239,15 @@ const p = StyleSheet.create({
   approveBtn: { backgroundColor: RqColors.green },
   rejectBtn: { backgroundColor: RqColors.red },
   actionText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  feedbackBox: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  feedbackTitle: { fontSize: 12, fontWeight: '800', color: '#B91C1C', marginBottom: 4 },
+  feedbackText: { fontSize: 13, fontWeight: '600', color: '#7F1D1D', lineHeight: 18 },
 });
 

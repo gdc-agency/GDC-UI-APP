@@ -138,6 +138,20 @@ function PersonCard({ member }) {
   );
 }
 
+function AttendanceStatusBanner({ message, onRetry }) {
+  if (!message) return null;
+  return (
+    <View style={av.errorBanner}>
+      <Text style={av.errorBannerText}>{message}</Text>
+      {onRetry ? (
+        <Pressable style={av.errorBannerBtn} onPress={onRetry}>
+          <Text style={av.errorBannerBtnText}>Retry</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function AdminAvailabilityBoard({
   availabilityRoleFilter,
   setAvailabilityRoleFilter,
@@ -148,6 +162,9 @@ function AdminAvailabilityBoard({
   availabilitySearch,
   setAvailabilitySearch,
   filteredAvailabilityUsers,
+  attendanceLoading,
+  attendanceError,
+  onRetryAttendance,
 }) {
   const [openMenu, setOpenMenu] = useState(null);
 
@@ -156,6 +173,7 @@ function AdminAvailabilityBoard({
 
   return (
     <>
+      <AttendanceStatusBanner message={attendanceError} onRetry={onRetryAttendance} />
       <View style={av.boardHero}>
         <View style={av.boardHeroIconWrap}>
           <MaterialCommunityIcons name="account-group-outline" size={24} color={AvColors.white} />
@@ -237,9 +255,15 @@ function AdminAvailabilityBoard({
           <Text style={av.peopleTitle}>People</Text>
           <Text style={av.peopleCount}>{memberLabel}</Text>
         </View>
-        {filteredAvailabilityUsers.length === 0 ? (
+        {attendanceLoading ? (
           <View style={av.emptyBox}>
-            <Text style={av.emptyText}>No people match filters.</Text>
+            <Text style={av.emptyText}>Loading team status…</Text>
+          </View>
+        ) : filteredAvailabilityUsers.length === 0 ? (
+          <View style={av.emptyBox}>
+            <Text style={av.emptyText}>
+              {attendanceError ? 'Could not load availability.' : 'No people match filters.'}
+            </Text>
           </View>
         ) : (
           filteredAvailabilityUsers.map((member) => <PersonCard key={member.gdcId} member={member} />)
@@ -270,6 +294,9 @@ export function AvailabilitySection({ styles, ctx }) {
     availabilityFromDate,
     availabilityToDate,
     filteredMyAvailabilityLog,
+    attendanceLoading,
+    attendanceError,
+    onRetryAttendance,
   } = ctx;
 
   const isAdminBoard = isAdminRole(user?.role);
@@ -289,6 +316,9 @@ export function AvailabilitySection({ styles, ctx }) {
             availabilitySearch={availabilitySearch}
             setAvailabilitySearch={setAvailabilitySearch}
             filteredAvailabilityUsers={filteredAvailabilityUsers}
+            attendanceLoading={attendanceLoading}
+            attendanceError={attendanceError}
+            onRetryAttendance={onRetryAttendance}
           />
         </ScrollView>
       </SafeAreaView>
@@ -299,6 +329,7 @@ export function AvailabilitySection({ styles, ctx }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AttendanceStatusBanner message={attendanceError} onRetry={onRetryAttendance} />
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="calendar-clock-outline" size={20} color="#fff" />
@@ -387,6 +418,14 @@ export function AvailabilitySection({ styles, ctx }) {
             </View>
           </View>
           <View style={{ marginTop: 8 }}>
+            {attendanceLoading ? (
+              <Text style={styles.recordFieldLabel}>Loading attendance log…</Text>
+            ) : null}
+            {!attendanceLoading && filteredMyAvailabilityLog.length === 0 ? (
+              <Text style={styles.recordFieldLabel}>
+                {attendanceError ? 'Could not load log.' : 'No records in this date range.'}
+              </Text>
+            ) : null}
             {filteredMyAvailabilityLog.map((row) => (
               <View
                 key={row.date}

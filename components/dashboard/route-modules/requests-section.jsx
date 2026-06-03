@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimension
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
-import { isAdminOrHrRole } from '@/utils/roles';
+import { isAdminOrHrRole, isHrRole } from '@/utils/roles';
 
 import { AdminRequestsBoard } from './admin-requests-board';
 import { RqColors, requestStyles as rq } from './request-styles';
@@ -27,6 +27,8 @@ export function RequestsSection({ styles, ctx }) {
     manualRequests,
     filteredAdminLeaveRequests,
     filteredAdminManualRequests,
+    filteredMyLeaveRequestsBoard,
+    filteredMyManualRequestsBoard,
     requestAdminSearch,
     setRequestAdminSearch,
     updateManualStatus,
@@ -68,12 +70,22 @@ export function RequestsSection({ styles, ctx }) {
   } = ctx;
 
   const isMyRequestsRoute = slug === 'my-requests';
+  const isOwnMyRequestsBoard =
+    isMyRequestsRoute &&
+    (isHrRole(user?.role) || user?.role === 'Employee' || user?.role === 'Team Leader');
+  const canCreateOwnRequest =
+    isOwnMyRequestsBoard && (user?.role === 'Employee' || user?.role === 'Team Leader');
   const isAdminReviewer = !isMyRequestsRoute && isAdminOrHrRole(user?.role);
-  const isManualTab = slug === 'manual-time-requests' || (isMyRequestsRoute && myRequestsTab === 'manual');
+  const useMgmtRequestUi = isAdminReviewer || isOwnMyRequestsBoard;
+  const isManualTab =
+    slug === 'manual-time-requests' || (isOwnMyRequestsBoard && myRequestsTab === 'manual');
 
-  if (isAdminReviewer) {
+  if (useMgmtRequestUi) {
     const leaveLabel = width > 400 ? 'Leave Requests' : isTinyMobile ? '' : 'Leave';
     const manualLabel = width > 400 ? 'Manual Time Requests' : isTinyMobile ? '' : 'Manual Time';
+    const boardLeave = isOwnMyRequestsBoard ? filteredMyLeaveRequestsBoard : filteredAdminLeaveRequests;
+    const boardManual = isOwnMyRequestsBoard ? filteredMyManualRequestsBoard : filteredAdminManualRequests;
+
     return (
       <SafeAreaView style={rq.safe} edges={['top']}>
         <DashboardTopbar />
@@ -83,14 +95,17 @@ export function RequestsSection({ styles, ctx }) {
               <MaterialCommunityIcons name="clipboard-check-outline" size={24} color={RqColors.blue} />
             </View>
             <View style={rq.heroTextWrap}>
-              <Text style={rq.heroTitle}>Request Management</Text>
+              <Text style={rq.heroTitle}>{isOwnMyRequestsBoard ? 'My Requests' : 'Request Management'}</Text>
             </View>
           </View>
 
           <View style={rq.tabsCard}>
             <View style={rq.tabsRow}>
               <Pressable
-                onPress={() => router.push('/dashboard/(tabs)/route/request-management')}
+                onPress={() => {
+                  if (isOwnMyRequestsBoard) setMyRequestsTab('leave');
+                  else router.push('/dashboard/(tabs)/route/request-management');
+                }}
                 style={[rq.tabBtn, isSmallMobile && { paddingVertical: 10 }, !isManualTab && rq.tabBtnActive]}
               >
                 <MaterialCommunityIcons
@@ -105,7 +120,10 @@ export function RequestsSection({ styles, ctx }) {
                 ) : null}
               </Pressable>
               <Pressable
-                onPress={() => router.push('/dashboard/(tabs)/route/manual-time-requests')}
+                onPress={() => {
+                  if (isOwnMyRequestsBoard) setMyRequestsTab('manual');
+                  else router.push('/dashboard/(tabs)/route/manual-time-requests');
+                }}
                 style={[rq.tabBtn, isSmallMobile && { paddingVertical: 10 }, isManualTab && rq.tabBtnActive]}
               >
                 <MaterialCommunityIcons
@@ -130,23 +148,64 @@ export function RequestsSection({ styles, ctx }) {
             setManualStatusFilter={setManualStatusFilter}
             requestAdminSearch={requestAdminSearch}
             setRequestAdminSearch={setRequestAdminSearch}
-            filteredAdminLeaveRequests={filteredAdminLeaveRequests}
-            filteredAdminManualRequests={filteredAdminManualRequests}
+            filteredAdminLeaveRequests={boardLeave}
+            filteredAdminManualRequests={boardManual}
             updateLeaveStatus={updateLeaveStatus}
             updateManualStatus={updateManualStatus}
             openRejectModal={openRejectModal}
+            showActions={!isOwnMyRequestsBoard}
+            searchPlaceholder={
+              isOwnMyRequestsBoard ? 'Search your requests...' : 'Search by name, role or type...'
+            }
+            onCreatePress={
+              canCreateOwnRequest
+                ? () => (isManualTab ? setManualModalOpen(true) : setLeaveModalOpen(true))
+                : undefined
+            }
           />
         </ScrollView>
 
-        <RejectModal
-          rejectModalOpen={rejectModalOpen}
-          setRejectModalOpen={setRejectModalOpen}
-          rejectTargetType={rejectTargetType}
-          rejectReason={rejectReason}
-          setRejectReason={setRejectReason}
-          submitRejectRequest={submitRejectRequest}
-          styles={styles}
-        />
+        {!isOwnMyRequestsBoard ? (
+          <RejectModal
+            rejectModalOpen={rejectModalOpen}
+            setRejectModalOpen={setRejectModalOpen}
+            rejectTargetType={rejectTargetType}
+            rejectReason={rejectReason}
+            setRejectReason={setRejectReason}
+            submitRejectRequest={submitRejectRequest}
+            styles={styles}
+          />
+        ) : null}
+
+        {canCreateOwnRequest ? (
+          <MyRequestCreateModals
+            styles={styles}
+            isManualTab={isManualTab}
+            leaveModalOpen={leaveModalOpen}
+            setLeaveModalOpen={setLeaveModalOpen}
+            leaveType={leaveType}
+            setLeaveType={setLeaveType}
+            leaveTypeDropdownOpen={leaveTypeDropdownOpen}
+            setLeaveTypeDropdownOpen={setLeaveTypeDropdownOpen}
+            openLeaveDatePicker={openLeaveDatePicker}
+            leaveFromDate={leaveFromDate}
+            leaveToDate={leaveToDate}
+            leaveReason={leaveReason}
+            setLeaveReason={setLeaveReason}
+            submitLeaveRequest={submitLeaveRequest}
+            manualModalOpen={manualModalOpen}
+            setManualModalOpen={setManualModalOpen}
+            openManualDatePicker={openManualDatePicker}
+            manualDate={manualDate}
+            openManualTimePicker={openManualTimePicker}
+            manualClockIn={manualClockIn}
+            manualClockOut={manualClockOut}
+            manualBreakOut={manualBreakOut}
+            manualReason={manualReason}
+            setManualReason={setManualReason}
+            submitManualRequest={submitManualRequest}
+          />
+        ) : null}
       </SafeAreaView>
     );
   }
@@ -387,6 +446,172 @@ export function RequestsSection({ styles, ctx }) {
         styles={styles}
       />
     </SafeAreaView>
+  );
+}
+
+function MyRequestCreateModals({
+  styles,
+  leaveModalOpen,
+  setLeaveModalOpen,
+  leaveType,
+  setLeaveType,
+  leaveTypeDropdownOpen,
+  setLeaveTypeDropdownOpen,
+  openLeaveDatePicker,
+  leaveFromDate,
+  leaveToDate,
+  leaveReason,
+  setLeaveReason,
+  submitLeaveRequest,
+  manualModalOpen,
+  setManualModalOpen,
+  openManualDatePicker,
+  manualDate,
+  openManualTimePicker,
+  manualClockIn,
+  manualClockOut,
+  manualBreakOut,
+  manualReason,
+  setManualReason,
+  submitManualRequest,
+}) {
+  return (
+    <>
+      <Modal visible={leaveModalOpen} transparent animationType="slide" onRequestClose={() => setLeaveModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCardShell}>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Apply for Leave</Text>
+                <Text style={styles.recordFieldLabel}>Leave Type</Text>
+                <View style={styles.leaveTypeWrap}>
+                  <Pressable style={styles.leaveTypeTrigger} onPress={() => setLeaveTypeDropdownOpen((v) => !v)}>
+                    <Text style={styles.leaveTypeTriggerText}>{leaveType}</Text>
+                    <MaterialCommunityIcons name="chevron-down" size={18} color="#64748b" />
+                  </Pressable>
+                  {leaveTypeDropdownOpen ? (
+                    <View style={styles.leaveTypeMenu}>
+                      {['Leave', 'Casual', 'Paid (Annual)'].map((type) => (
+                        <Pressable
+                          key={type}
+                          onPress={() => {
+                            setLeaveType(type);
+                            setLeaveTypeDropdownOpen(false);
+                          }}
+                          style={[styles.leaveTypeOption, leaveType === type && styles.leaveTypeOptionActive]}
+                        >
+                          <Text style={[styles.leaveTypeOptionText, leaveType === type && styles.leaveTypeOptionTextActive]}>
+                            {type}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.dateFilterRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>From</Text>
+                    <Pressable style={styles.modalPickerField} onPress={() => openLeaveDatePicker('from')}>
+                      <Text style={styles.modalPickerText}>{leaveFromDate || 'YYYY-MM-DD'}</Text>
+                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>To</Text>
+                    <Pressable style={styles.modalPickerField} onPress={() => openLeaveDatePicker('to')}>
+                      <Text style={styles.modalPickerText}>{leaveToDate || 'YYYY-MM-DD'}</Text>
+                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                </View>
+                <Text style={styles.recordFieldLabel}>Reason</Text>
+                <TextInput
+                  value={leaveReason}
+                  onChangeText={setLeaveReason}
+                  placeholder="Reason..."
+                  placeholderTextColor="#94a3b8"
+                  style={[styles.input, styles.textAreaSm]}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.cancelBtn} onPress={() => setLeaveModalOpen(false)}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalPrimaryBtn} onPress={submitLeaveRequest}>
+                    <Text style={styles.actionBtnText}>Submit</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={manualModalOpen} transparent animationType="slide" onRequestClose={() => setManualModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCardShell}>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Request Manual Time</Text>
+                <View style={styles.dateFilterRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>Date</Text>
+                    <Pressable style={styles.modalPickerField} onPress={openManualDatePicker}>
+                      <Text style={styles.modalPickerText}>{manualDate || 'YYYY-MM-DD'}</Text>
+                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.dateFilterRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>Clock In</Text>
+                    <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('in')}>
+                      <Text style={styles.modalPickerText}>{manualClockIn || '--:-- --'}</Text>
+                      <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>Clock Out</Text>
+                    <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('out')}>
+                      <Text style={styles.modalPickerText}>{manualClockOut || '--:-- --'}</Text>
+                      <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.dateFilterRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recordFieldLabel}>Break-out (optional)</Text>
+                    <Pressable style={styles.modalPickerField} onPress={() => openManualTimePicker('breakOut')}>
+                      <Text style={styles.modalPickerText}>{manualBreakOut || '--:-- --'}</Text>
+                      <MaterialCommunityIcons name="clock-outline" size={16} color="#64748b" />
+                    </Pressable>
+                  </View>
+                </View>
+                <Text style={styles.recordFieldLabel}>Reason</Text>
+                <TextInput
+                  value={manualReason}
+                  onChangeText={setManualReason}
+                  placeholder="Reason..."
+                  placeholderTextColor="#94a3b8"
+                  style={[styles.input, styles.textAreaSm]}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.cancelBtn} onPress={() => setManualModalOpen(false)}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalPrimaryBtn} onPress={submitManualRequest}>
+                    <Text style={styles.actionBtnText}>Submit</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 

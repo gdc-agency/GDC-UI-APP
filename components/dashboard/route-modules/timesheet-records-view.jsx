@@ -17,6 +17,7 @@ import {
   promptAttendancePdfExport,
 } from '@/utils/attendance-export';
 
+import { ClockRecordCard, formatClockDisplayDate } from './clock-record-card';
 import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 import { TimesheetUserAvatar } from './timesheet-user-avatar';
 
@@ -58,13 +59,6 @@ function openDatePicker(currentIso, onPick) {
       },
     });
   }
-}
-
-function formatDisplayDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function roleSubtitle(role, team) {
@@ -208,43 +202,6 @@ function TimePanel({ label, time, isIn }) {
   );
 }
 
-function ClockRecordCard({ entry, index }) {
-  const name = entry.user?.name || entry.userName || '—';
-  const dept = entry.user?.team || entry.department || entry.team || '—';
-  const role = entry.user?.role || entry.userRole || '—';
-  const avatarUrl = entry.user?.avatarUrl || entry.avatarUrl;
-  const duration = durationForEntry(entry);
-
-  return (
-    <View style={ts.logRecordCard}>
-      <View style={ts.logRecordTop}>
-        <TimesheetUserAvatar name={name} avatarUrl={avatarUrl} size={48} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={ts.logRecordName} numberOfLines={1}>
-            {name}
-          </Text>
-          <Text style={ts.logRecordSub} numberOfLines={1}>
-            {roleSubtitle(role, dept)}
-          </Text>
-        </View>
-        <DurationChip duration={duration} variant="clock" />
-      </View>
-
-      <View style={ts.logMetaBar}>
-        <MetaTile icon="numeric" label="Sr#" value={String(index + 1)} />
-        <MetaTile icon="card-account-details-outline" label="GDC ID" value={entry.gdcId} />
-        <MetaTile icon="calendar-month-outline" label="Date" value={formatDisplayDate(entry.date)} />
-      </View>
-
-      <View style={ts.logInOutRow}>
-        <TimePanel label="CHECK IN" time={entry.checkIn} isIn />
-        <MaterialCommunityIcons name="arrow-right" size={18} color="#94A3B8" />
-        <TimePanel label="CHECK OUT" time={entry.checkOut} isIn={false} />
-      </View>
-    </View>
-  );
-}
-
 function ManualRecordCard({ entry }) {
   const name = entry.user?.name || entry.userName || '—';
   const dept = entry.user?.team || entry.department || entry.team || '—';
@@ -272,7 +229,7 @@ function ManualRecordCard({ entry }) {
 
       <View style={[ts.logMetaBar, ts.logMetaBarManual]}>
         <MetaTile icon="card-account-details-outline" label="GDC ID" value={entry.gdcId} tone="amber" />
-        <MetaTile icon="calendar-month-outline" label="Date" value={formatDisplayDate(entry.date)} tone="amber" />
+        <MetaTile icon="calendar-month-outline" label="Date" value={formatClockDisplayDate(entry.date)} tone="amber" />
         <MetaTile icon="clock-outline" label="Duration" value={duration} tone="amber" />
       </View>
 
@@ -453,11 +410,11 @@ export function TimesheetRecordsView({
         </View>
       ) : (
         <View>
-          {records.map((entry, index) =>
+          {records.map((entry) =>
             isManual ? (
               <ManualRecordCard key={entry.id} entry={entry} />
             ) : (
-              <ClockRecordCard key={entry.id} entry={entry} index={index} />
+              <ClockRecordCard key={entry.id} entry={entry} />
             ),
           )}
         </View>

@@ -225,6 +225,7 @@ export default function NotificationsScreen() {
           <Pressable onPress={onClearAll} disabled={!token || items.length === 0}>
             <Text style={[styles.toolbarLink, (!token || items.length === 0) && styles.toolbarLinkDisabled]}>Clear all</Text>
           </Pressable>
+          <Text style={styles.toolbarDivider}>|</Text>
           <Pressable onPress={onMarkAllRead} disabled={!token || marking || items.length === 0}>
             <Text style={[styles.toolbarLink, (!token || items.length === 0) && styles.toolbarLinkDisabled]}>
               {marking ? '…' : 'Mark all read'}
@@ -255,7 +256,8 @@ export default function NotificationsScreen() {
             </Text>
           }
           renderItem={({ item }) => (
-            <View style={[styles.row, item.read && styles.rowRead]}>
+            <View style={[styles.card, !item.read && styles.cardUnread]}>
+              {!item.read ? <View style={styles.unreadBar} /> : null}
               <Pressable
                 style={styles.rowMain}
                 onPress={() => void onOpenItem(item)}
@@ -263,26 +265,31 @@ export default function NotificationsScreen() {
                 <View style={styles.iconWrap}>
                   <MaterialCommunityIcons
                     name={iconForCategory(item.category, item.eventKey)}
-                    size={18}
+                    size={20}
                     color={BrandColors.primaryMid}
                   />
                 </View>
                 <View style={styles.body}>
                   <Text style={styles.rowTitle}>{item.title}</Text>
                   {item.description ? <Text style={styles.rowText}>{item.description}</Text> : null}
-                  <Text style={styles.meta}>{formatTime(item.createdAt)}</Text>
+                  <View style={styles.metaRow}>
+                    <MaterialCommunityIcons name="clock-outline" size={13} color="#94a3b8" />
+                    <Text style={styles.meta}>{formatTime(item.createdAt)}</Text>
+                  </View>
                 </View>
-                {!item.read ? <View style={styles.unreadDot} /> : <View style={styles.unreadDotSpacer} />}
               </Pressable>
-              <Pressable
-                style={styles.deleteBtn}
-                hitSlop={12}
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  onDeleteItem(item);
-                }}>
-                <MaterialCommunityIcons name="trash-can-outline" size={18} color="#94a3b8" />
-              </Pressable>
+              <View style={styles.rowActions}>
+                {!item.read ? <View style={styles.unreadDot} /> : null}
+                <Pressable
+                  style={styles.deleteBtn}
+                  hitSlop={12}
+                  onPress={(e) => {
+                    e?.stopPropagation?.();
+                    onDeleteItem(item);
+                  }}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#94a3b8" />
+                </Pressable>
+              </View>
             </View>
           )}
         />
@@ -320,50 +327,80 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
   },
   toolbarHint: { fontSize: 13, color: BrandColors.textMuted, flex: 1, marginRight: 8 },
-  toolbarActions: { flexDirection: 'row', gap: 14, alignItems: 'center' },
+  toolbarActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  toolbarDivider: { fontSize: 14, color: '#cbd5e1', fontWeight: '400' },
   toolbarLink: { fontSize: 14, color: BrandColors.primaryMid, fontWeight: '700' },
   toolbarLinkDisabled: { opacity: 0.4 },
-  list: { paddingVertical: 8, paddingHorizontal: 12, paddingBottom: 100 },
+  list: { paddingVertical: 10, paddingHorizontal: 14, paddingBottom: 100, gap: 10 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   skeletonWrap: { paddingBottom: 100 },
   empty: { textAlign: 'center', marginTop: 40, color: BrandColors.textMuted, fontSize: 15, paddingHorizontal: 24 },
-  row: {
+  card: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
+    alignItems: 'stretch',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  cardUnread: {
+    borderColor: '#c7d8f5',
+    backgroundColor: '#fafcff',
+  },
+  unreadBar: {
+    width: 4,
+    backgroundColor: BrandColors.primaryMid,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
   },
   rowMain: {
     flex: 1,
     flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    gap: 12,
+    paddingVertical: 14,
+    paddingLeft: 12,
+    paddingRight: 8,
     alignItems: 'flex-start',
     minWidth: 0,
   },
-  rowRead: { opacity: 0.72 },
   iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#eaf0ff',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    flexShrink: 0,
   },
-  body: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '700', color: BrandColors.text },
-  rowText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: BrandColors.textMuted },
-  meta: { marginTop: 6, fontSize: 11, color: '#94a3b8', fontWeight: '600' },
-  deleteBtn: { padding: 12, justifyContent: 'flex-start' },
+  body: { flex: 1, minWidth: 0 },
+  rowTitle: { fontSize: 15, fontWeight: '800', color: BrandColors.text, lineHeight: 20 },
+  rowText: { marginTop: 4, fontSize: 13, lineHeight: 19, color: BrandColors.textMuted },
+  metaRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  meta: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingTop: 14,
+    paddingRight: 12,
+    gap: 8,
+  },
+  deleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: BrandColors.primaryMid,
-    marginTop: 8,
+    marginTop: 14,
     flexShrink: 0,
   },
-  unreadDotSpacer: { width: 8, marginTop: 8, flexShrink: 0 },
 });

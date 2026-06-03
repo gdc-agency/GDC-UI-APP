@@ -11,6 +11,13 @@ import { isAdminRole, isHrRole } from '@/utils/roles';
 
 const DRAWER_WIDTH = 304;
 
+/** Retired route — do not show in drawer (use team-tl instead). */
+const RETIRED_SIDEBAR_ROUTE_IDS = new Set(['team-data']);
+
+function withoutRetiredRoutes(items) {
+  return items.filter((r) => !RETIRED_SIDEBAR_ROUTE_IDS.has(r.id));
+}
+
 export function DashboardTopbar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -21,7 +28,6 @@ export function DashboardTopbar() {
   const adminRoutes = [
     { id: 'admin', label: 'Admin Control' },
     { id: 'daily-updates', label: 'Daily Updates' },
-    { id: 'team-data', label: 'Teams Management' },
     { id: 'project-manager', label: 'Project Manager' },
     { id: 'timesheet', label: 'Timesheet' },
     { id: 'availability', label: 'Availability' },
@@ -37,13 +43,17 @@ export function DashboardTopbar() {
   ];
   const hrExtraRoutes = [
     { id: 'request-management', label: 'Request Management' },
-    { id: 'team-data', label: 'Teams Management' },
     { id: 'team-tl', label: 'Team assign to TL' },
   ];
-  const routes = isAdminRole(user?.role) ? adminRoutes : isHrRole(user?.role) ? [...nonAdminRoutes, ...hrExtraRoutes] : nonAdminRoutes;
+  const routes = withoutRetiredRoutes(
+    isAdminRole(user?.role)
+      ? adminRoutes
+      : isHrRole(user?.role)
+        ? [...nonAdminRoutes, ...hrExtraRoutes]
+        : nonAdminRoutes,
+  );
   const routeIconMap = {
     'daily-updates': 'text-box-outline',
-    'team-data': 'account-group-outline',
     'project-manager': 'calendar-month-outline',
     timesheet: 'clock-outline',
     availability: 'calendar-clock-outline',
@@ -127,7 +137,8 @@ export function DashboardTopbar() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.drawerBrandText}>{BRAND_COMPANY_NAME}</Text>
                   <Text style={styles.drawerUserMeta} numberOfLines={1}>
-                    {user?.name ? user.name : 'Signed in'}{user?.email ? ` • ${user.email}` : ''}
+                    {user?.name ? user.name : 'Signed in'}
+                    {user?.role ? ` • ${user.role}` : ''}
                   </Text>
                 </View>
               </View>
@@ -159,7 +170,6 @@ export function DashboardTopbar() {
                         <Text style={[styles.routeItemText, isActive && styles.routeItemTextActive]}>{r.label}</Text>
                       </View>
                     </View>
-                    <MaterialCommunityIcons name="chevron-right" size={18} color={isActive ? BrandColors.primary : '#94a3b8'} />
                   </Pressable>
                 );
               })}

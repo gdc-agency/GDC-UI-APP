@@ -14,3 +14,17 @@ export function isHrRole(role) {
 export function isAdminOrHrRole(role) {
   return isAdminRole(role) || isHrRole(role);
 }
+
+/** Matches Auth roster / dashboard team count (`employee` slug only). */
+export function normalizeRoleSlug(role) {
+  let x = String(role || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
+  if (x === 'teamleader') x = 'team_leader';
+  return x;
+}
+
+export function isEmployeeRole(role) {
+  return normalizeRoleSlug(role) === 'employee';
+}

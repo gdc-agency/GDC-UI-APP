@@ -2,12 +2,12 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { isAdminRole } from '@/utils/roles';
+import { isAdminOrHrRole, isAdminRole } from '@/utils/roles';
 
-import { TsColors, statusDotStyle, timesheetStyles as ts } from './timesheet-styles';
+import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 
+import { AttendanceMemberCard } from './attendance-member-card';
 import { TimesheetPageHeader } from './timesheet-page-header';
-import { TimesheetUserAvatar } from './timesheet-user-avatar';
 import { TimesheetRecordsView } from './timesheet-records-view';
 
 const DATE_OPTIONS = [
@@ -16,31 +16,23 @@ const DATE_OPTIONS = [
   { key: '30d', label: '30 Days' },
 ];
 
-const ROLE_OPTIONS = [
+export const TIMESHEET_ADMIN_ROLE_OPTIONS = [
   { key: 'all', label: 'All Roles' },
   { key: 'Employee', label: 'Employee' },
   { key: 'Team Leader', label: 'Team Leader' },
   { key: 'HR', label: 'HR' },
 ];
 
-function dayNum(iso) {
-  if (!iso) return '—';
-  const p = String(iso).slice(8, 10);
-  return p.startsWith('0') ? p.slice(1) : p;
-}
+export const TIMESHEET_HR_ROLE_OPTIONS = [
+  { key: 'all', label: 'All Roles' },
+  { key: 'Employee', label: 'Employee' },
+  { key: 'Team Leader', label: 'Team Leader' },
+];
 
-function dayShort(iso) {
-  if (!iso) return '';
-  const d = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { weekday: 'short' });
-}
-
-function roleSubtitle(role, team) {
-  const r = String(role || '').trim();
-  const t = String(team || '').trim();
-  if (r && t && t !== '—') return `${r} • ${t}`;
-  return r || t || '—';
+export function timesheetRoleFilterOptionsForViewer(role) {
+  if (isAdminRole(role)) return TIMESHEET_ADMIN_ROLE_OPTIONS;
+  if (String(role || '').trim() === 'HR') return TIMESHEET_HR_ROLE_OPTIONS;
+  return TIMESHEET_ADMIN_ROLE_OPTIONS;
 }
 
 function formatDashboardDate(timesheetWindow) {
@@ -126,105 +118,6 @@ function TimesheetDashboardHero({ stats, timesheetWindow }) {
   );
 }
 
-function StatusDot({ code }) {
-  const s = statusDotStyle(code);
-  return (
-    <View style={[ts.statusDot, { backgroundColor: s.bg }]}>
-      <Text style={ts.statusDotText}>{s.label}</Text>
-    </View>
-  );
-}
-
-function Legend() {
-  const items = [
-    { code: 'P', label: 'Present', color: TsColors.green },
-    { code: 'A', label: 'Absent', color: TsColors.red },
-    { code: 'LV', label: 'Leave', color: TsColors.orange },
-    { code: 'LT', label: 'Late', color: TsColors.purple },
-  ];
-  return (
-    <View style={ts.legendRow}>
-      {items.map((item) => (
-        <View key={item.label} style={ts.legendItem}>
-          <View style={[ts.legendDot, { backgroundColor: item.color }]} />
-          <Text style={ts.legendText}>{item.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function EmployeeCard({ entry, timesheetDays, timesheetWindow, expanded, onToggle }) {
-  const showTimeline = timesheetWindow === '7d' && Array.isArray(entry.cells) && entry.cells.length > 0;
-
-  return (
-    <View style={ts.employeeCard}>
-      <Pressable style={ts.employeeHead} onPress={onToggle}>
-        <TimesheetUserAvatar name={entry.name} avatarUrl={entry.avatarUrl} />
-        <View style={ts.employeeMeta}>
-          <Text style={ts.employeeName} numberOfLines={1}>
-            {entry.name}
-          </Text>
-          <Text style={ts.employeeRole} numberOfLines={1}>
-            {roleSubtitle(entry.role, entry.team)}
-          </Text>
-        </View>
-        <View style={ts.employeeRight}>
-          <Text style={ts.employeeGdc} numberOfLines={1}>
-            {entry.gdcId}
-          </Text>
-          <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={TsColors.textMuted} />
-        </View>
-      </Pressable>
-
-      {expanded ? (
-        <View style={ts.expandedBody}>
-          {showTimeline ? (
-            <>
-              <View style={ts.timelineRow}>
-                {timesheetDays.map((day, idx) => (
-                  <View key={`${entry.gdcId}-${day}`} style={ts.timelineCol}>
-                    <Text style={ts.timelineDate}>{dayNum(day)}</Text>
-                    <Text style={ts.timelineDay}>{dayShort(day)}</Text>
-                    <StatusDot code={entry.cells[idx] || 'A'} />
-                  </View>
-                ))}
-              </View>
-              <Legend />
-            </>
-          ) : timesheetWindow === 'today' ? (
-            <View style={ts.summaryCountsRow}>
-              <View style={ts.summaryCountItem}>
-                <StatusDot code={entry.cells?.[0] || 'A'} />
-                <Text style={ts.summaryCountLbl}>Today</Text>
-              </View>
-            </View>
-          ) : timesheetWindow === '30d' ? (
-            <View style={ts.summaryCountsRow}>
-              <View style={ts.summaryCountItem}>
-                <Text style={[ts.summaryCountVal, { color: TsColors.green }]}>{entry.counts?.present ?? 0}</Text>
-                <Text style={ts.summaryCountLbl}>Present</Text>
-              </View>
-              <View style={ts.summaryCountItem}>
-                <Text style={[ts.summaryCountVal, { color: TsColors.purple }]}>{entry.counts?.late ?? 0}</Text>
-                <Text style={ts.summaryCountLbl}>Late</Text>
-              </View>
-              <View style={ts.summaryCountItem}>
-                <Text style={[ts.summaryCountVal, { color: TsColors.red }]}>{entry.counts?.absent ?? 0}</Text>
-                <Text style={ts.summaryCountLbl}>Absent</Text>
-              </View>
-              <View style={ts.summaryCountItem}>
-                <Text style={[ts.summaryCountVal, { color: TsColors.orange }]}>{entry.leaveDays ?? 0}</Text>
-                <Text style={ts.summaryCountLbl}>Leave</Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 /** @deprecated Removed — use TimesheetRecordsView. Kept for Metro fast-refresh. */
 function RecordList() {
   return null;
@@ -260,6 +153,7 @@ export function TimesheetOverviewScreen({
   attendanceError,
   onRetryAttendance,
   showRoleFilter,
+  roleFilterOptions,
   recordDepartmentFilter,
   setRecordDepartmentFilter,
   recordDepartmentOptions,
@@ -283,7 +177,8 @@ export function TimesheetOverviewScreen({
   const stats = useMemo(() => computeOverviewStats(attendanceRows, timesheetWindow), [attendanceRows, timesheetWindow]);
 
   const dateLabel = DATE_OPTIONS.find((o) => o.key === timesheetWindow)?.label || '7 Days';
-  const roleLabel = ROLE_OPTIONS.find((o) => o.key === timesheetRoleFilter)?.label || 'All Roles';
+  const roleOpts = roleFilterOptions?.length ? roleFilterOptions : TIMESHEET_ADMIN_ROLE_OPTIONS;
+  const roleLabel = roleOpts.find((o) => o.key === timesheetRoleFilter)?.label || 'All Roles';
 
   return (
     <>
@@ -350,7 +245,7 @@ export function TimesheetOverviewScreen({
                 </Pressable>
                 {roleMenuOpen ? (
                   <View style={ts.roleMenu}>
-                    {ROLE_OPTIONS.map((opt) => (
+                    {roleOpts.map((opt) => (
                       <Pressable
                         key={opt.key}
                         style={ts.roleMenuItem}
@@ -392,7 +287,7 @@ export function TimesheetOverviewScreen({
             </View>
           ) : (
             attendanceRows.map((entry) => (
-              <EmployeeCard
+              <AttendanceMemberCard
                 key={entry.gdcId}
                 entry={entry}
                 timesheetDays={timesheetDays}
@@ -432,9 +327,8 @@ export function TimesheetOverviewScreen({
   );
 }
 
+/** Admin + HR: same overview UI. TL / Employee keep role-specific panels. */
 export function useShowTimesheetOverviewUi(user, slug) {
   const isRecords = slug === 'clock-records' || slug === 'manual-records';
-  const isAdminHrOverview =
-    (isAdminRole(user?.role) || user?.role === 'HR') && (slug === 'timesheet' || isRecords);
-  return isAdminHrOverview;
+  return isAdminOrHrRole(user?.role) && (slug === 'timesheet' || isRecords);
 }

@@ -94,6 +94,14 @@ export async function getClockHistory(token) {
   return extractDataArray(res);
 }
 
+/** @param {string} token */
+export async function getMyTodayStatus(token) {
+  const res = await attendanceApiRequest('/api/today-status', { token });
+  if (!res || typeof res !== 'object') return null;
+  const d = /** @type {{ data?: Record<string, unknown> }} */ (res);
+  return d.data && typeof d.data === 'object' ? d.data : null;
+}
+
 /**
  * @param {string} token
  * @param {{ role?: string; from?: string; to?: string; gdc_id?: string; id?: string; department?: string }} [query]

@@ -70,6 +70,7 @@ export {
   getAttendance7Days,
   getAttendanceSummary,
   getClockHistory,
+  getMyTodayStatus,
   getClockRecords,
   getCurrentShift,
   getManualTimesheetRecords,

@@ -122,6 +122,15 @@ export const requestStyles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
     color: RqColors.text,
+    flex: 1,
+  },
+  createBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: RqColors.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchRow: {
     flexDirection: 'row',

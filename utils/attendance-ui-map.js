@@ -1,5 +1,6 @@
 import { resolveProfileImageUri } from '@/utils/chat-directory';
 import { formatAttendanceDuration } from '@/utils/attendance-export';
+import { isAdminRole, isEmployeeRole } from '@/utils/roles';
 
 /** @param {Record<string, unknown>} row */
 function avatarUrlFromRow(row) {
@@ -24,6 +25,25 @@ export function filterAttendanceOverviewUsers(users) {
   return users.filter((u) => !isExcludedAttendanceOverviewRole(u.role));
 }
 
+/**
+ * Admin / HR attendance scope (matches GDC website `filterUsersForAttendanceViewer`).
+ * Admin: HR, Team Leader, Employee (not Admin). HR: Employee + Team Leader only.
+ *
+ * @param {string | undefined} viewerRole
+ * @param {Array<{ role?: string }>} users
+ */
+export function filterUsersForAttendanceViewer(viewerRole, users) {
+  const base = filterAttendanceOverviewUsers(users);
+  if (isAdminRole(viewerRole)) return base;
+  if (String(viewerRole || '').trim() === 'HR') {
+    return base.filter((u) => {
+      const r = displayRoleFromApi(u.role);
+      return r === 'Employee' || r === 'Team Leader';
+    });
+  }
+  return base;
+}
+
 /** Map API role strings to dashboard display labels. */
 export function displayRoleFromApi(roleRaw) {
   const r = String(roleRaw || '')
@@ -35,6 +55,25 @@ export function displayRoleFromApi(roleRaw) {
   if (r === 'team_leader' || r === 'teamleader' || r === 'team_lead') return 'Team Leader';
   if (r === 'employee') return 'Employee';
   return typeof roleRaw === 'string' && roleRaw.trim() ? roleRaw.trim() : 'Employee';
+}
+
+/** Default log range for My Availability (last 30 days, local calendar). */
+export function getDefaultAvailabilityDateRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 29);
+  return {
+    start: dateOnlyFromTimestamp(start),
+    end: dateOnlyFromTimestamp(end),
+  };
+}
+
+/** Map GET /api/today-status to availability chip status. */
+export function mapTodayStatusToAvailabilityStatus(raw) {
+  const s = String(raw || '').toUpperCase();
+  if (s === 'LEAVE') return 'Leave';
+  if (s === 'PRESENT') return 'Available';
+  return 'Unavailable';
 }
 
 /** Map dashboard filter label to attendance API role query. */
@@ -157,6 +196,43 @@ export function mapSevenDayUserRow(row) {
  * @param {Record<string, unknown>} row
  * @param {string} todayIso YYYY-MM-DD
  */
+/**
+ * Auth `my-team-roster` member → timesheet list row (stable team label for TL roster).
+ * @param {Record<string, unknown>} member
+ * @param {string | null | undefined} teamName
+ */
+export function mapRosterMemberToTimesheetUser(member, teamName) {
+  const m = member && typeof member === 'object' ? member : {};
+  const team = String(teamName || m.department || '').trim() || '—';
+  return {
+    id: m.id != null ? String(m.id) : undefined,
+    gdcId: String(m.gdc_id ?? m.gdcId ?? '').trim(),
+    name: String(m.name ?? '').trim(),
+    role: displayRoleFromApi(m.role),
+    team,
+    avatarUrl: avatarUrlFromRow(m),
+  };
+}
+
+/**
+ * @param {unknown} rosterRes - GET /api/teams/my-team-roster
+ */
+export function employeesFromTeamRoster(rosterRes) {
+  if (!rosterRes || typeof rosterRes !== 'object') {
+    return { teamName: null, members: [] };
+  }
+  const teamName =
+    rosterRes.team_name != null ? String(rosterRes.team_name).trim() : null;
+  const raw = Array.isArray(/** @type {{ members?: unknown }} */ (rosterRes).members)
+    ? /** @type {{ members: unknown[] }} */ (rosterRes).members
+    : [];
+  const members = raw
+    .filter((m) => isEmployeeRole(displayRoleFromApi(m && typeof m === 'object' ? m.role : '')))
+    .map((m) => mapRosterMemberToTimesheetUser(m, teamName))
+    .filter((u) => u.gdcId);
+  return { teamName, members };
+}
+
 export function mapTodaySummaryUserRow(row, todayIso) {
   return {
     id: row.id != null ? String(row.id) : undefined,
@@ -180,6 +256,50 @@ export function mapTodaySummaryUserRow(row, todayIso) {
  * @param {Array<{ gdcId: string; avatarUrl?: string | null; id?: string | number }>} users
  * @param {Array<Record<string, unknown>>} profileRows
  */
+/**
+ * Fill missing avatars / names on clock log rows from Auth directory.
+ * @param {Array<Record<string, unknown>>} logs
+ * @param {Array<Record<string, unknown>>} profileRows
+ */
+export function enrichTimesheetLogsWithAvatars(logs, profileRows = []) {
+  const byGdc = new Map();
+  for (const row of profileRows) {
+    const gdc = String(row.gdc_id ?? row.gdcId ?? '').trim();
+    if (!gdc) continue;
+    byGdc.set(gdc, {
+      avatarUrl: avatarUrlFromRow(row),
+      name: String(row.name ?? ''),
+      role: displayRoleFromApi(row.role),
+      team: String(row.department ?? row.team ?? '—'),
+    });
+  }
+  return logs.map((log) => {
+    const snap = byGdc.get(log.gdcId);
+    const avatarUrl = log.avatarUrl || snap?.avatarUrl || null;
+    const userName = log.userName || snap?.name || '';
+    const userRole = log.userRole || snap?.role || 'Employee';
+    const team = log.team || snap?.team || '—';
+    return { ...log, avatarUrl, userName, userRole, team };
+  });
+}
+
+/** Attach `user` blob for {@link ClockRecordCard}. */
+export function attachClockLogUser(log, profile) {
+  const name = profile?.name || log.userName || '—';
+  const role = profile?.role || log.userRole || 'Employee';
+  const team = profile?.team || log.team || '—';
+  const avatarUrl = log.avatarUrl || profile?.avatarUrl || null;
+  return {
+    ...log,
+    avatarUrl,
+    userName: name,
+    userRole: role,
+    team,
+    durationLabel: log.durationLabel || formatAttendanceDuration(log.hours, log.hours),
+    user: { name, role, team, avatarUrl },
+  };
+}
+
 export function enrichTimesheetUserAvatars(users, profileRows = []) {
   const byGdc = new Map();
   const byId = new Map();
@@ -230,9 +350,12 @@ export function mapSummaryUserToAvailability(row) {
     status = 'Available';
     attendanceLabel = 'Present';
   }
+  const live = String(row.live_status ?? '').toUpperCase();
   let activityLabel = 'Away';
   if (status === 'Leave') activityLabel = 'Leave';
-  else if (status === 'Available') activityLabel = 'Working';
+  else if (live === 'BREAK') activityLabel = 'On break';
+  else if (live === 'WORKING') activityLabel = 'Working';
+  else if (status === 'Available' && row.check_in && !row.check_out) activityLabel = 'Working';
 
   return {
     id: row.id != null ? String(row.id) : undefined,
@@ -311,15 +434,21 @@ export function mapRecordRowToTimesheetLog(row, source) {
 export function mapClockHistoryToLog(row) {
   const date = dateOnlyFromTimestamp(row.check_in ?? row.date);
   const isLate = String(row.flag ?? '').toUpperCase() === 'LATE';
+  const hours = Number.parseFloat(String(row.hours ?? '0')) || 0;
   return {
     id: String(row.attendance_id ?? `hist-${date}`),
     gdcId: String(row.gdc_id ?? ''),
     date,
     checkIn: timeLabelFromTimestamp(row.check_in),
     checkOut: row.check_out ? timeLabelFromTimestamp(row.check_out) : '--',
-    hours: Number.parseFloat(String(row.hours ?? '0')) || 0,
+    hours,
+    durationLabel: formatAttendanceDuration(hours, row.hours),
     status: isLate ? 'L' : 'P',
     source: 'clock',
+    avatarUrl: avatarUrlFromRow(row),
+    userName: String(row.name ?? row.user_name ?? ''),
+    userRole: displayRoleFromApi(row.role),
+    team: String(row.department ?? row.team ?? '—'),
   };
 }
 
@@ -328,16 +457,50 @@ export function mapClockHistoryToLog(row) {
  */
 export function mapClockHistoryToAvailabilityLog(row) {
   const date = dateOnlyFromTimestamp(row.check_in ?? row.date);
-  const isLate = String(row.flag ?? '').toUpperCase() === 'LATE';
   const hours = Number.parseFloat(String(row.hours ?? '0')) || 0;
+  const hasSession = !!(row.check_in || hours > 0);
   return {
     date,
     in: timeLabelFromTimestamp(row.check_in),
     out: row.check_out ? timeLabelFromTimestamp(row.check_out) : '--',
     breaks: 0,
     hours,
-    status: isLate ? 'Present' : hours > 0 ? 'Present' : 'Absent',
+    status: hasSession ? 'Present' : 'Absent',
   };
+}
+
+/**
+ * Merge 7-day attendance API days with clock history in/out times.
+ * @param {Record<string, unknown> | null} userRow
+ * @param {Array<Record<string, unknown>>} clockRows
+ */
+export function buildMyAvailabilityLogFromSevenDays(userRow, clockRows = []) {
+  const attendance = Array.isArray(userRow?.attendance) ? userRow.attendance : [];
+  const clockByDate = new Map();
+  for (const row of clockRows) {
+    const date = dateOnlyFromTimestamp(row.check_in ?? row.date);
+    if (!date) continue;
+    if (!clockByDate.has(date)) clockByDate.set(date, row);
+  }
+  const rows = attendance.map((day) => {
+    const date = dateOnlyFromTimestamp(day?.date);
+    const statusRaw = String(day?.attendance_status ?? 'ABSENT').toUpperCase();
+    let status = 'Absent';
+    if (statusRaw === 'LEAVE') status = 'Leave';
+    else if (statusRaw === 'PRESENT') status = 'Present';
+    const clock = clockByDate.get(date);
+    const hours = clock ? Number.parseFloat(String(clock.hours ?? '0')) || 0 : 0;
+    return {
+      date,
+      in: clock ? timeLabelFromTimestamp(clock.check_in) : '--',
+      out: clock?.check_out ? timeLabelFromTimestamp(clock.check_out) : '--',
+      breaks: 0,
+      hours,
+      status,
+    };
+  });
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+  return rows;
 }
 
 /**
@@ -370,6 +533,25 @@ export function requestStatusTimestamp(req) {
  * @param {Array<Record<string, unknown>>} requests
  * @param {Array<Record<string, unknown>>} profileRows
  */
+/**
+ * My Requests route: only the signed-in user's rows (TL API returns whole team).
+ * @param {Array<{ gdcId?: string; employee?: string }>} requests
+ * @param {{ gdc_id?: string | null; name?: string | null } | null | undefined} user
+ */
+export function filterMyOwnRequests(requests, user) {
+  if (!user || !Array.isArray(requests)) return [];
+  const gdc = user.gdc_id ? String(user.gdc_id).trim() : '';
+  if (gdc) {
+    const matched = requests.filter((r) => String(r.gdcId ?? '').trim() === gdc);
+    if (matched.length > 0 || requests.length === 0) return matched;
+  }
+  const name = user.name ? String(user.name).trim().toLowerCase() : '';
+  if (name) {
+    return requests.filter((r) => String(r.employee ?? '').trim().toLowerCase() === name);
+  }
+  return [];
+}
+
 export function enrichRequestsWithAvatars(requests, profileRows = []) {
   const byName = new Map();
   const byGdc = new Map();
@@ -383,14 +565,34 @@ export function enrichRequestsWithAvatars(requests, profileRows = []) {
   }
   return requests.map((r) => {
     const key = String(r.employee ?? '').trim().toLowerCase();
+    const gdcKey = String(r.gdcId ?? '').trim();
     return {
       ...r,
       avatarUrl:
         r.avatarUrl ||
-        (r.gdcId && byGdc.get(r.gdcId)) ||
+        (gdcKey && byGdc.get(gdcKey)) ||
         (key && byName.get(key)) ||
         null,
     };
+  });
+}
+
+/**
+ * Fallback avatar for My Requests when attendance row has no requester_avatar.
+ * @param {Array<{ gdcId?: string; employee?: string; avatarUrl?: string | null }>} requests
+ * @param {{ gdc_id?: string | null; name?: string | null; avatar?: string | null } | null | undefined} user
+ */
+export function applyViewerAvatarToOwnRequests(requests, user) {
+  const url = resolveProfileImageUri(user?.avatar);
+  if (!url || !user) return requests;
+  const gdc = user.gdc_id ? String(user.gdc_id).trim() : '';
+  const name = user.name ? String(user.name).trim().toLowerCase() : '';
+  return requests.map((r) => {
+    const isOwn =
+      (gdc && String(r.gdcId ?? '').trim() === gdc) ||
+      (name && String(r.employee ?? '').trim().toLowerCase() === name);
+    if (!isOwn) return r;
+    return { ...r, avatarUrl: r.avatarUrl || url };
   });
 }
 

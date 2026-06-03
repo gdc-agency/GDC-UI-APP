@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
@@ -8,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -15,14 +17,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
-import { BRAND_COMPANY_NAME, BrandColors } from '@/constants/brand';
+import { BrandColors } from '@/constants/brand';
 import { SkeletonGroup, SkeletonProfileForm } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
 import { updateProfile } from '@/services/api';
@@ -31,12 +31,70 @@ function empty(s) {
   return String(s ?? '').trim();
 }
 
+/**
+ * @param {{
+ *   icon: string;
+ *   iconColor: string;
+ *   iconBg: string;
+ *   label: string;
+ *   value: string;
+ *   fieldKey?: string;
+ *   focusedField?: string | null;
+ *   onFieldFocus?: (key: string) => void;
+ *   inputRef?: React.RefObject<TextInput | null>;
+ *   onChangeText?: (t: string) => void;
+ *   editable?: boolean;
+ *   keyboardType?: import('react-native').TextInputProps['keyboardType'];
+ *   multiline?: boolean;
+ * }} props
+ */
+function ProfileInfoRow({
+  icon,
+  iconColor,
+  iconBg,
+  label,
+  value,
+  fieldKey,
+  focusedField = null,
+  onFieldFocus,
+  inputRef,
+  onChangeText,
+  editable = true,
+  keyboardType,
+  multiline,
+}) {
+  const showCaret = Boolean(fieldKey && focusedField === fieldKey);
+
+  return (
+    <View style={styles.infoRow}>
+      <View style={[styles.infoIconWrap, { backgroundColor: iconBg }]}>
+        <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
+      </View>
+      <View style={styles.infoTextCol}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <TextInput
+          ref={inputRef}
+          value={value}
+          onChangeText={onChangeText}
+          editable={editable}
+          caretHidden={!showCaret}
+          onFocus={fieldKey && onFieldFocus ? () => onFieldFocus(fieldKey) : undefined}
+          style={[styles.infoValue, !editable && styles.infoValueLocked, multiline && styles.infoValueMultiline]}
+          placeholder="—"
+          placeholderTextColor="#94a3b8"
+          keyboardType={keyboardType}
+          autoCapitalize={label === 'Email' ? 'none' : 'sentences'}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const { user, token, refreshProfile, mergeFromServerUserRow } = useAuth();
-  const { width } = useWindowDimensions();
-  const isWide = width >= 760;
 
-  /** Latest session user for focus effect (avoid deps on `user` → infinite re-fetch / stuck loading). */
   const userRef = React.useRef(user);
   userRef.current = user;
 
@@ -49,6 +107,11 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [photoSheetOpen, setPhotoSheetOpen] = useState(false);
+  const [focusedField, setFocusedField] = useState(/** @type {string | null} */ (null));
+  const nameInputRef = React.useRef(/** @type {TextInput | null} */ (null));
+  const phoneInputRef = React.useRef(/** @type {TextInput | null} */ (null));
+  const cnicInputRef = React.useRef(/** @type {TextInput | null} */ (null));
+  const addressInputRef = React.useRef(/** @type {TextInput | null} */ (null));
   const insets = useSafeAreaInsets();
   const sheetTranslate = React.useRef(new Animated.Value(320)).current;
   const sheetBackdrop = React.useRef(new Animated.Value(0)).current;
@@ -137,8 +200,20 @@ export default function ProfileScreen() {
     setAddress(empty(user?.address));
   }, [user]);
 
-  const firstName = (name || user?.name || 'U').split(' ')?.[0] ?? 'U';
+  const displayName = name || user?.name || 'User';
+  const firstName = displayName.split(' ')?.[0] ?? 'U';
   const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '')}`;
+  const roleLabel = user?.role ? String(user.role) : '';
+  const departmentLabel = department || user?.department || '';
+
+  const dismissFieldEditing = React.useCallback(() => {
+    setFocusedField(null);
+    Keyboard.dismiss();
+    nameInputRef.current?.blur();
+    phoneInputRef.current?.blur();
+    cnicInputRef.current?.blur();
+    addressInputRef.current?.blur();
+  }, []);
 
   const fieldPayload = () => ({
     name: name.trim(),
@@ -154,6 +229,7 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Not signed in');
       return;
     }
+    dismissFieldEditing();
     setSaving(true);
     try {
       const res = await updateProfile(
@@ -177,6 +253,7 @@ export default function ProfileScreen() {
       Alert.alert('Update failed', e?.message ?? 'Could not save profile');
     } finally {
       setSaving(false);
+      dismissFieldEditing();
     }
   }
 
@@ -240,67 +317,31 @@ export default function ProfileScreen() {
     void submitProfile(undefined);
   }
 
-  const fields = (
-    <>
-      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
-        <Text style={styles.label}>FULL NAME</Text>
-        <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Name" placeholderTextColor="#94a3b8" />
-      </View>
-      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
-        <Text style={styles.label}>EMAIL</Text>
-        <TextInput
-          value={email}
-          editable={false}
-          style={[styles.input, styles.inputLocked, Platform.OS === 'web' ? { cursor: 'not-allowed' } : undefined]}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          placeholder="Email"
-          placeholderTextColor="#94a3b8"
-        />
-      </View>
-      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
-        <Text style={styles.label}>PHONE</Text>
-        <TextInput value={phone} onChangeText={setPhone} style={styles.input} keyboardType="phone-pad" placeholderTextColor="#94a3b8" />
-      </View>
-      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
-        <Text style={styles.label}>DEPARTMENT</Text>
-        <TextInput
-          value={department}
-          editable={false}
-          style={[styles.input, styles.inputLocked, Platform.OS === 'web' ? { cursor: 'not-allowed' } : undefined]}
-          placeholderTextColor="#94a3b8"
-        />
-      </View>
-      <View style={[styles.fieldWrap, isWide && styles.fieldHalf]}>
-        <Text style={styles.label}>CNIC</Text>
-        <TextInput value={cnic} onChangeText={setCnic} style={styles.input} placeholderTextColor="#94a3b8" />
-      </View>
-      <View style={[styles.fieldWrap, styles.fieldFull]}>
-        <Text style={styles.label}>ADDRESS</Text>
-        <TextInput
-          value={address}
-          onChangeText={setAddress}
-          style={[styles.input, styles.multilineInput]}
-          multiline
-          placeholderTextColor="#94a3b8"
-        />
-      </View>
-    </>
-  );
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          {loading ? (
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScrollBeginDrag={dismissFieldEditing}>
+        {loading ? (
+          <View style={styles.loadingWrap}>
             <SkeletonGroup speedMs={1700} delayMs={180}>
               <SkeletonProfileForm />
             </SkeletonGroup>
-          ) : (
-            <>
-              <View style={styles.hero}>
+          </View>
+        ) : (
+          <>
+            <LinearGradient
+              colors={[BrandColors.primaryMid, BrandColors.primaryLight, '#5eb8ff']}
+              locations={[0, 0.55, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.banner}>
+              <View style={styles.bannerLeft}>
                 <View style={styles.avatarWrap}>
                   <View style={styles.avatarCircle}>
                     {user?.avatar ? (
@@ -315,28 +356,129 @@ export default function ProfileScreen() {
                       <Text style={styles.avatarText}>{firstName.slice(0, 1).toUpperCase()}</Text>
                     )}
                   </View>
-                  <TouchableOpacity style={styles.cameraBtn} activeOpacity={0.9} onPress={onChangePhoto} disabled={saving || !token}>
-                    <MaterialCommunityIcons name="camera-outline" size={15} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.title}>{user?.name ?? BRAND_COMPANY_NAME}</Text>
-                <View style={Platform.OS === 'web' ? { cursor: 'not-allowed' } : undefined}>
-                  <Text style={styles.gdcId}>{gdcLabel}</Text>
+                  <Pressable style={styles.avatarCameraBtn} onPress={onChangePhoto} disabled={saving || !token}>
+                    <MaterialCommunityIcons name="camera" size={14} color={BrandColors.primaryMid} />
+                  </Pressable>
                 </View>
               </View>
 
-              <View style={[styles.formGrid, isWide && styles.formGridWide]}>{fields}</View>
-            </>
-          )}
+              <View style={styles.bannerBody}>
+                <Text style={styles.bannerName} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.82}>
+                  {displayName}
+                </Text>
+                <View style={styles.gdcBadge}>
+                  <MaterialCommunityIcons name="shield-check" size={14} color="#fff" />
+                  <Text style={styles.gdcBadgeText} numberOfLines={1} ellipsizeMode="tail">
+                    {gdcLabel}
+                  </Text>
+                </View>
+                {roleLabel ? (
+                  <View style={styles.roleRow}>
+                    <MaterialCommunityIcons name="briefcase-outline" size={14} color="rgba(255,255,255,0.95)" />
+                    <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">
+                      {roleLabel}
+                    </Text>
+                  </View>
+                ) : null}
+                {departmentLabel ? (
+                  <View style={styles.roleRow}>
+                    <MaterialCommunityIcons name="office-building-outline" size={14} color="rgba(255,255,255,0.95)" />
+                    <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">
+                      {departmentLabel}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </LinearGradient>
 
-          <TouchableOpacity style={styles.saveBtn} onPress={onSave} disabled={saving || loading} activeOpacity={0.9}>
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save changes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            <View style={styles.infoCard}>
+              <ProfileInfoRow
+                icon="account-outline"
+                iconColor="#2563eb"
+                iconBg="#dbeafe"
+                label="Full Name"
+                fieldKey="name"
+                focusedField={focusedField}
+                onFieldFocus={setFocusedField}
+                inputRef={nameInputRef}
+                value={name}
+                onChangeText={setName}
+              />
+              <View style={styles.infoDivider} />
+              <ProfileInfoRow
+                icon="email-outline"
+                iconColor="#2563eb"
+                iconBg="#dbeafe"
+                label="Email"
+                value={email}
+                editable={false}
+              />
+              <View style={styles.infoDivider} />
+              <ProfileInfoRow
+                icon="phone-outline"
+                iconColor="#16a34a"
+                iconBg="#dcfce7"
+                label="Phone"
+                fieldKey="phone"
+                focusedField={focusedField}
+                onFieldFocus={setFocusedField}
+                inputRef={phoneInputRef}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+              <View style={styles.infoDivider} />
+              <ProfileInfoRow
+                icon="briefcase-outline"
+                iconColor="#ea580c"
+                iconBg="#ffedd5"
+                label="Department"
+                value={departmentLabel || '—'}
+                editable={false}
+              />
+              <View style={styles.infoDivider} />
+              <ProfileInfoRow
+                icon="card-account-details-outline"
+                iconColor="#7c3aed"
+                iconBg="#ede9fe"
+                label="CNIC"
+                fieldKey="cnic"
+                focusedField={focusedField}
+                onFieldFocus={setFocusedField}
+                inputRef={cnicInputRef}
+                value={cnic}
+                onChangeText={setCnic}
+              />
+              <View style={styles.infoDivider} />
+              <ProfileInfoRow
+                icon="map-marker-outline"
+                iconColor="#db2777"
+                iconBg="#fce7f3"
+                label="Address"
+                fieldKey="address"
+                focusedField={focusedField}
+                onFieldFocus={setFocusedField}
+                inputRef={addressInputRef}
+                value={address}
+                onChangeText={setAddress}
+                multiline
+              />
+            </View>
+
+            <Pressable style={styles.saveBtn} onPress={onSave} disabled={saving || loading} activeOpacity={0.9}>
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={styles.saveBtnContent}>
+                  <View style={styles.saveBtnIconWrap}>
+                    <MaterialCommunityIcons name="content-save" size={18} color="#fff" />
+                  </View>
+                  <Text style={styles.saveBtnText}>Save changes</Text>
+                </View>
+              )}
+            </Pressable>
+          </>
+        )}
       </ScrollView>
 
       <Modal
@@ -346,10 +488,7 @@ export default function ProfileScreen() {
         statusBarTranslucent
         onRequestClose={() => closePhotoSheet()}>
         <View style={styles.photoSheetRoot} pointerEvents="box-none">
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.photoSheetBackdrop, { opacity: sheetBackdrop }]}
-          />
+          <Animated.View pointerEvents="none" style={[styles.photoSheetBackdrop, { opacity: sheetBackdrop }]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => closePhotoSheet()} accessibilityLabel="Dismiss" />
           <Animated.View
             style={[
@@ -406,101 +545,134 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BrandColors.pageBg },
-  scroll: { paddingHorizontal: 18, paddingBottom: 124 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
-    padding: 18,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.07,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  hero: {
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  scroll: { paddingBottom: 124 },
+  loadingWrap: { paddingHorizontal: 16, paddingTop: 8 },
+  banner: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 18,
+    overflow: 'hidden',
+    shadowColor: BrandColors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  avatarWrap: {
-    position: 'relative',
-    marginBottom: 10,
-  },
+  bannerLeft: { flexShrink: 0, marginRight: 4 },
+  avatarWrap: { position: 'relative' },
   avatarCircle: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0b1729',
     borderWidth: 3,
-    borderColor: '#dbeafe',
+    borderColor: '#fff',
     overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarText: { color: '#e2e8f0', fontSize: 40, fontWeight: '800' },
-  cameraBtn: {
+  avatarText: { color: '#e2e8f0', fontSize: 28, fontWeight: '800' },
+  avatarCameraBtn: {
     position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    right: -2,
+    bottom: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: BrandColors.primaryMid,
+    backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: '#fff',
   },
-  title: { fontSize: 24, fontWeight: '800', color: BrandColors.text },
-  gdcId: { fontSize: 13, color: BrandColors.primaryMid, marginTop: 4, textAlign: 'center', fontWeight: '700' },
-  formGrid: {
+  bannerBody: { flex: 1, minWidth: 0, gap: 6, paddingRight: 4 },
+  bannerName: { fontSize: 17, fontWeight: '800', color: '#fff', lineHeight: 20 },
+  gdcBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    maxWidth: '100%',
+  },
+  gdcBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff', flexShrink: 1 },
+  roleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  roleText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.95)', flex: 1 },
+  infoCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e8edf5',
+    paddingVertical: 4,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     gap: 12,
   },
-  formGridWide: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+  infoIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  fieldWrap: {
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#f8fbff',
-  },
-  fieldHalf: {
-    width: '48.5%',
-  },
-  fieldFull: {
-    width: '100%',
-  },
-  label: { fontSize: 12, color: '#64748b', fontWeight: '800', letterSpacing: 0.8, marginBottom: 6 },
-  input: {
-    fontSize: 16,
+  infoTextCol: { flex: 1, minWidth: 0 },
+  infoLabel: { fontSize: 12, color: '#94a3b8', fontWeight: '600', marginBottom: 2 },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: '700',
     color: BrandColors.text,
-    fontWeight: '500',
-    paddingVertical: 2,
-    minHeight: 28,
+    padding: 0,
+    margin: 0,
+    minHeight: 22,
   },
-  inputLocked: {
-    backgroundColor: 'transparent',
-    color: '#64748b',
-    opacity: 0.95,
-  },
-  multilineInput: {
-    minHeight: 76,
-    textAlignVertical: 'top',
-    paddingTop: 2,
+  infoValueLocked: { color: '#64748b' },
+  infoValueMultiline: { minHeight: 44, lineHeight: 20 },
+  infoDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#eef2f7',
+    marginLeft: 68,
   },
   saveBtn: {
+    marginHorizontal: 16,
     marginTop: 20,
     backgroundColor: BrandColors.primaryMid,
     borderRadius: 14,
     paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  saveBtnIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },

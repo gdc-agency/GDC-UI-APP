@@ -20,6 +20,9 @@ export function AdminRequestsBoard({
   updateLeaveStatus,
   updateManualStatus,
   openRejectModal,
+  showActions = true,
+  onCreatePress,
+  searchPlaceholder = 'Search by name, role or type...',
 }) {
   const { width } = useWindowDimensions();
   const isSmallMobile = width < 380;
@@ -33,6 +36,11 @@ export function AdminRequestsBoard({
     <View style={rq.contentCard}>
         <View style={rq.listHead}>
           <Text style={rq.listTitle}>{isManualTab ? 'Manual Time Requests' : 'Leave Requests'}</Text>
+          {onCreatePress ? (
+            <Pressable style={rq.createBtn} onPress={onCreatePress} accessibilityLabel="Create request">
+              <MaterialCommunityIcons name="plus-circle-outline" size={22} color={RqColors.white} />
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={rq.statusFilterRow}>
@@ -47,7 +55,7 @@ export function AdminRequestsBoard({
               <TextInput
                 value={requestAdminSearch}
                 onChangeText={setRequestAdminSearch}
-                placeholder="Search by name, role or type..."
+                placeholder={searchPlaceholder}
                 placeholderTextColor="#94A3B8"
                 style={rq.searchInput}
               />
@@ -101,10 +109,20 @@ export function AdminRequestsBoard({
               key={req.id}
               req={req}
               isManual={isManualTab}
-              showActions
-              onApprove={() => (isManualTab ? updateManualStatus(req.id, 'Approved') : updateLeaveStatus(req.id, 'Approved'))}
-              onReject={() => (isManualTab ? updateManualStatus(req.id, 'Rejected') : updateLeaveStatus(req.id, 'Rejected'))}
-              onOpenReject={() => openRejectModal(req.id, isManualTab ? 'manual' : 'leave')}
+              showActions={showActions}
+              onApprove={
+                showActions
+                  ? () => (isManualTab ? updateManualStatus(req.id, 'Approved') : updateLeaveStatus(req.id, 'Approved'))
+                  : undefined
+              }
+              onReject={
+                showActions
+                  ? () => (isManualTab ? updateManualStatus(req.id, 'Rejected') : updateLeaveStatus(req.id, 'Rejected'))
+                  : undefined
+              }
+              onOpenReject={
+                showActions ? () => openRejectModal(req.id, isManualTab ? 'manual' : 'leave') : undefined
+              }
             />
           ))
         )}
