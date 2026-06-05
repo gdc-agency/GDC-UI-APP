@@ -18,14 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 
-function roleBadgeLabel(role) {
-  const r = String(role || '').toLowerCase().replace(/\s+/g, '_');
-  if (r === 'admin') return 'AD';
-  if (r === 'hr') return 'HR';
-  if (r === 'team_leader' || r === 'teamleader') return 'TL';
-  return '';
-}
-
 const SHEET_SLIDE = 480;
 
 const ContactRow = memo(function ContactRow({ item, loading, onPress }) {
@@ -50,7 +42,6 @@ const ContactRow = memo(function ContactRow({ item, loading, onPress }) {
           <Text style={styles.contactName} numberOfLines={1}>
             {line}
           </Text>
-          {item.roleLabel ? <Text style={styles.roleBadge}>{roleBadgeLabel(item.roleLabel)}</Text> : null}
         </View>
         {item.roleLabel ? (
           <Text style={styles.contactSub} numberOfLines={1}>
@@ -339,15 +330,5 @@ const styles = StyleSheet.create({
   contactMeta: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   contactName: { fontSize: 16, fontWeight: '700', color: BrandColors.text, flexShrink: 1 },
-  roleBadge: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: BrandColors.primaryMid,
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
   contactSub: { marginTop: 2, fontSize: 12, color: '#64748b' },
 });

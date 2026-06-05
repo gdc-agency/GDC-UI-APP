@@ -1,6 +1,17 @@
 /** App logo — `assets/images/gdcLogo1.png` (no extra circle/frame in UI). */
 export const BRAND_LOGO_SOURCE = require('../assets/images/icon.png');
 
+/** Welcome / login / splash logo frame — slight corner radius, not a circle. */
+export const BRAND_LOGO_BORDER_RADIUS = 8;
+
+/** White logo card + image sizing (tight padding, centered). */
+export const BRAND_LOGO_FRAME = {
+  width: 112,
+  height: 112,
+  borderRadius: BRAND_LOGO_BORDER_RADIUS,
+  padding: 4,
+};
+
 /** Short name shown on splash / headers (mockup-style). */
 export const BRAND_SHORT_NAME = 'GDC';
 

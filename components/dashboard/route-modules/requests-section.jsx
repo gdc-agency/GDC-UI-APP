@@ -70,12 +70,13 @@ export function RequestsSection({ styles, ctx }) {
   } = ctx;
 
   const isMyRequestsRoute = slug === 'my-requests';
+  const isRequestMgmtRoute = slug === 'request-management' || slug === 'manual-time-requests';
   const isOwnMyRequestsBoard =
     isMyRequestsRoute &&
     (isHrRole(user?.role) || user?.role === 'Employee' || user?.role === 'Team Leader');
-  const canCreateOwnRequest =
-    isOwnMyRequestsBoard && (user?.role === 'Employee' || user?.role === 'Team Leader');
-  const isAdminReviewer = !isMyRequestsRoute && isAdminOrHrRole(user?.role);
+  // My Requests: HR / Employee / TL can create own leave + manual time (not on Request Management).
+  const canCreateOwnRequest = isOwnMyRequestsBoard;
+  const isAdminReviewer = isRequestMgmtRoute && isAdminOrHrRole(user?.role);
   const useMgmtRequestUi = isAdminReviewer || isOwnMyRequestsBoard;
   const isManualTab =
     slug === 'manual-time-requests' || (isOwnMyRequestsBoard && myRequestsTab === 'manual');

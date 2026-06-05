@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  */
 export function GlobalChatNotice() {
   const insets = useSafeAreaInsets();
-  const { incomingNotice, dismissIncomingNotice, activeChatId } = useGdcInbox();
+  const { incomingNotice, dismissIncomingNotice, activeChatId, threads } = useGdcInbox();
 
   if (
     !incomingNotice ||
@@ -21,12 +21,19 @@ export function GlobalChatNotice() {
     return null;
   }
 
+  const thread = threads.find((t) => threadIdEquals(t.id, incomingNotice.chatId));
+  const unreadCount = Math.max(Number(thread?.unread) || 0, 1);
+
   return (
     <View style={[styles.host, { top: insets.top + 6 }]} pointerEvents="box-none">
       <ChatIncomingNotice
         title={incomingNotice.title}
         preview={incomingNotice.preview}
         senderName={incomingNotice.senderName}
+        unreadCount={unreadCount}
+        avatarUrl={thread?.listAvatarUrl || null}
+        isOnline={!!thread?.isOnline}
+        at={incomingNotice.at}
         onPress={() => {
           dismissIncomingNotice();
           publishPendingChatOpen(incomingNotice.chatId);

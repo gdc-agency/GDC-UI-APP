@@ -1,22 +1,13 @@
-import { getAttendanceApiBaseUrl, isLoopbackUrl } from '@/constants/api-config';
+import { getAttendanceApiBaseUrl } from '@/constants/api-config';
 import { Platform } from 'react-native';
 
 const REQUEST_TIMEOUT_MS = 45000;
 
 function attendanceNetworkHint() {
-  const base = getAttendanceApiBaseUrl();
-  const lines = [
-    `Attendance service URL: ${base}`,
-    'Attendance must run on your PC (Attendence-Service, PORT=5000).',
-    'app.json: same Wi‑Fi IP as apiBaseUrl + attendanceApiPort 5000.',
-    'Restart Metro: npx expo start -c',
-  ];
-  if (Platform.OS === 'web') {
-    lines.push('Web: restart Attendence-Service after CORS update; use http://127.0.0.1:5000 on same PC.');
-  } else if (isLoopbackUrl(base)) {
-    lines.push('On a real phone, 127.0.0.1 does not work — use your PC LAN IP (e.g. http://192.168.1.7:5000).');
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn('[api] Attendance request failed', { base: getAttendanceApiBaseUrl(), platform: Platform.OS });
   }
-  return lines.join('\n');
+  return 'Cannot connect to the attendance service. Check your network and try again.';
 }
 
 export class AttendanceApiError extends Error {

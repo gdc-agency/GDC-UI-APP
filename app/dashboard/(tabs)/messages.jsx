@@ -7,19 +7,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    FlatList,
-    InteractionManager,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    View
+  Alert,
+  Animated,
+  FlatList,
+  InteractionManager,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,8 +43,8 @@ import { useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcInbox } from '@/context/gdc-inbox-context';
 import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
 import {
-    isChatDisplayNamePending,
-    resolveChatPeerDisplayName
+  isChatDisplayNamePending,
+  resolveChatPeerDisplayName
 } from '@/utils/chat-directory';
 import { isMessageUploading, statusIconColor, statusIconName } from '@/utils/chat-message-status';
 import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
@@ -140,6 +140,19 @@ const roleBadgeLabel = (role) => {
   return String(role || '').slice(0, 3).toUpperCase();
 };
 
+const FILTER_TABS = [
+  { id: 'all', label: 'All', icon: 'view-grid-outline' },
+  { id: 'unread', label: 'Unread', icon: 'email-outline' },
+  { id: 'groups', label: 'Groups', icon: 'account-group-outline' },
+];
+
+function formatUnreadPill(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return '';
+  if (n > 99) return '99+';
+  return String(n);
+}
+
 function initials(name) {
   const parts = String(name || '')
     .trim()
@@ -167,48 +180,54 @@ const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, 
           ? `📎 ${last.fileName}`
           : 'Document'
         : last?.text ?? 'Start a conversation';
+  const timeLabel = normalizeTime(last?.time);
 
   return (
-    <Pressable style={styles.chatCard} onPress={() => onOpen(item.id)} onLongPress={() => onHide(item.id)}>
-      <View>
-        {peer?.avatarUrl || item.listAvatarUrl ? (
-          <Image
-            source={{ uri: peer?.avatarUrl || item.listAvatarUrl }}
-            style={styles.avatarImg}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{avatarLetter}</Text>
-          </View>
-        )}
-        {item.peerId ? <View style={[styles.presenceDot, item.isOnline && styles.presenceDotOnline]} /> : null}
-      </View>
-      <View style={styles.chatBody}>
-        <View style={styles.chatTop}>
-          <View style={styles.chatCardTitleRow}>
-            <Text
-              numberOfLines={1}
-              style={[styles.chatCardName, nameLoading && styles.chatCardNamePending]}>
-              {displayName || '…'}
+    <Pressable
+      style={[styles.chatCard, hasUnread && styles.chatCardUnread]}
+      onPress={() => onOpen(item.id)}
+      onLongPress={() => onHide(item.id)}>
+      <View style={styles.chatCardInner}>
+        <View>
+          {peer?.avatarUrl || item.listAvatarUrl ? (
+            <Image
+              source={{ uri: peer?.avatarUrl || item.listAvatarUrl }}
+              style={styles.avatarImg}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{avatarLetter}</Text>
+            </View>
+          )}
+          {item.peerId ? <View style={[styles.presenceDot, item.isOnline && styles.presenceDotOnline]} /> : null}
+        </View>
+        <View style={styles.chatBody}>
+          <View style={styles.chatMainCol}>
+            <View style={styles.chatCardTitleRow}>
+              <Text
+                numberOfLines={1}
+                style={[styles.chatCardName, nameLoading && styles.chatCardNamePending]}>
+                {displayName || '…'}
+              </Text>
+              {(item.headerRole || peer?.roleLabel) ? (
+                <Text style={styles.roleBadge}>{roleBadgeLabel(item.headerRole || peer?.roleLabel)}</Text>
+              ) : null}
+            </View>
+            <Text style={[styles.chatCardMsg, hasUnread && styles.chatCardMsgUnread]} numberOfLines={1}>
+              {previewText}
             </Text>
-            {(item.headerRole || peer?.roleLabel) ? (
-              <Text style={styles.roleBadge}>{roleBadgeLabel(item.headerRole || peer?.roleLabel)}</Text>
+          </View>
+          <View style={styles.chatMetaRight}>
+            <Text style={[styles.chatCardTime, hasUnread && styles.chatCardTimeUnread]}>{timeLabel}</Text>
+            {hasUnread ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{formatUnreadPill(unreadCount)}</Text>
+              </View>
             ) : null}
           </View>
-          <Text style={[styles.chatCardTime, hasUnread && styles.chatCardTimeUnread]}>
-            {normalizeTime(last?.time)}
-          </Text>
         </View>
-        <Text style={[styles.chatCardMsg, hasUnread && styles.chatCardMsgUnread]} numberOfLines={1}>
-          {previewText}
-        </Text>
       </View>
-      {hasUnread ? (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 });
@@ -499,6 +518,7 @@ export default function MessagesScreen() {
   const inbox = useGdcInbox();
   const {
     threads,
+    totalUnreadMessages,
     contacts,
     groupContacts,
     inboxLoading,
@@ -710,6 +730,8 @@ export default function MessagesScreen() {
     const last = messageRows[messageRows.length - 1];
     return `${selectedId || ''}:${messageRows.length}:${last?.id || ''}`;
   }, [messageRows, selectedId]);
+
+  const totalUnread = Number(totalUnreadMessages) || 0;
 
   const filteredThreads = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
@@ -1319,35 +1341,45 @@ export default function MessagesScreen() {
               <Text style={styles.listTitle}>Chats</Text>
               <Text style={styles.listSubTitle}>{roleTitle} conversation inbox</Text>
             </View>
-            <Pressable style={styles.newBtn} onPress={() => setNewChatOpen(true)}>
-              <MaterialCommunityIcons name="message-plus-outline" size={19} color={BrandColors.primaryMid} />
-            </Pressable>
           </View>
 
           <View style={styles.searchWrap}>
-            <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+            <MaterialCommunityIcons name="magnify" size={20} color="#94a3b8" />
             <TextInput
               value={listSearch}
               onChangeText={setListSearch}
-              placeholder="Search chats..."
+              placeholder="Search conversations..."
               placeholderTextColor="#94a3b8"
               style={styles.searchInput}
             />
+            <MaterialCommunityIcons name="tune-variant" size={20} color={BrandColors.primaryMid} />
           </View>
 
           <View style={styles.filterRow}>
-            {[
-              ['all', 'All'],
-              ['unread', 'Unread'],
-              ['groups', 'Groups'],
-            ].map(([id, label]) => (
-              <Pressable
-                key={id}
-                style={[styles.filterChip, listFilter === id && styles.filterChipActive]}
-                onPress={() => setListFilter(id)}>
-                <Text style={[styles.filterChipText, listFilter === id && styles.filterChipTextActive]}>{label}</Text>
-              </Pressable>
-            ))}
+            {FILTER_TABS.map(({ id, label, icon }) => {
+              const active = listFilter === id;
+              const showUnreadCount = id === 'unread' && totalUnread > 0;
+              return (
+                <Pressable
+                  key={id}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  onPress={() => setListFilter(id)}>
+                  <MaterialCommunityIcons
+                    name={icon}
+                    size={14}
+                    color={active ? '#fff' : BrandColors.primaryMid}
+                  />
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+                  {showUnreadCount ? (
+                    <View style={[styles.filterUnreadBadge, active && styles.filterUnreadBadgeActive]}>
+                      <Text style={[styles.filterUnreadBadgeText, active && styles.filterUnreadBadgeTextActive]}>
+                        {formatUnreadPill(totalUnread)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
           </View>
 
           {inboxError ? (
@@ -1367,6 +1399,7 @@ export default function MessagesScreen() {
             data={filteredThreads}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: tabBarHeight + 88 }}
             refreshControl={
               <RefreshControl refreshing={listRefreshing} onRefresh={() => void onPullRefreshInbox()} />
             }
@@ -1386,6 +1419,13 @@ export default function MessagesScreen() {
             }
             renderItem={renderThreadItem}
           />
+
+          <Pressable
+            style={[styles.chatFab, { bottom: tabBarHeight + 18 }]}
+            onPress={() => setNewChatOpen(true)}
+            accessibilityLabel="New chat">
+            <MaterialCommunityIcons name="message-plus" size={26} color="#fff" />
+          </Pressable>
         </View>
       )}
 
@@ -1541,79 +1581,129 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fbff' },
+  safe: { flex: 1, backgroundColor: BrandColors.pageBg },
   safeRelative: { position: 'relative' },
-  listScreen: { flex: 1, paddingHorizontal: 14, paddingTop: 10, backgroundColor: '#f8fbff' },
+  listScreen: { flex: 1, paddingHorizontal: 14, paddingTop: 10, backgroundColor: BrandColors.pageBg },
   listScreenRelative: { position: 'relative' },
-  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  listTitle: { fontSize: 26, fontWeight: '800', color: BrandColors.text },
+  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  listTitle: { fontSize: 28, fontWeight: '800', color: BrandColors.text },
   listSubTitle: { marginTop: 2, fontSize: 12, color: BrandColors.textMuted },
-  newBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  chatFab: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: BrandColors.primaryMid,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0b2c6a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 10,
+    zIndex: 20,
+  },
+  filterUnreadBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BrandColors.primaryMid,
+    marginLeft: 2,
+  },
+  filterUnreadBadgeActive: {
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#dbe4fb',
+  },
+  filterUnreadBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  filterUnreadBadgeTextActive: {
+    color: BrandColors.primaryMid,
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f1f5fb',
-    borderWidth: 0,
-    borderColor: '#e7eefb',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  searchInput: { flex: 1, paddingHorizontal: 8, paddingVertical: 10, color: BrandColors.text, fontSize: 14 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  filterChip: {
-    borderRadius: 999,
+    gap: 8,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e8edf5',
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#eef4ff',
+    paddingVertical: 4,
+    marginBottom: 12,
+    shadowColor: '#0b2c6a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  filterChipActive: { backgroundColor: '#1266f1' },
-  filterChipText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
-  filterChipTextActive: { color: '#fff' },
-  chatCard: {
+  searchInput: { flex: 1, paddingVertical: 11, color: BrandColors.text, fontSize: 14 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: 16,
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 14,
     paddingVertical: 9,
-    paddingHorizontal: 2,
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e2e8f5',
   },
-  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
+  filterChipActive: { backgroundColor: BrandColors.primaryMid, borderColor: BrandColors.primaryMid },
+  filterChipText: { color: BrandColors.primaryMid, fontSize: 12, fontWeight: '800' },
+  filterChipTextActive: { color: '#fff' },
+  chatCard: {
+    marginBottom: 10,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e8edf5',
+    shadowColor: '#0b2c6a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  chatCardUnread: {
+    borderColor: '#c7dcff',
+  },
+  chatCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   avatarSm: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#1d4ed8', fontSize: 16, fontWeight: '800' },
-  chatBody: { flex: 1 },
-  chatTop: { flexDirection: 'row', alignItems: 'center' },
-  chatCardTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0, marginRight: 8 },
+  chatBody: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+  chatMainCol: { flex: 1, minWidth: 0, paddingRight: 8 },
+  chatMetaRight: { alignItems: 'flex-end', minWidth: 54, paddingTop: 1 },
+  chatCardTitleRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   chatCardName: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: BrandColors.text },
   chatCardNamePending: { color: '#94a3b8' },
-  chatCardTime: { fontSize: 10, color: '#94a3b8', minWidth: 54, textAlign: 'right', fontWeight: '700' },
-  chatCardMsg: { marginTop: 3, color: '#64748b', fontSize: 12, fontWeight: '500' },
-  chatCardStatus: { marginTop: 1, color: '#94a3b8', fontSize: 11 },
+  chatCardTime: { fontSize: 11, color: '#94a3b8', textAlign: 'right', fontWeight: '600' },
+  chatCardTimeUnread: { color: BrandColors.primaryMid, fontWeight: '700' },
+  chatCardMsg: { marginTop: 2, color: '#64748b', fontSize: 13, fontWeight: '400' },
   unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 5,
+    marginTop: 4,
+    minWidth: 26,
+    paddingHorizontal: 7,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ef4444',
+    backgroundColor: BrandColors.primaryMid,
   },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  chatCardTimeUnread: { color: '#ef4444', fontWeight: '700' },
-  chatCardMsgUnread: { color: '#111b21', fontWeight: '700' },
+  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  chatCardMsgUnread: { color: '#334155' },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1645,7 +1735,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     flexShrink: 0,
   },
-  avatarImg: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#e2e8f0' },
+  avatarImg: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e2e8f0' },
   contactAvatarImg: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e2e8f0' },
   backBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   headerMeta: { flex: 1, minWidth: 0 },
@@ -2281,9 +2371,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     bottom: 1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
     borderWidth: 2,
     borderColor: '#fff',
     backgroundColor: '#94a3b8',

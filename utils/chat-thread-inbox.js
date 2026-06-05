@@ -97,7 +97,8 @@ export function buildPlaceholderThreadFromIncoming({
       : dir?.avatarUrl || null,
     peerId: isGroup ? '' : otherId,
     isOnline: otherId ? onlineUserIds.has(otherId) : false,
-    unread: authorId && String(authorId) !== String(myId) ? 1 : 0,
+    // Let socket receive handler decide how much to increment unread; avoid double-counting.
+    unread: 0,
     messages: [ui],
     threadPreview: ui,
     messagesHasMore: true,

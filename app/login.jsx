@@ -19,8 +19,12 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WaveDivider } from '@/components/wave-divider';
-import { getApiBaseUrl, isLoopbackApiOnNativeDevice, isLoopbackApiOnWebDev } from '@/constants/api-config';
-import { BRAND_COMPANY_NAME, BRAND_LOGO_SOURCE, BrandColors } from '@/constants/brand';
+import {
+  BRAND_COMPANY_NAME,
+  BRAND_LOGO_FRAME,
+  BRAND_LOGO_SOURCE,
+  BrandColors,
+} from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 
 const HEADER_RATIO = 0.39;
@@ -75,7 +79,12 @@ export default function LoginScreen() {
           style={styles.headerGradient}>
           <View style={[styles.headerInner, { paddingTop: insets.top + 24 }]}>
             <View style={styles.headerLogoWrap}>
-              <Image source={BRAND_LOGO_SOURCE} style={styles.headerLogoImg} contentFit="contain" />
+              <Image
+                source={BRAND_LOGO_SOURCE}
+                style={styles.headerLogoImg}
+                contentFit="cover"
+                contentPosition="center"
+              />
             </View>
             <Text style={styles.headerSub}>{BRAND_COMPANY_NAME}</Text>
             <Text style={styles.headerTagline}>Turning Clicks into Clients</Text>
@@ -94,20 +103,7 @@ export default function LoginScreen() {
         style={styles.scrollView}>
         <View style={styles.formStack}>
           <View style={styles.formBody}>
-            <Text style={styles.formTitle}>Sign in with email</Text>
-
-            <Text style={styles.apiHint} numberOfLines={2}>
-              API: {getApiBaseUrl()}
-            </Text>
-            {(isLoopbackApiOnNativeDevice() || isLoopbackApiOnWebDev()) ? (
-              <View style={styles.apiWarn}>
-                <Text style={styles.apiWarnText}>
-                  {isLoopbackApiOnNativeDevice()
-                    ? 'On a real phone use your PC Wi‑Fi IP (not localhost, not 10.0.2.2). Set app.json expo.extra.apiBaseUrl to http://YOUR_IP:3000 or EXPO_PUBLIC_API_BASE_URL, same Wi‑Fi, then restart Expo.'
-                    : 'Production web needs a public or LAN API URL in app config — not localhost.'}
-                </Text>
-              </View>
-            ) : null}
+            <Text style={styles.formTitle}>Sign In</Text>
 
             {error ? (
               <View style={styles.alert}>
@@ -210,9 +206,11 @@ const styles = StyleSheet.create({
   },
   headerLogoWrap: {
     marginBottom: 10,
-    width: 126,
-    height: 126,
-    borderRadius: 63,
+    width: BRAND_LOGO_FRAME.width,
+    height: BRAND_LOGO_FRAME.height,
+    borderRadius: BRAND_LOGO_FRAME.borderRadius,
+    padding: BRAND_LOGO_FRAME.padding,
+    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(147,197,253,0.6)',
@@ -225,8 +223,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   headerLogoImg: {
-    width: 103,
-    height: 103,
+    width: '100%',
+    height: '100%',
   },
   headerSub: {
     marginTop: 2,
@@ -272,28 +270,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  apiHint: {
-    fontSize: 11,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  apiWarn: {
-    backgroundColor: '#fff7ed',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#fed7aa',
-  },
-  apiWarnText: {
-    color: '#9a3412',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
-    textAlign: 'center',
-  },
   alert: {
     backgroundColor: '#fef2f2',
     borderRadius: 12,
@@ -312,7 +288,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#475569',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   input: {
     fontSize: 16,

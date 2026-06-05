@@ -92,6 +92,20 @@ export function isLoopbackUrl(url) {
   return /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:|\/|$)/i.test(String(url));
 }
 
+/** Render / HTTPS deploy — never rewrite to Metro LAN in dev. */
+function isRemoteHostedUrl(url) {
+  const s = stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    if (u.protocol === 'https:') return true;
+    if (/\.onrender\.com$/i.test(u.hostname)) return true;
+  } catch {
+    return /^https:\/\//i.test(s) || /\.onrender\.com/i.test(s);
+  }
+  return false;
+}
+
 /**
  * Browsers (Expo web on a laptop) and phones cannot use "localhost" for APIs on another interface.
  * When Metro exposes a LAN host, rewrite loopback URLs to that host (port preserved).
@@ -116,21 +130,31 @@ function rewriteLoopbackUrlToMetroLan(url) {
  * in dev. Opt out: EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.
  */
 function applyWebDevLoopbackForSameMachineAuth(url) {
-  if (Platform.OS !== 'web') return stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
+  const normalized = stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
+  if (Platform.OS !== 'web') return normalized;
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return normalized;
+  if (isRemoteHostedUrl(normalized)) return normalized;
   if (String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1') {
-    return stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
+    return normalized;
+  }
+  if (!isLoopbackUrl(normalized)) {
+    try {
+      const u = new URL(normalized);
+      if (u.protocol !== 'http:') return normalized;
+    } catch {
+      return normalized;
+    }
   }
   try {
-    const u = new URL(stripUrlWhitespace(String(url)));
-    const port = u.port || '3000';
+    const u = new URL(normalized);
+    const port = u.port || '5001';
     const out = stripUrlWhitespace(`http://127.0.0.1:${port}`).replace(/\/+$/, '');
-    if (out !== stripUrlWhitespace(String(url)).replace(/\/+$/, '')) {
+    if (out !== normalized) {
       logApiConfigOnce('log', `web-loopback:${out}`, `[api-config] Web dev: use ${out} instead of LAN URL (same-PC browser ↔ API).`);
     }
     return out;
   } catch {
-    return stripUrlWhitespace(String(url || '')).replace(/\/+$/, '');
+    return normalized;
   }
 }
 
@@ -140,8 +164,11 @@ function applyWebDevLoopbackForSameMachineAuth(url) {
  */
 function resolveApiBaseUrlFromExtra(ex) {
   const configuredUrl = stripUrlWhitespace(String(ex.apiBaseUrl ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? ''));
+  if (configuredUrl && isRemoteHostedUrl(configuredUrl)) {
+    return configuredUrl.replace(/\/+$/, '');
+  }
   const apiPort = String(
-    ex.apiPort ?? process.env.EXPO_PUBLIC_API_PORT ?? portFromConfiguredUrl(configuredUrl) ?? '3000',
+    ex.apiPort ?? process.env.EXPO_PUBLIC_API_PORT ?? portFromConfiguredUrl(configuredUrl) ?? '5001',
   );
   const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -155,7 +182,7 @@ function resolveApiBaseUrlFromExtra(ex) {
    * Prefer the host Metro reports when it differs from the configured host. Opt out with
    * EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.
    */
-  if (isDev && isDevClient && !forceConfigured) {
+  if (isDev && isDevClient && !forceConfigured && !isRemoteHostedUrl(configuredUrl)) {
     const lan = resolveDevLanHost();
     if (lan) {
       if (configuredUrl && !isLoopbackUrl(configuredUrl)) {
@@ -238,6 +265,9 @@ function taskBaseFromAuthHost(apiBase, taskApiPort) {
  */
 function resolveTaskApiBaseFromExtra(ex, apiBase) {
   let configuredTaskUrl = stripUrlWhitespace(String(ex.taskApiBaseUrl ?? '').replace(/^\uFEFF/, ''));
+  if (configuredTaskUrl && isRemoteHostedUrl(configuredTaskUrl)) {
+    return configuredTaskUrl.replace(/\/+$/, '');
+  }
   /** Embedded / OTA manifests sometimes ship legacy `localhost:5001` — never use it. */
   if (/^(https?:\/\/)?(localhost|127\.0\.0\.1):5001(\/|\?|#|$)/i.test(configuredTaskUrl)) {
     configuredTaskUrl = '';
@@ -301,6 +331,9 @@ function resolveTaskApiBaseFromExtra(ex, apiBase) {
  */
 function resolveChatApiBaseFromExtra(ex, apiBase) {
   let configuredChatUrl = stripUrlWhitespace(String(ex.chatApiBaseUrl ?? '').replace(/^\uFEFF/, ''));
+  if (configuredChatUrl && isRemoteHostedUrl(configuredChatUrl)) {
+    return configuredChatUrl.replace(/\/+$/, '');
+  }
   const rawChatPort = ex.chatApiPort != null && ex.chatApiPort !== '' ? Number(ex.chatApiPort) : NaN;
   const chatApiPort = Number.isFinite(rawChatPort) && rawChatPort > 0 ? String(rawChatPort) : '5003';
 
@@ -327,7 +360,28 @@ function resolveChatApiBaseFromExtra(ex, apiBase) {
 
 /** Auth API base (no trailing slash). Call on each request — do not cache at module scope. */
 export function getApiBaseUrl() {
-  return applyWebDevLoopbackForSameMachineAuth(rewriteLoopbackUrlToMetroLan(resolveApiBaseUrlFromExtra(getExpoExtra())));
+  const ex = getExpoExtra();
+  let out = applyWebDevLoopbackForSameMachineAuth(
+    rewriteLoopbackUrlToMetroLan(resolveApiBaseUrlFromExtra(ex)),
+  );
+
+  const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+  if (isNative && Device.isDevice === true && isLoopbackUrl(out)) {
+    const lan = resolveDevLanHost();
+    const apiPort = String(
+      ex.apiPort ?? process.env.EXPO_PUBLIC_API_PORT ?? portFromConfiguredUrl(out) ?? '5001',
+    );
+    if (lan) {
+      out = stripUrlWhitespace(`http://${lan}:${apiPort}`).replace(/\/+$/, '');
+      logApiConfigOnce(
+        'warn',
+        `auth-device-lan:${out}`,
+        `[api-config] Auth → ${out} (device cannot use loopback; using Metro LAN host)`,
+      );
+    }
+  }
+
+  return out;
 }
 
 /** Task Management API base (no trailing slash). Call on each request. */
@@ -349,6 +403,9 @@ export function getChatApiBaseUrl() {
  */
 function resolveAttendanceApiBaseFromExtra(ex, apiBase) {
   let configuredUrl = stripUrlWhitespace(String(ex.attendanceApiBaseUrl ?? '').replace(/^\uFEFF/, ''));
+  if (configuredUrl && isRemoteHostedUrl(configuredUrl)) {
+    return configuredUrl.replace(/\/+$/, '');
+  }
   const rawPort = ex.attendanceApiPort != null && ex.attendanceApiPort !== '' ? Number(ex.attendanceApiPort) : NaN;
   const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5000';
 
@@ -394,7 +451,7 @@ export function getAttendanceApiBaseUrl() {
    * Dev: `attendanceApiBaseUrl` in app.json often stays on an old LAN IP while Metro moves Auth to the
    * current PC host — phones then fail clock/manual fetches while web (127.0.0.1) still works.
    */
-  if (isDev && isDevClient && !forceConfigured) {
+  if (isDev && isDevClient && !forceConfigured && !isRemoteHostedUrl(configuredAttendanceUrl)) {
     const lan = resolveDevLanHost();
     if (lan && configuredAttendanceUrl && !isLoopbackUrl(configuredAttendanceUrl)) {
       try {
@@ -479,13 +536,3 @@ export function isLoopbackApiOnWebDev() {
   return isLoopbackUrl(getApiBaseUrl());
 }
 
-if (typeof __DEV__ !== 'undefined' && __DEV__) {
-  try {
-    console.log(`[api-config] Auth API → ${getApiBaseUrl()}`);
-    console.log(`[api-config] Task API → ${getTaskApiBaseUrl()}`);
-    console.log(`[api-config] Chat API → ${getChatApiBaseUrl()}`);
-    console.log(`[api-config] Attendance API → ${getAttendanceApiBaseUrl()}`);
-  } catch (_) {
-    /* ignore */
-  }
-}

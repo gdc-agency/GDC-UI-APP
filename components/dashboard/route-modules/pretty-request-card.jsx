@@ -102,22 +102,16 @@ export function PrettyRequestCard({
     <View style={p.card}>
       <View style={p.headRow}>
         <View style={p.userRow}>
-          <TimesheetUserAvatar name={req?.employee} avatarUrl={req?.avatarUrl} size={52} />
+          <TimesheetUserAvatar name={req?.employee} avatarUrl={req?.avatarUrl} size={48} />
           <View style={p.userTextCol}>
-            <View style={p.nameStatusRow}>
-              <Text style={p.userName} numberOfLines={1}>
-                {req?.employee || '—'}
+            <Text style={p.userName}>{req?.employee || '—'}</Text>
+            <Text style={p.userMeta}>{subTitle}</Text>
+            <View style={[p.statusPill, isSmall && p.statusPillCompact, { backgroundColor: st.bg }]}>
+              <MaterialCommunityIcons name={st.icon} size={isSmall ? 14 : 15} color={st.color} />
+              <Text style={[p.statusText, isSmall && p.statusTextCompact, { color: st.color }]}>
+                {req?.status || '—'}
               </Text>
-              <View style={[p.statusPill, isSmall && p.statusPillCompact, { backgroundColor: st.bg }]}>
-                <MaterialCommunityIcons name={st.icon} size={isSmall ? 15 : 16} color={st.color} />
-                <Text style={[p.statusText, isSmall && p.statusTextCompact, { color: st.color }]} numberOfLines={1}>
-                  {req?.status || '—'}
-                </Text>
-              </View>
             </View>
-            <Text style={p.userMeta} numberOfLines={1}>
-              {subTitle}
-            </Text>
           </View>
         </View>
       </View>
@@ -180,12 +174,13 @@ export function PrettyRequestCard({
 
 const p = StyleSheet.create({
   card: {
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     padding: 14,
     marginBottom: 12,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#0F172A',
@@ -197,24 +192,31 @@ const p = StyleSheet.create({
       default: {},
     }),
   },
-  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-  userTextCol: { flex: 1, minWidth: 0 },
-  nameStatusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  userName: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  userMeta: { marginTop: 2, fontSize: 13, fontWeight: '700', color: '#64748B' },
+  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  userRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 },
+  userTextCol: { flex: 1, minWidth: 0, gap: 4 },
+  userName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  userMeta: { fontSize: 12, fontWeight: '600', color: '#64748B', lineHeight: 17 },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    flexShrink: 0,
+    alignSelf: 'flex-start',
+    gap: 5,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    maxWidth: '100%',
   },
-  statusText: { fontSize: 14, fontWeight: '800' },
-  statusPillCompact: { paddingHorizontal: 10, paddingVertical: 6, gap: 5 },
-  statusTextCompact: { fontSize: 12 },
+  statusText: { fontSize: 12, fontWeight: '800' },
+  statusPillCompact: { paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
+  statusTextCompact: { fontSize: 11 },
   divider: { height: 1, backgroundColor: '#E2E8F0', marginTop: 12, marginBottom: 12 },
   body: { gap: 12 },
 

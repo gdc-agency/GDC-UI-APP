@@ -3,12 +3,10 @@ import { getChatApiBaseUrl } from '@/constants/api-config';
 const REQUEST_TIMEOUT_MS = 45000;
 
 function chatNetworkHint() {
-  const base = getChatApiBaseUrl();
-  return [
-    `Chat service URL: ${base}`,
-    'Set expo.extra.chatApiPort (default 5002) or expo.extra.chatApiBaseUrl. Chat service must use the same JWT_SECRET as Auth for Bearer tokens.',
-    'Restart Metro with: npx expo start -c if you changed app.json.',
-  ].join('\n');
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn('[api] Chat request failed', { base: getChatApiBaseUrl() });
+  }
+  return 'Cannot connect to the chat service. Check your network and try again.';
 }
 
 export class ChatApiError extends Error {

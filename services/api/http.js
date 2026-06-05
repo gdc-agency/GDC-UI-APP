@@ -2,24 +2,15 @@ import { getApiBaseUrl } from '@/constants/api-config';
 import { Platform } from 'react-native';
 
 /** Wrong host / firewall: avoid infinite spinner on mobile. */
-const REQUEST_TIMEOUT_MS = 25000;
+/** Render free tier cold starts can exceed 25s on first request. */
+const REQUEST_TIMEOUT_MS = 60000;
 
 function networkErrorHint() {
-  const base = getApiBaseUrl();
-  const isLocalhost = /localhost|127\.0\.0\.1/i.test(base);
-  const isEmulatorOnlyHost = /10\.0\.2\.2/i.test(base);
-  const parts = [
-    `URL: ${base}`,
-    isEmulatorOnlyHost
-      ? '10.0.2.2 only works inside the Android *emulator* (it means “the PC”). On a real Android phone use your PC Wi‑Fi IP in expo.extra.apiBaseUrl, e.g. http://192.168.1.50:3000.'
-      : isLocalhost
-        ? Platform.OS === 'web'
-          ? 'Expo web on your laptop uses 127.0.0.1 for Auth in development (same PC). If you forced a LAN URL and login fails, unset EXPO_PUBLIC_API_USE_CONFIGURED_URL or fix Windows / browser access to that IP.'
-          : 'Phone cannot reach localhost (that is the phone itself). In app.json set expo.extra.apiBaseUrl to http://YOUR_PC_LAN_IP:PORT or use a .env EXPO_PUBLIC_API_BASE_URL. Same Wi‑Fi; allow port in Windows Firewall.'
-        : 'Check: Auth on that IP, Windows firewall, phone + PC on same Wi‑Fi. If your PC’s LAN address changed, restart Expo — in development the app uses Metro’s host when it differs from app.json (see [api-config] in Metro). Force a fixed URL with EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.',
-    'expo start --tunnel: tunnel only helps Metro; API must still be your PC LAN IP, not *.exp.direct.',
-  ];
-  return parts.join('\n');
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    const base = getApiBaseUrl();
+    console.warn('[api] Request failed', { base, platform: Platform.OS });
+  }
+  return 'Cannot connect to the server. Check your network and try again.';
 }
 
 export class ApiError extends Error {

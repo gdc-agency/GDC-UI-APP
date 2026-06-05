@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "crmApp",
+    "name": "GDC",
     "slug": "crmApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/launcher-icon.png",
     "scheme": "crmapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -21,13 +21,15 @@
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/launcher-icon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.jawadc226.crmApp"
     },
     "web": {
       "output": "static",
@@ -61,12 +63,18 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiBaseUrl": "http://192.168.1.7:3000",
-      "apiPort": 3000,
+      "apiBaseUrl": "https://gdc-backend-yrit.onrender.com",
+      "taskApiBaseUrl": "https://taskmanagment-backend-34i7.onrender.com",
+      "chatApiBaseUrl": "https://chat-backend-y6j2.onrender.com",
+      "attendanceApiBaseUrl": "https://attendence-service-rdvv.onrender.com",
+      "apiPort": 5001,
       "taskApiPort": 4000,
       "chatApiPort": 5003,
       "attendanceApiPort": 5000,
-      "attendanceApiBaseUrl": "http://192.168.1.25:5000"
+      "router": {},
+      "eas": {
+        "projectId": "36cc37ec-7449-40dc-89bc-9014a36ff7f6"
+      }
     }
   }
 }

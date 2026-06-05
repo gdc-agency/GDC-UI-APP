@@ -1,60 +1,60 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
-import {
-  addGroupMembers,
-  createGroupChat,
-  deleteChatMessage,
-  deleteGroupChat,
-  demoteGroupAdmin,
-  leaveGroupChat,
-  listChatMessages,
-  listChatThreads,
-  markChatRead,
-  openDmChat,
-  postChatMessage,
-  promoteGroupAdmin,
-  removeGroupMembers,
-  updateGroupChat,
-} from '@/services/api/chat-api';
-import { ChatApiError } from '@/services/api/chat-http';
 import { getAllUsers } from '@/services/api/admin-api';
 import { listAuthUsers } from '@/services/api/auth-api';
-import { fetchChatParticipantSnapshots } from '@/services/api/profile-api';
+import {
+    addGroupMembers,
+    createGroupChat,
+    deleteChatMessage,
+    deleteGroupChat,
+    demoteGroupAdmin,
+    leaveGroupChat,
+    listChatMessages,
+    listChatThreads,
+    markChatRead,
+    openDmChat,
+    postChatMessage,
+    promoteGroupAdmin,
+    removeGroupMembers,
+    updateGroupChat,
+} from '@/services/api/chat-api';
+import { ChatApiError } from '@/services/api/chat-http';
 import { deleteNotificationByEventKey } from '@/services/api/notifications-api';
+import { fetchChatParticipantSnapshots } from '@/services/api/profile-api';
 import { getMyTeamRoster, getVisibleDirectory } from '@/services/api/teams-api';
 import { ensureGdcSocketConnected, getGdcSocket } from '@/services/realtime/gdc-socket';
-import { computeTotalChatUnread } from '@/utils/compute-total-chat-unread';
-import { publishChatUnreadTotal, resetChatUnreadBus } from '@/utils/chat-unread-bus';
-import { clearChatInAppNotice, messagePreviewLabel, publishChatInAppNotice } from '@/utils/chat-in-app-notice';
-import { invalidateNotificationInbox } from '@/utils/notification-invalidate';
-import { syncChatInAppNotification } from '@/utils/sync-chat-in-app-notification';
-import { patchMessagesWithTombstone, toDeletedMessageUi } from '@/utils/chat-deleted-message';
-import {
-  buildPlaceholderThreadFromIncoming,
-  sortThreadsByRecent,
-  threadIdEquals,
-} from '@/utils/chat-thread-inbox';
-import {
-  buildGroupCreateKey,
-  createGroupIdempotencyKey,
-  runGroupCreateOnce,
-} from '@/utils/group-create-guard';
-import { isAdminRole } from '@/utils/roles';
-import { formatDisplayRole, formatFileSize, mapDirectoryUser, resolveProfileImageUri } from '@/utils/chat-directory';
 import { readLocalUriAsDataUrl } from '@/utils/chat-attachment-read';
+import { patchMessagesWithTombstone, toDeletedMessageUi } from '@/utils/chat-deleted-message';
+import { formatDisplayRole, formatFileSize, mapDirectoryUser, resolveProfileImageUri } from '@/utils/chat-directory';
+import { clearChatInAppNotice, messagePreviewLabel, publishChatInAppNotice } from '@/utils/chat-in-app-notice';
 import {
-  finalizeOutgoingMessage,
-  isMessageUploading,
-  isTempMessageId,
-  mergeOutgoingDeliveryState,
+    finalizeOutgoingMessage,
+    isMessageUploading,
+    isTempMessageId,
+    mergeOutgoingDeliveryState,
 } from '@/utils/chat-message-status';
 import {
-  runWithTransferProgress,
-  startTransferProgressAnimator,
+    buildPlaceholderThreadFromIncoming,
+    sortThreadsByRecent,
+    threadIdEquals,
+} from '@/utils/chat-thread-inbox';
+import {
+    runWithTransferProgress,
+    startTransferProgressAnimator,
 } from '@/utils/chat-transfer-progress';
+import { publishChatUnreadTotal, resetChatUnreadBus } from '@/utils/chat-unread-bus';
+import { computeTotalChatUnread } from '@/utils/compute-total-chat-unread';
+import {
+    buildGroupCreateKey,
+    createGroupIdempotencyKey,
+    runGroupCreateOnce,
+} from '@/utils/group-create-guard';
+import { invalidateNotificationInbox } from '@/utils/notification-invalidate';
+import { isAdminRole } from '@/utils/roles';
+import { syncChatInAppNotification } from '@/utils/sync-chat-in-app-notification';
 
 const HIDDEN_CHAT_IDS_PREFIX = 'gdc_chat_hidden_threads:';
 const HIDDEN_MESSAGE_IDS_PREFIX = 'gdc_chat_hidden_messages:';
@@ -398,6 +398,10 @@ export function useGdcChatInbox({ token, user }) {
   const inboxSyncedFromServerRef = useRef(false);
   /** chatId → last successful messages fetch (ms) */
   const lastMessagesLoadAtRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+  /** Dedupe socket deliveries (relay may hit user + chat rooms, or receiveMessage + chat.message). */
+  const processedInboundMessageIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
+  /** chatId → last message id we already showed in the in-app banner */
+  const lastNotifiedMessageIdByChatRef = useRef(/** @type {Record<string, string>} */ ({}));
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -1621,10 +1625,24 @@ export function useGdcChatInbox({ token, user }) {
     const s = getGdcSocket();
     if (!s) return undefined;
 
+    const isChatParticipant = (chatId, authorId) => {
+      const thread = threadsRef.current.find((t) => threadIdEquals(t.id, chatId));
+      const members = Array.isArray(thread?.server?.memberIds)
+        ? thread.server.memberIds.map(String)
+        : [];
+      if (members.length > 0) return members.includes(String(myId));
+      if (authorId && authorId !== String(myId)) return true;
+      return authorId === String(myId);
+    };
+
     const pushIncomingNotice = (chatId, ui, authorId) => {
       const aid = String(authorId || '').trim();
       if (!aid || aid === String(myId)) return;
+      if (!isChatParticipant(chatId, aid)) return;
       if (threadIdEquals(selectedChatIdRef.current, chatId)) return;
+      const messageId = ui?.id != null ? String(ui.id) : '';
+      if (messageId && lastNotifiedMessageIdByChatRef.current[String(chatId)] === messageId) return;
+      if (messageId) lastNotifiedMessageIdByChatRef.current[String(chatId)] = messageId;
       const row = threadsRef.current.find((t) => threadIdEquals(t.id, chatId));
       const peer = aid ? userDirectoryByIdRef.current[aid] : null;
       const notice = {
@@ -1648,6 +1666,16 @@ export function useGdcChatInbox({ token, user }) {
         return;
       }
       const authorId = String(serverMsg.authorId ?? '');
+      if (!isChatParticipant(chatId, authorId)) return;
+      const inboundMessageId = serverMsg.id != null ? String(serverMsg.id) : '';
+      if (inboundMessageId) {
+        if (processedInboundMessageIdsRef.current.has(inboundMessageId)) return;
+        processedInboundMessageIdsRef.current.add(inboundMessageId);
+        if (processedInboundMessageIdsRef.current.size > 500) {
+          const kept = [...processedInboundMessageIdsRef.current].slice(-250);
+          processedInboundMessageIdsRef.current = new Set(kept);
+        }
+      }
       let ui = mapApiMessageToUi(serverMsg, myId);
       const isDeletedEvent = !!(serverMsg.deleted || ui.deleted);
       if (isDeletedEvent) {
@@ -1703,8 +1731,10 @@ export function useGdcChatInbox({ token, user }) {
           } else {
             nextMsgs = mergeMessageList(msgs, ui).slice(-80);
           }
+          const isNewInbound =
+            !!inboundMessageId && !msgs.some((m) => String(m.id) === inboundMessageId);
           let unread = Number(t.unread) || 0;
-          if (!isOpen && authorId && authorId !== String(myId)) unread += 1;
+          if (!isOpen && authorId && authorId !== String(myId) && isNewInbound) unread += 1;
           if (isOpen) unread = 0;
 
           let row = { ...t, messages: nextMsgs, unread, threadPreview: ui };
@@ -1812,13 +1842,6 @@ export function useGdcChatInbox({ token, user }) {
         return;
       }
       scheduleSilentThreadRefreshRef.current?.();
-      setTimeout(() => {
-        if (threadIdEquals(selectedChatIdRef.current, chatId)) return;
-        const row = threadsRef.current.find((t) => threadIdEquals(t.id, chatId));
-        const preview = row?.threadPreview;
-        if (!preview || preview.deleted) return;
-        pushIncomingNotice(chatId, preview, String(preview.authorId ?? ''));
-      }, 650);
     };
 
     const onChatTyping = (payload) => {

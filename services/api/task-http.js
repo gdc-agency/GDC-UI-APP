@@ -3,12 +3,10 @@ import { getTaskApiBaseUrl } from '@/constants/api-config';
 const REQUEST_TIMEOUT_MS = 45000;
 
 function taskNetworkHint() {
-  const base = getTaskApiBaseUrl();
-  return [
-    `Task service URL: ${base}`,
-    'Task URL = same host as Auth (app.json expo.extra.apiBaseUrl / LAN) + expo.extra.taskApiPort (4000). Optional: expo.extra.taskApiBaseUrl.',
-    'Restart Metro with: npx expo start -c if you changed app.json.',
-  ].join('\n');
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn('[api] Task request failed', { base: getTaskApiBaseUrl() });
+  }
+  return 'Cannot connect to the task service. Check your network and try again.';
 }
 
 export class TaskApiError extends Error {

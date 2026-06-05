@@ -11,6 +11,7 @@ import {
   BRAND_SHORT_NAME,
   BRAND_TAGLINE,
   BRAND_LOGO_SOURCE,
+  BRAND_LOGO_FRAME,
   BrandColors,
 } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
@@ -58,7 +59,12 @@ export default function WelcomeScreen() {
         <StatusBar style="light" />
         <SafeAreaView style={styles.loaderSafe} edges={['top', 'bottom']}>
           <View style={styles.loaderCard}>
-            <Image source={BRAND_LOGO_SOURCE} style={styles.loaderLogo} contentFit="contain" />
+            <Image
+              source={BRAND_LOGO_SOURCE}
+              style={styles.loaderLogo}
+              contentFit="cover"
+              contentPosition="center"
+            />
           </View>
           <Text style={styles.loaderTitle}>{BRAND_COMPANY_NAME}</Text>
           <Text style={styles.loaderTagline}>Turning Clicks into Clients</Text>
@@ -86,7 +92,8 @@ export default function WelcomeScreen() {
             <Image
               source={BRAND_LOGO_SOURCE}
               style={styles.logoImg}
-              contentFit="contain"
+              contentFit="cover"
+              contentPosition="center"
               accessibilityLabel={`${BRAND_COMPANY_NAME} logo`}
             />
           </View>
@@ -126,9 +133,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   loaderCard: {
-    width: 176,
-    height: 176,
-    borderRadius: 88,
+    width: BRAND_LOGO_FRAME.width,
+    height: BRAND_LOGO_FRAME.height,
+    borderRadius: BRAND_LOGO_FRAME.borderRadius,
+    padding: BRAND_LOGO_FRAME.padding,
+    overflow: 'hidden',
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.35)',
@@ -141,8 +150,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   loaderLogo: {
-    width: 132,
-    height: 132,
+    width: '100%',
+    height: '100%',
   },
   loaderTitle: {
     marginTop: 18,
@@ -188,9 +197,11 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     marginBottom: 20,
-    width: 132,
-    height: 132,
-    borderRadius: 66,
+    width: BRAND_LOGO_FRAME.width,
+    height: BRAND_LOGO_FRAME.height,
+    borderRadius: BRAND_LOGO_FRAME.borderRadius,
+    padding: BRAND_LOGO_FRAME.padding,
+    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(147,197,253,0.6)',
@@ -203,8 +214,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   logoImg: {
-    width: 108,
-    height: 108,
+    width: '100%',
+    height: '100%',
   },
   heroCompany: {
     marginTop: 4,

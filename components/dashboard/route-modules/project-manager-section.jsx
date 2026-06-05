@@ -286,7 +286,7 @@ export function ProjectManagerSection({
 
         <View style={[styles.panel, { marginTop: 12 }]}>
           <Text style={styles.panelTitle}>Task List</Text>
-          <Text style={styles.panelSub}>Project tasks matching current filters.</Text>
+          <Text style={styles.panelSub}></Text>
           {projectTasksLoading ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>Loading tasks…</Text>
@@ -344,19 +344,6 @@ export function ProjectManagerSection({
                     <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
                     <Text style={styles.projectDueText}>{formatProjectDueDate(task.deadline)}</Text>
                   </View>
-                  {task.attachmentName ? (
-                    <View style={styles.projectAttachmentRow}>
-                      <View style={styles.projectAttachmentIconWrap}>
-                        <MaterialCommunityIcons name="paperclip" size={16} color="#2563eb" />
-                      </View>
-                      <View style={styles.projectAttachmentTextWrap}>
-                        <Text style={styles.projectAttachmentLabel}>Attachment</Text>
-                        <Text style={styles.projectAttachmentName} numberOfLines={1} ellipsizeMode="tail">
-                          {task.attachmentName}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
                 </View>
               </Pressable>
             ))
