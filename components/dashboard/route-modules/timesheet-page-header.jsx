@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
+import { useTheme } from '@/context/theme-context';
 
 const SEGMENTS = [
   { id: 'timesheet', label: 'Attendance', icon: 'view-grid-outline' },
@@ -10,9 +10,13 @@ const SEGMENTS = [
   { id: 'manual-records', label: 'Manual Record', icon: 'clipboard-text-outline' },
 ];
 
-const INACTIVE_COLOR = '#64748B';
 
 function SegmentTab({ seg, active, onPress }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+  const inactiveColor = TsColors.textMuted;
+
   return (
     <Pressable
       accessibilityRole="tab"
@@ -30,7 +34,7 @@ function SegmentTab({ seg, active, onPress }) {
         <MaterialCommunityIcons
           name={seg.icon}
           size={22}
-          color={active ? TsColors.blue : INACTIVE_COLOR}
+          color={active ? TsColors.blue : inactiveColor}
         />
         <Text style={[ts.segmentText, active && ts.segmentTextActive]} numberOfLines={2}>
           {seg.label}
@@ -43,6 +47,9 @@ function SegmentTab({ seg, active, onPress }) {
 
 /** Top title + segmented tabs (Attendance / Clock / Manual). */
 export function TimesheetPageHeader({ slug, router }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   return (
     <View style={ts.headerBlock}>
       <Text style={ts.screenTitle}>Timesheet</Text>

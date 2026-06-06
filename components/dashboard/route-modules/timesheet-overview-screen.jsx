@@ -2,9 +2,8 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { useTheme } from '@/context/theme-context';
 import { isAdminOrHrRole, isAdminRole } from '@/utils/roles';
-
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 
 import { AttendanceMemberCard } from './attendance-member-card';
 import { TimesheetPageHeader } from './timesheet-page-header';
@@ -71,6 +70,9 @@ function computeOverviewStats(rows, timesheetWindow) {
 }
 
 function DashboardStatTile({ label, value, icon, tint, iconColor }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   return (
     <View style={ts.dashboardTile}>
       <View style={[ts.dashboardTileIcon, { backgroundColor: tint }]}>
@@ -98,6 +100,10 @@ function StatCard({ label, value, icon, tint, iconColor }) {
 }
 
 function TimesheetDashboardHero({ stats, timesheetWindow }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   return (
     <View style={ts.dashboardHero}>
       <View style={ts.dashboardHeroTop}>
@@ -162,6 +168,10 @@ export function TimesheetOverviewScreen({
   token,
   recordExportQuery,
 }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const [expandedId, setExpandedId] = useState(null);
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);

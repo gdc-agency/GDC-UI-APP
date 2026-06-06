@@ -17,8 +17,9 @@ import {
   promptAttendancePdfExport,
 } from '@/utils/attendance-export';
 
+import { useTheme } from '@/context/theme-context';
+
 import { ClockRecordCard, formatClockDisplayDate } from './clock-record-card';
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 import { TimesheetUserAvatar } from './timesheet-user-avatar';
 
 const MANUAL_STATUS_OPTIONS = [
@@ -75,14 +76,22 @@ function normalizeManualStatus(status) {
   return 'Pending';
 }
 
-function manualStatusStyle(status) {
+function manualStatusStyle(status, TsColors) {
   const label = normalizeManualStatus(status);
-  if (label === 'Approved') return { bg: '#DCFCE7', color: '#15803D', dot: '#22C55E', label };
-  if (label === 'Rejected') return { bg: '#FEE2E2', color: '#B91C1C', dot: '#EF4444', label };
-  return { bg: '#FFEDD5', color: '#C2410C', dot: '#F59E0B', label };
+  if (label === 'Approved') {
+    return { bg: TsColors.greenBg, color: TsColors.greenText, dot: TsColors.green, label };
+  }
+  if (label === 'Rejected') {
+    return { bg: TsColors.redBg, color: TsColors.redText, dot: TsColors.red, label };
+  }
+  return { bg: TsColors.amberBg, color: TsColors.amberText, dot: TsColors.orange, label };
 }
 
 function FilterSelect({ label, value, options, onChange, openKey, setOpenKey, fieldKey, style }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const open = openKey === fieldKey;
   const display = options.find((o) => o.key === value)?.label || value;
 
@@ -116,6 +125,10 @@ function FilterSelect({ label, value, options, onChange, openKey, setOpenKey, fi
 }
 
 function DateField({ label, value, onChange }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   if (Platform.OS === 'ios') {
     return (
       <View style={ts.logFilterField}>
@@ -125,7 +138,7 @@ function DateField({ label, value, onChange }) {
             value={value}
             onChangeText={onChange}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={TsColors.inputPlaceholder}
             autoCapitalize="none"
             style={[ts.logFilterInputText, { paddingVertical: 0 }]}
           />
@@ -152,7 +165,11 @@ function durationForEntry(entry) {
 }
 
 function MetaTile({ icon, label, value, tone = 'blue' }) {
-  const iconColor = tone === 'amber' ? '#F59E0B' : '#3B82F6';
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
+  const iconColor = tone === 'amber' ? TsColors.orange : TsColors.blue;
   return (
     <View style={ts.logMetaTile}>
       <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
@@ -165,6 +182,10 @@ function MetaTile({ icon, label, value, tone = 'blue' }) {
 }
 
 function DurationChip({ duration, variant = 'clock' }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const isManual = variant === 'manual';
   return (
     <View style={[ts.logDurationChip, isManual && ts.logDurationChipAmber]}>
@@ -179,7 +200,11 @@ function DurationChip({ duration, variant = 'clock' }) {
 }
 
 function StatusChip({ status }) {
-  const st = manualStatusStyle(status);
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
+  const st = manualStatusStyle(status, TsColors);
   return (
     <View style={[ts.logStatusChip, { backgroundColor: st.bg }]}>
       <View style={[ts.logStatusDot, { backgroundColor: st.dot }]} />
@@ -189,6 +214,10 @@ function StatusChip({ status }) {
 }
 
 function TimePanel({ label, time, isIn }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   return (
     <View style={ts.logTimePanel}>
       <MaterialCommunityIcons name={isIn ? 'login' : 'logout'} size={22} color={TsColors.blue} />
@@ -203,6 +232,9 @@ function TimePanel({ label, time, isIn }) {
 }
 
 function ManualRecordCard({ entry }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   const name = entry.user?.name || entry.userName || '—';
   const dept = entry.user?.team || entry.department || entry.team || '—';
   const role = entry.user?.role || entry.userRole || '—';
@@ -264,6 +296,10 @@ export function TimesheetRecordsView({
   statusFilter,
   setStatusFilter,
 }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const [openMenu, setOpenMenu] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const isManual = variant === 'manual';
@@ -341,7 +377,7 @@ export function TimesheetRecordsView({
                 value={recordSearch}
                 onChangeText={setRecordSearch}
                 placeholder="GDC-ID or name"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={TsColors.inputPlaceholder}
                 style={[ts.logFilterInputText, { paddingVertical: 0 }]}
               />
             </View>

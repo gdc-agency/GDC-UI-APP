@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ import { resolveGroupMember } from '@/utils/resolve-group-member';
 const SHEET_SLIDE = 520;
 const ROW_H = 58;
 
-const MemberManageRow = memo(function MemberManageRow({ item, isAdmin, isMe, canManage, busy, onRemove, onPromote }) {
+const MemberManageRow = memo(function MemberManageRow({ item, isAdmin, isMe, canManage, busy, onRemove, onPromote, styles, colors }) {
   const line = item.displayName || item.name || item.id;
   return (
     <View style={styles.memberRow}>
@@ -45,7 +45,7 @@ const MemberManageRow = memo(function MemberManageRow({ item, isAdmin, isMe, can
         <View style={styles.memberActions}>
           {!isAdmin ? (
             <Pressable style={styles.iconBtn} onPress={() => onPromote(item.id)} disabled={busy}>
-              <MaterialCommunityIcons name="shield-plus-outline" size={20} color={BrandColors.primaryMid} />
+              <MaterialCommunityIcons name="shield-plus-outline" size={20} color={colors.primaryMid} />
             </Pressable>
           ) : null}
           <Pressable style={styles.iconBtn} onPress={() => onRemove(item.id)} disabled={busy}>
@@ -85,8 +85,134 @@ export function GroupSettingsSheet({
   onDelete,
   onPromote,
 }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: { flex: 1, justifyContent: 'flex-end' },
+        backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.modalBackdrop },
+        sheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingHorizontal: 16,
+          maxHeight: '92%',
+        },
+        grabber: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 999,
+          backgroundColor: colors.borderStrong,
+          marginVertical: 10,
+        },
+        headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+        title: { fontSize: 18, fontWeight: '800', color: colors.text },
+        avatarBlock: { alignSelf: 'center', marginBottom: 12, position: 'relative' },
+        groupAvatar: { width: 88, height: 88, borderRadius: 44 },
+        groupAvatarFb: {
+          width: 88,
+          height: 88,
+          borderRadius: 44,
+          backgroundColor: colors.infoBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        editPhotoBadge: {
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          backgroundColor: colors.primaryMid,
+          borderRadius: 14,
+          padding: 6,
+        },
+        nameRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+        nameInput: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          fontSize: 16,
+          color: colors.text,
+          backgroundColor: colors.inputBg,
+        },
+        saveBtn: {
+          backgroundColor: colors.primaryMid,
+          borderRadius: 12,
+          paddingHorizontal: 16,
+          justifyContent: 'center',
+        },
+        saveBtnText: { color: '#fff', fontWeight: '700' },
+        groupTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 12, color: colors.text },
+        section: { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginBottom: 8 },
+        addMemberBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+        addMemberText: { color: colors.primaryMid, fontWeight: '700' },
+        addPanel: { backgroundColor: colors.surfaceMuted, borderRadius: 12, padding: 10, marginBottom: 10 },
+        addSearch: {
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          borderRadius: 10,
+          padding: 10,
+          marginBottom: 8,
+          backgroundColor: colors.card,
+          color: colors.text,
+        },
+        addRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          paddingVertical: 8,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderStrong,
+        },
+        addRowText: { fontSize: 15, color: colors.text },
+        memberList: { maxHeight: 220, marginBottom: 12 },
+        memberRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: ROW_H,
+        },
+        memberLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+        avatar: { width: 40, height: 40, borderRadius: 20 },
+        avatarFb: {
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: colors.chipActiveBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        avatarLetter: { fontWeight: '800', color: colors.primaryMid },
+        memberName: { fontSize: 15, fontWeight: '600', color: colors.text },
+        adminTag: { fontSize: 11, color: colors.primaryMid, fontWeight: '700' },
+        memberActions: { flexDirection: 'row', gap: 4 },
+        iconBtn: { padding: 8 },
+        primaryBtn: {
+          backgroundColor: colors.primaryMid,
+          borderRadius: 10,
+          paddingVertical: 10,
+          alignItems: 'center',
+          marginTop: 8,
+        },
+        primaryBtnOff: { opacity: 0.5 },
+        primaryBtnText: { color: '#fff', fontWeight: '700' },
+        dangerBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingVertical: 14,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.borderStrong,
+        },
+        dangerText: { color: '#ef4444', fontWeight: '700', fontSize: 15 },
+      }),
+    [colors],
+  );
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -280,7 +406,7 @@ export function GroupSettingsSheet({
           </View>
 
           {busy ? (
-            <ActivityIndicator style={{ marginVertical: 8 }} color={BrandColors.primaryMid} />
+            <ActivityIndicator style={{ marginVertical: 8 }} color={colors.primaryMid} />
           ) : null}
 
           <Pressable style={styles.avatarBlock} onPress={pickAvatar} disabled={!isAdmin || busy}>
@@ -288,7 +414,7 @@ export function GroupSettingsSheet({
               <Image source={{ uri: String(avatarUrl) }} style={styles.groupAvatar} contentFit="cover" />
             ) : (
               <View style={styles.groupAvatarFb}>
-                <MaterialCommunityIcons name="account-group" size={36} color={BrandColors.primaryMid} />
+                <MaterialCommunityIcons name="account-group" size={36} color={colors.primaryMid} />
               </View>
             )}
             {isAdmin ? (
@@ -317,7 +443,7 @@ export function GroupSettingsSheet({
           <Text style={styles.section}>{memberIds.length} members</Text>
           {isAdmin ? (
             <Pressable style={styles.addMemberBtn} onPress={() => setAddOpen((v) => !v)} disabled={busy}>
-              <MaterialCommunityIcons name="account-plus-outline" size={20} color={BrandColors.primaryMid} />
+              <MaterialCommunityIcons name="account-plus-outline" size={20} color={colors.primaryMid} />
               <Text style={styles.addMemberText}>Add members</Text>
             </Pressable>
           ) : null}
@@ -349,7 +475,7 @@ export function GroupSettingsSheet({
                         })
                       }>
                       <Text style={styles.addRowText}>{item.displayName || item.name}</Text>
-                      {on ? <MaterialCommunityIcons name="check-circle" size={18} color={BrandColors.primaryMid} /> : null}
+                      {on ? <MaterialCommunityIcons name="check-circle" size={18} color={colors.primaryMid} /> : null}
                     </Pressable>
                   );
                 }}
@@ -375,6 +501,8 @@ export function GroupSettingsSheet({
                 isMe={String(item.id) === String(myUserId)}
                 canManage={isAdmin}
                 busy={busy}
+                styles={styles}
+                colors={colors}
                 onRemove={confirmRemove}
                 onPromote={(id) => {
                   setBusy(true);
@@ -401,121 +529,3 @@ export function GroupSettingsSheet({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.5)' },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    maxHeight: '92%',
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 10,
-  },
-  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  title: { fontSize: 18, fontWeight: '800', color: BrandColors.text },
-  avatarBlock: { alignSelf: 'center', marginBottom: 12, position: 'relative' },
-  groupAvatar: { width: 88, height: 88, borderRadius: 44 },
-  groupAvatarFb: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editPhotoBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 14,
-    padding: 6,
-  },
-  nameRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  nameInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  saveBtn: {
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  saveBtnText: { color: '#fff', fontWeight: '700' },
-  groupTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 12, color: BrandColors.text },
-  section: { fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 8 },
-  addMemberBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  addMemberText: { color: BrandColors.primaryMid, fontWeight: '700' },
-  addPanel: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 10, marginBottom: 10 },
-  addSearch: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  addRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
-  addRowText: { fontSize: 15, color: BrandColors.text },
-  memberList: { maxHeight: 220, marginBottom: 12 },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: ROW_H,
-  },
-  memberLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  avatarFb: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: { fontWeight: '800', color: BrandColors.primaryMid },
-  memberName: { fontSize: 15, fontWeight: '600', color: BrandColors.text },
-  adminTag: { fontSize: 11, color: BrandColors.primaryMid, fontWeight: '700' },
-  memberActions: { flexDirection: 'row', gap: 4 },
-  iconBtn: { padding: 8 },
-  primaryBtn: {
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryBtnOff: { opacity: 0.5 },
-  primaryBtnText: { color: '#fff', fontWeight: '700' },
-  dangerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e2e8f0',
-  },
-  dangerText: { color: '#ef4444', fontWeight: '700', fontSize: 15 },
-});

@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { createGroupIdempotencyKey } from '@/utils/group-create-guard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -72,7 +72,7 @@ const MemberRow = memo(
   (a, b) => a.selected === b.selected && String(a.item.id) === String(b.item.id),
 );
 
-const Chip = memo(function Chip({ label, onRemove }) {
+const Chip = memo(function Chip({ label, onRemove, styles }) {
   return (
     <Pressable style={styles.chip} onPress={onRemove}>
       <Text style={styles.chipText} numberOfLines={1}>
@@ -93,7 +93,7 @@ const StepDots = memo(function StepDots({ step }) {
   );
 });
 
-const SettingToggle = memo(function SettingToggle({ label, sub, value, onValueChange, disabled }) {
+const SettingToggle = memo(function SettingToggle({ label, sub, value, onValueChange, disabled, styles, colors }) {
   return (
     <View style={styles.toggleRow}>
       <View style={{ flex: 1 }}>
@@ -104,7 +104,7 @@ const SettingToggle = memo(function SettingToggle({ label, sub, value, onValueCh
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
-        trackColor={{ false: '#e2e8f0', true: BrandColors.primaryMid }}
+        trackColor={{ false: colors.borderStrong, true: colors.primaryMid }}
       />
     </View>
   );
@@ -114,8 +114,211 @@ const SettingToggle = memo(function SettingToggle({ label, sub, value, onValueCh
  * WhatsApp-style 3-step create group with keyboard-safe sheet layout.
  */
 export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = false, onCreate }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: { flex: 1, justifyContent: 'flex-end' },
+        backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.modalBackdrop },
+        sheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingHorizontal: 16,
+          overflow: 'hidden',
+        },
+        grabber: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 999,
+          backgroundColor: colors.borderStrong,
+          marginVertical: 10,
+        },
+        headRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 8,
+        },
+        headCenter: { flex: 1, alignItems: 'center' },
+        title: { fontSize: 17, fontWeight: '800', color: colors.text },
+        stepDots: { flexDirection: 'row', gap: 6, marginTop: 6 },
+        stepDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.borderStrong },
+        stepDotActive: { backgroundColor: colors.primaryMid, width: 18 },
+        kav: { flex: 1, minHeight: 0 },
+        body: { flex: 1, minHeight: 0 },
+        scrollFlex: { flex: 1 },
+        scrollContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 20 },
+        detailsBody: { flex: 1, paddingTop: 4 },
+        searchWrap: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors.surfaceMuted,
+          borderRadius: 14,
+          paddingHorizontal: 12,
+          marginBottom: 10,
+        },
+        searchInput: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, fontSize: 15, color: colors.text },
+        chipsScroll: { marginBottom: 8, maxHeight: 44 },
+        chip: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          backgroundColor: colors.infoBg,
+          borderRadius: 20,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          marginRight: 8,
+          maxWidth: 150,
+        },
+        chipText: { fontSize: 13, fontWeight: '600', color: colors.primaryMid, flexShrink: 1 },
+        listFlex: { flex: 1, minHeight: 120 },
+        memberRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: MEMBER_ROW_H,
+          paddingVertical: 8,
+        },
+        memberIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+        avatarWrap: { position: 'relative' },
+        avatarImg: { width: 44, height: 44, borderRadius: 22 },
+        avatarFallback: {
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: colors.chipActiveBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        avatarLetter: { fontSize: 16, fontWeight: '800', color: colors.primaryMid },
+        presenceDot: {
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 12,
+          height: 12,
+          borderRadius: 6,
+          backgroundColor: colors.textSecondary,
+          borderWidth: 2,
+          borderColor: colors.card,
+        },
+        presenceDotOn: { backgroundColor: '#22c55e' },
+        nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        memberName: { fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 },
+        roleBadge: {
+          fontSize: 9,
+          fontWeight: '800',
+          color: colors.primaryMid,
+          backgroundColor: colors.infoBg,
+          paddingHorizontal: 5,
+          paddingVertical: 2,
+          borderRadius: 4,
+        },
+        memberSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+        check: {
+          width: 24,
+          height: 24,
+          borderRadius: 12,
+          borderWidth: 2,
+          borderColor: colors.borderStrong,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        checkOn: { backgroundColor: colors.primaryMid, borderColor: colors.primaryMid },
+        footer: {
+          paddingTop: 8,
+          paddingHorizontal: 0,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.borderStrong,
+          backgroundColor: colors.modalSheetBg,
+          minHeight: FOOTER_H,
+          justifyContent: 'center',
+        },
+        primaryBtn: {
+          backgroundColor: colors.primaryMid,
+          borderRadius: 14,
+          paddingVertical: 14,
+          alignItems: 'center',
+        },
+        primaryBtnDisabled: { opacity: 0.45 },
+        primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+        btnLoading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+        avatarPick: {
+          width: 88,
+          height: 88,
+          borderRadius: 44,
+          backgroundColor: colors.surfaceMuted,
+          alignSelf: 'center',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 16,
+          overflow: 'hidden',
+        },
+        avatarPickImg: { width: '100%', height: '100%' },
+        fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginBottom: 6 },
+        fieldInput: {
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          borderRadius: 12,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+          fontSize: 16,
+          color: colors.text,
+          marginBottom: 14,
+          backgroundColor: colors.inputBg,
+        },
+        fieldInputFocused: {
+          borderColor: colors.primaryMid,
+          borderWidth: 2,
+          backgroundColor: colors.card,
+        },
+        fieldMulti: { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 },
+        settingsHint: { textAlign: 'center', color: colors.textMuted, fontSize: 13, marginBottom: 12 },
+        privacyStack: { gap: 8, marginBottom: 10 },
+        privacyRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          padding: 12,
+          borderRadius: 14,
+          backgroundColor: colors.surfaceMuted,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+        },
+        privacyRowActive: {
+          borderColor: colors.chipActiveBorder,
+          backgroundColor: colors.infoBg,
+        },
+        privacyTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+        privacySub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+        radio: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          borderWidth: 2,
+          borderColor: colors.borderStrong,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        radioOn: { borderColor: colors.primaryMid },
+        radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primaryMid },
+        toggleRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 10,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderStrong,
+        },
+        toggleLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
+        toggleSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+      }),
+    [colors],
+  );
   const progress = useRef(new Animated.Value(0)).current;
   const submittingRef = useRef(false);
   const idempotencyRef = useRef('');
@@ -274,9 +477,9 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
 
   const renderMember = useCallback(
     ({ item }) => (
-      <MemberRow item={item} selected={selectedSet.has(String(item.id))} onToggle={toggle} />
+      <MemberRow item={item} selected={selectedSet.has(String(item.id))} onToggle={toggle} styles={styles} />
     ),
-    [selectedSet, toggle],
+    [selectedSet, toggle, styles],
   );
 
   const keyExtractor = useCallback((item) => String(item.id), []);
@@ -374,14 +577,14 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                 }}
                 hitSlop={10}
                 disabled={submitting}>
-                <MaterialCommunityIcons name="arrow-left" size={22} color={BrandColors.text} />
+                <MaterialCommunityIcons name="arrow-left" size={22} color={colors.text} />
               </Pressable>
             ) : (
               <View style={{ width: 22 }} />
             )}
             <View style={styles.headCenter}>
               <Text style={styles.title}>{stepTitle}</Text>
-              <StepDots step={step} />
+              <StepDots step={step} styles={styles} />
             </View>
             <Pressable onPress={closeAnimated} hitSlop={10} disabled={submitting}>
               <MaterialCommunityIcons name="close" size={22} color="#64748b" />
@@ -422,6 +625,7 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                         <Chip
                           label={String(item.displayName || item.name)}
                           onRemove={() => toggle(String(item.id))}
+                          styles={styles}
                         />
                       )}
                     />
@@ -450,7 +654,7 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                       renderItem={renderMember}
                       ListFooterComponent={
                         listLimit < filtered.length ? (
-                          <ActivityIndicator style={{ marginVertical: 12 }} color={BrandColors.primaryMid} />
+                          <ActivityIndicator style={{ marginVertical: 12 }} color={colors.primaryMid} />
                         ) : null
                       }
                     />
@@ -464,7 +668,7 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     {avatarUri ? (
                       <Image source={{ uri: avatarUri }} style={styles.avatarPickImg} contentFit="cover" />
                     ) : (
-                      <MaterialCommunityIcons name="camera-plus-outline" size={32} color={BrandColors.primaryMid} />
+                      <MaterialCommunityIcons name="camera-plus-outline" size={32} color={colors.primaryMid} />
                     )}
                   </Pressable>
                   <View>
@@ -538,6 +742,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     value={allowMembersToAdd}
                     onValueChange={setAllowMembersToAdd}
                     disabled={submitting || privacy === 'restricted'}
+                    styles={styles}
+                    colors={colors}
                   />
                   <SettingToggle
                     label="Members can edit group info"
@@ -545,6 +751,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     value={allowMembersToEditInfo}
                     onValueChange={setAllowMembersToEditInfo}
                     disabled={submitting}
+                    styles={styles}
+                    colors={colors}
                   />
                   <SettingToggle
                     label="Mute notifications"
@@ -552,6 +760,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     value={muteNotifications}
                     onValueChange={setMuteNotifications}
                     disabled={submitting}
+                    styles={styles}
+                    colors={colors}
                   />
                   <SettingToggle
                     label="Disappearing messages"
@@ -559,6 +769,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     value={disappearingMessages}
                     onValueChange={setDisappearingMessages}
                     disabled={submitting}
+                    styles={styles}
+                    colors={colors}
                   />
                 </ScrollView>
               ) : null}
@@ -580,201 +792,3 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.52)' },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    overflow: 'hidden',
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 10,
-  },
-  headRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  headCenter: { flex: 1, alignItems: 'center' },
-  title: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
-  stepDots: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  stepDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#e2e8f0' },
-  stepDotActive: { backgroundColor: BrandColors.primaryMid, width: 18 },
-  kav: { flex: 1, minHeight: 0 },
-  body: { flex: 1, minHeight: 0 },
-  scrollFlex: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 20 },
-  detailsBody: { flex: 1, paddingTop: 4 },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5fb',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  searchInput: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, fontSize: 15, color: BrandColors.text },
-  chipsScroll: { marginBottom: 8, maxHeight: 44 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#eff6ff',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    maxWidth: 150,
-  },
-  chipText: { fontSize: 13, fontWeight: '600', color: BrandColors.primaryMid, flexShrink: 1 },
-  listFlex: { flex: 1, minHeight: 120 },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: MEMBER_ROW_H,
-    paddingVertical: 8,
-  },
-  memberIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatarWrap: { position: 'relative' },
-  avatarImg: { width: 44, height: 44, borderRadius: 22 },
-  avatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: { fontSize: 16, fontWeight: '800', color: BrandColors.primaryMid },
-  presenceDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#94a3b8',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  presenceDotOn: { backgroundColor: '#22c55e' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  memberName: { fontSize: 15, fontWeight: '700', color: BrandColors.text, flexShrink: 1 },
-  roleBadge: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: BrandColors.primaryMid,
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  memberSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  check: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: BrandColors.primaryMid, borderColor: BrandColors.primaryMid },
-  footer: {
-    paddingTop: 8,
-    paddingHorizontal: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e9edef',
-    backgroundColor: '#fff',
-    minHeight: FOOTER_H,
-    justifyContent: 'center',
-  },
-  primaryBtn: {
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryBtnDisabled: { opacity: 0.45 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  btnLoading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatarPick: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#f1f5fb',
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  avatarPickImg: { width: '100%', height: '100%' },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 6 },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: BrandColors.text,
-    marginBottom: 14,
-    backgroundColor: '#fafbff',
-  },
-  fieldInputFocused: {
-    borderColor: BrandColors.primaryMid,
-    borderWidth: 2,
-    backgroundColor: '#fff',
-  },
-  fieldMulti: { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 },
-  settingsHint: { textAlign: 'center', color: '#64748b', fontSize: 13, marginBottom: 12 },
-  privacyStack: { gap: 8, marginBottom: 10 },
-  privacyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  privacyRowActive: {
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
-  },
-  privacyTitle: { fontSize: 14, fontWeight: '700', color: BrandColors.text },
-  privacySub: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioOn: { borderColor: BrandColors.primaryMid },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: BrandColors.primaryMid },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
-  toggleLabel: { fontSize: 15, fontWeight: '600', color: BrandColors.text },
-  toggleSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
-});

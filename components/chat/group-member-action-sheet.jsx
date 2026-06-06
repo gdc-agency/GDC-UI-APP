@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,8 @@ const ActionCard = React.memo(function ActionCard({
   subtitle,
   onPress,
   disabled,
+  styles,
+  colors,
 }) {
   const isDanger = tone === 'danger';
   return (
@@ -22,7 +24,7 @@ const ActionCard = React.memo(function ActionCard({
       onPress={onPress}
       disabled={disabled}>
       <View style={[styles.actionIconWrap, isDanger ? styles.actionIconDanger : styles.actionIconPrimary]}>
-        <MaterialCommunityIcons name={icon} size={22} color={isDanger ? '#dc2626' : BrandColors.primaryMid} />
+        <MaterialCommunityIcons name={icon} size={22} color={isDanger ? '#dc2626' : colors.primaryMid} />
       </View>
       <View style={styles.actionTextWrap}>
         <Text style={[styles.actionTitle, isDanger ? styles.actionTitleDanger : styles.actionTitlePrimary]}>
@@ -30,7 +32,7 @@ const ActionCard = React.memo(function ActionCard({
         </Text>
         {subtitle ? <Text style={styles.actionSubtitle}>{subtitle}</Text> : null}
       </View>
-      <MaterialCommunityIcons name="chevron-right" size={22} color="#94a3b8" />
+      <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
     </Pressable>
   );
 });
@@ -58,8 +60,89 @@ export function GroupMemberActionSheet({
   onMakeAdmin,
   onMakeMember,
 }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: { flex: 1, justifyContent: 'flex-end' },
+        backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.modalBackdrop },
+        sheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingHorizontal: 18,
+          paddingTop: 8,
+          maxWidth: 520,
+          width: '100%',
+          alignSelf: 'center',
+        },
+        grabber: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.borderStrong,
+          marginBottom: 14,
+        },
+        profileRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 18,
+          gap: 12,
+        },
+        profileAvatarWrap: {},
+        profileAvatar: { width: 52, height: 52, borderRadius: 26 },
+        profileAvatarFb: {
+          width: 52,
+          height: 52,
+          borderRadius: 26,
+          backgroundColor: colors.chipActiveBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        profileAvatarLetter: { fontSize: 20, fontWeight: '800', color: colors.primaryMid },
+        profileMeta: { flex: 1, minWidth: 0 },
+        profileName: { fontSize: 17, fontWeight: '800', color: colors.text },
+        profileStatus: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+        closeBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: colors.infoBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        busy: { marginBottom: 8 },
+        actions: { gap: 12, paddingBottom: 4 },
+        actionCard: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          borderRadius: 16,
+          padding: 14,
+          gap: 12,
+        },
+        actionCardDanger: { backgroundColor: colors.dangerBg },
+        actionCardPrimary: { backgroundColor: colors.infoBg },
+        actionIconWrap: {
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        actionIconDanger: { backgroundColor: '#fee2e2' },
+        actionIconPrimary: { backgroundColor: colors.chipActiveBg },
+        actionTextWrap: { flex: 1, minWidth: 0 },
+        actionTitle: { fontSize: 16, fontWeight: '800' },
+        actionTitleDanger: { color: '#dc2626' },
+        actionTitlePrimary: { color: colors.primaryMid },
+        actionSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 3, lineHeight: 16 },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     if (visible && member) {
@@ -115,12 +198,12 @@ export function GroupMemberActionSheet({
               <Text style={styles.profileStatus}>{member.online ? 'Online' : 'Offline'}</Text>
             </View>
             <Pressable style={styles.closeBtn} onPress={closeAnimated} hitSlop={10} disabled={busy}>
-              <MaterialCommunityIcons name="close" size={20} color={BrandColors.primaryMid} />
+              <MaterialCommunityIcons name="close" size={20} color={colors.primaryMid} />
             </Pressable>
           </View>
 
           {busy ? (
-            <ActivityIndicator style={styles.busy} color={BrandColors.primaryMid} />
+            <ActivityIndicator style={styles.busy} color={colors.primaryMid} />
           ) : null}
 
           <View style={styles.actions}>
@@ -130,6 +213,8 @@ export function GroupMemberActionSheet({
               title="Remove from group"
               subtitle={`${displayName} will be removed from this group`}
               disabled={busy}
+              styles={styles}
+              colors={colors}
               onPress={() => {
                 closeAnimated();
                 setTimeout(() => onRemove(), 220);
@@ -142,6 +227,8 @@ export function GroupMemberActionSheet({
                 title="Dismiss as admin"
                 subtitle={`${displayName} will be a regular member`}
                 disabled={busy}
+                styles={styles}
+                colors={colors}
                 onPress={() => {
                   closeAnimated();
                   setTimeout(() => onMakeMember(), 220);
@@ -154,6 +241,8 @@ export function GroupMemberActionSheet({
                 title="Make admin"
                 subtitle={`${displayName} will be added as an admin`}
                 disabled={busy}
+                styles={styles}
+                colors={colors}
                 onPress={() => {
                   closeAnimated();
                   setTimeout(() => onMakeAdmin(), 220);
@@ -166,79 +255,3 @@ export function GroupMemberActionSheet({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.45)' },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 8,
-    maxWidth: 520,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#cbd5e1',
-    marginBottom: 14,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-    gap: 12,
-  },
-  profileAvatarWrap: {},
-  profileAvatar: { width: 52, height: 52, borderRadius: 26 },
-  profileAvatarFb: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileAvatarLetter: { fontSize: 20, fontWeight: '800', color: BrandColors.primaryMid },
-  profileMeta: { flex: 1, minWidth: 0 },
-  profileName: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
-  profileStatus: { fontSize: 13, color: '#64748b', marginTop: 2 },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  busy: { marginBottom: 8 },
-  actions: { gap: 12, paddingBottom: 4 },
-  actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-  },
-  actionCardDanger: { backgroundColor: '#fef2f2' },
-  actionCardPrimary: { backgroundColor: '#eff6ff' },
-  actionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionIconDanger: { backgroundColor: '#fee2e2' },
-  actionIconPrimary: { backgroundColor: '#dbeafe' },
-  actionTextWrap: { flex: 1, minWidth: 0 },
-  actionTitle: { fontSize: 16, fontWeight: '800' },
-  actionTitleDanger: { color: '#dc2626' },
-  actionTitlePrimary: { color: BrandColors.primaryMid },
-  actionSubtitle: { fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 16 },
-});

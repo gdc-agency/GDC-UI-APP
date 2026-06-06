@@ -1,3 +1,5 @@
+import { resolveProfileImageUri } from '@/utils/chat-directory';
+
 /** Map DB `users.role` to dashboard labels (matches auth-context / login). */
 export function displayRoleFromDb(role) {
   const r = String(role || '')
@@ -50,6 +52,10 @@ function rowNumericId(row) {
   return Number.isFinite(n) ? n : null;
 }
 
+function avatarFromRow(row) {
+  return resolveProfileImageUri(row?.profile_image ?? row?.profileImage ?? row?.avatar);
+}
+
 export function mapPendingUserRow(row) {
   const id = rowNumericId(row);
   const hashRaw = row.hash_id ?? row.hashId;
@@ -62,6 +68,7 @@ export function mapPendingUserRow(row) {
     role: displayRoleFromDb(row.role),
     accountStatus: 'Pending',
     team: row.department ?? null,
+    avatarUrl: avatarFromRow(row),
   };
 }
 
@@ -77,5 +84,6 @@ export function mapApprovedUserRow(row) {
     role: displayRoleFromDb(row.role),
     accountStatus: 'Active',
     team: row.department ?? null,
+    avatarUrl: avatarFromRow(row),
   };
 }

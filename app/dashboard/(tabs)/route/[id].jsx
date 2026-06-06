@@ -10,12 +10,12 @@ import { AvailabilitySection } from '@/components/dashboard/route-modules/availa
 import { DailyUpdatesSection } from '@/components/dashboard/route-modules/daily-updates-section';
 import { ProjectManagerSection } from '@/components/dashboard/route-modules/project-manager-section';
 import { RequestsSection } from '@/components/dashboard/route-modules/requests-section';
-import routeDetailStyles from '@/components/dashboard/route-modules/route-detail-styles';
 import { TeamTlSection } from '@/components/dashboard/route-modules/team-tl-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { GDC_MODULES } from '@/constants/gdc-modules';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
 import {
     approveLeaveRequest as approveLeaveRequestApi,
     approveManualTimeRequest as approveManualTimeRequestApi,
@@ -119,8 +119,6 @@ const ATTENDANCE_ROUTE_SLUGS = new Set([
   'admin',
 ]);
 
-// --- Mock-data helpers (temporary until backend integration) ---
-
 function assignableRoleKey(roleRaw) {
   let r = String(roleRaw || '')
     .toLowerCase()
@@ -131,6 +129,9 @@ function assignableRoleKey(roleRaw) {
 }
 
 export default function RouteDetailScreen() {
+  const { moduleStyles } = useTheme();
+  const styles = moduleStyles.routeDetail;
+
   // --- Route + auth context ---
   const params = useLocalSearchParams();
   const { id } = params;
@@ -646,14 +647,26 @@ export default function RouteDetailScreen() {
   }, []);
   const projectStatusTone = useCallback((status) => {
     const normalized = String(status || '').toLowerCase();
-    if (normalized === 'pending') return styles.projectStatusPending;
-    if (normalized === 'in progress' || normalized === 'working') return styles.projectStatusProgress;
-    if (normalized === 'review') return styles.projectStatusReview;
-    if (normalized === 'submitted') return styles.projectStatusSubmitted;
-    if (normalized === 'overdue') return styles.projectStatusOverdue;
-    if (normalized === 'completed' || normalized === 'approved') return styles.projectStatusCompleted;
-    return styles.projectStatusDefault;
-  }, []);
+    if (normalized === 'pending') {
+      return { pill: styles.projectStatusPending, text: styles.projectStatusPendingText };
+    }
+    if (normalized === 'in progress' || normalized === 'working') {
+      return { pill: styles.projectStatusProgress, text: styles.projectStatusProgressText };
+    }
+    if (normalized === 'review') {
+      return { pill: styles.projectStatusReview, text: styles.projectStatusReviewText };
+    }
+    if (normalized === 'submitted') {
+      return { pill: styles.projectStatusSubmitted, text: styles.projectStatusSubmittedText };
+    }
+    if (normalized === 'overdue') {
+      return { pill: styles.projectStatusOverdue, text: styles.projectStatusOverdueText };
+    }
+    if (normalized === 'completed' || normalized === 'approved') {
+      return { pill: styles.projectStatusCompleted, text: styles.projectStatusCompletedText };
+    }
+    return { pill: styles.projectStatusDefault, text: styles.projectStatusDefaultText };
+  }, [styles]);
   const hrAssignableUsers = useMemo(() => {
     if (!isAdminRole(user?.role)) return [];
     return taskAssignableRaw
@@ -2597,5 +2610,3 @@ export default function RouteDetailScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = routeDetailStyles;

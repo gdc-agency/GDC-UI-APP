@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -20,10 +21,56 @@ const H_PAD = 14;
  * @param {{ visible: boolean; uri: string; onClose: () => void }} props
  */
 export function ChatImagePreview({ visible, uri, onClose }) {
+  const { chatTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: screenW, height: screenH } = useWindowDimensions();
   const slide = useRef(new Animated.Value(0)).current;
   const [galleryH, setGalleryH] = useState(0);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: {
+          flex: 1,
+          backgroundColor: chatTheme.wallpaper,
+        },
+        header: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 4,
+          paddingBottom: 4,
+        },
+        headerBtn: {
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        headerSpacer: { flex: 1 },
+        imageHost: {
+          flex: 1,
+          width: '100%',
+        },
+        page: {
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+        imageFrame: {
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderRadius: 14,
+          overflow: 'hidden',
+          backgroundColor: chatTheme.bubbleIn,
+        },
+        previewImage: {
+          width: '100%',
+          height: '100%',
+        },
+      }),
+    [chatTheme],
+  );
 
   const frameW = Math.max(0, screenW - H_PAD * 2);
   const frameH = Math.max(0, (galleryH > 0 ? galleryH : screenH * 0.72) - H_PAD * 2);
@@ -91,44 +138,3 @@ export function ChatImagePreview({ visible, uri, onClose }) {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    paddingBottom: 4,
-  },
-  headerBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerSpacer: { flex: 1 },
-  imageHost: {
-    flex: 1,
-    width: '100%',
-  },
-  page: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageFrame: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#111',
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-});

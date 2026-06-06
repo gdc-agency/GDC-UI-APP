@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
+import { useTheme } from '@/context/theme-context';
 
 export function initialsFromName(name) {
   return String(name || '?')
@@ -17,6 +17,9 @@ export function initialsFromName(name) {
 
 /** Profile image with initials fallback for timesheet lists. */
 export function TimesheetUserAvatar({ name, avatarUrl, size = 44 }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   const radius = size / 2;
   const boxStyle = [ts.avatar, { width: size, height: size, borderRadius: radius }];
 

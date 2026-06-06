@@ -387,7 +387,88 @@ export function getApiBaseUrl() {
 /** Task Management API base (no trailing slash). Call on each request. */
 export function getTaskApiBaseUrl() {
   const ex = getExpoExtra();
-  return applyWebDevLoopbackForSameMachineAuth(rewriteLoopbackUrlToMetroLan(resolveTaskApiBaseFromExtra(ex, getApiBaseUrl())));
+  const authBase = getApiBaseUrl();
+  const rawPort = ex.taskApiPort != null && ex.taskApiPort !== '' ? Number(ex.taskApiPort) : NaN;
+  let taskApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '4000';
+  if (taskApiPort === '5001') taskApiPort = '4000';
+
+  const forceConfigured =
+    String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1';
+  const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
+  const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+  const isWeb = Platform.OS === 'web';
+  const isDevClient = isNative || isWeb;
+
+  /**
+   * Dev / Expo: use local Task service (Metro LAN or loopback) even when app.json points at Render.
+   * Production APK keeps the deployed Render URL. Opt out: EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.
+   */
+  if (isDev && isDevClient && !forceConfigured) {
+    /**
+     * Expo web on the dev PC: Metro host is often `localhost` (ignored by resolveDevLanHost),
+     * so the app was falling back to Render → browser CORS blocks Task (Auth allows 8081, Task does not).
+     */
+    if (Platform.OS === 'web') {
+      const webHost =
+        typeof window !== 'undefined' && window.location?.hostname
+          ? String(window.location.hostname).toLowerCase()
+          : '';
+      if (webHost === 'localhost' || webHost === '127.0.0.1') {
+        const loopback = stripUrlWhitespace(`http://127.0.0.1:${taskApiPort}`).replace(/\/+$/, '');
+        logApiConfigOnce(
+          'log',
+          `task-web-loopback:${loopback}`,
+          `[api-config] Dev web: Task → ${loopback} (local; Render Task lacks Expo web CORS)`,
+        );
+        return loopback;
+      }
+    }
+
+    const lan = resolveDevLanHost();
+    if (lan) {
+      const localUrl = stripUrlWhitespace(`http://${lan}:${taskApiPort}`).replace(/\/+$/, '');
+      logApiConfigOnce(
+        'log',
+        `task-dev-lan:${localUrl}`,
+        `[api-config] Dev: Task → ${localUrl} (local service; set EXPO_PUBLIC_API_USE_CONFIGURED_URL=1 to use Render)`,
+      );
+      return applyWebDevLoopbackForSameMachineAuth(rewriteLoopbackUrlToMetroLan(localUrl));
+    }
+    if (Platform.OS === 'android' && Device.isDevice === false) {
+      const emulatorUrl = stripUrlWhitespace(`http://10.0.2.2:${taskApiPort}`).replace(/\/+$/, '');
+      logApiConfigOnce('log', `task-emulator:${emulatorUrl}`, `[api-config] Dev: Task → ${emulatorUrl}`);
+      return emulatorUrl;
+    }
+  }
+
+  let out = applyWebDevLoopbackForSameMachineAuth(
+    rewriteLoopbackUrlToMetroLan(resolveTaskApiBaseFromExtra(ex, authBase)),
+  );
+
+  const isPhysicalDevice = isNative && Device.isDevice === true;
+  if (isPhysicalDevice && isLoopbackUrl(out)) {
+    const lan = resolveDevLanHost();
+    if (lan) {
+      out = stripUrlWhitespace(`http://${lan}:${taskApiPort}`).replace(/\/+$/, '');
+      logApiConfigOnce(
+        'warn',
+        `task-device-lan:${out}`,
+        `[api-config] Task → ${out} (device cannot use loopback; using Metro LAN host)`,
+      );
+    }
+  }
+
+  if (Platform.OS === 'web' && isDev) {
+    const webHost =
+      typeof window !== 'undefined' && window.location?.hostname
+        ? String(window.location.hostname).toLowerCase()
+        : '';
+    if (webHost === 'localhost' || webHost === '127.0.0.1') {
+      out = applyWebDevLoopbackForSameMachineAuth(out);
+    }
+  }
+
+  return stripUrlWhitespace(out).replace(/\/+$/, '');
 }
 
 /** Chat service API base (no trailing slash). Separate deploy from Auth; same JWT as CRM login. */

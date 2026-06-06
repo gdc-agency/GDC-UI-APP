@@ -1,10 +1,16 @@
 import { getTaskApiBaseUrl } from '@/constants/api-config';
+import { Platform } from 'react-native';
 
 const REQUEST_TIMEOUT_MS = 45000;
 
 function taskNetworkHint() {
+  const base = getTaskApiBaseUrl();
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    console.warn('[api] Task request failed', { base: getTaskApiBaseUrl() });
+    console.warn('[api] Task request failed', { base, platform: Platform.OS });
+    if (Platform.OS === 'web') {
+      return `Cannot connect to the task service at ${base}. In Expo web dev, run the local Task service (npm run dev in taskmanagment-Services, port 4000) or set EXPO_PUBLIC_API_USE_CONFIGURED_URL=1 after Render CORS is updated.`;
+    }
+    return `Cannot connect to the task service at ${base}. Ensure Task service is running (port 4000) and your phone/PC are on the same Wi‑Fi.`;
   }
   return 'Cannot connect to the task service. Check your network and try again.';
 }

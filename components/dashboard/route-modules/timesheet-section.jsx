@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { useTheme } from '@/context/theme-context';
 import { isAdminOrHrRole } from '@/utils/roles';
 
 import {
@@ -12,9 +13,11 @@ import {
 } from './timesheet-overview-screen';
 import { TimesheetRoleNav } from './timesheet-role-nav';
 import { TimesheetTlPanel } from './timesheet-tl-panel';
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 
 export function TimesheetSection({ styles, ctx }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   const {
     slug,
     user,

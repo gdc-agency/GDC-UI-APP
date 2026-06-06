@@ -1,4 +1,5 @@
 import { displayRoleFromDb } from '@/utils/admin-directory';
+import { resolveProfileImageUri } from '@/utils/chat-directory';
 
 function num(v) {
   const n = Number(v);
@@ -54,6 +55,7 @@ export function buildTeamAssignmentRows(teams, userRows) {
         team: teamName,
         department,
         tl: leaderName,
+        avatarUrl: resolveProfileImageUri(u.profile_image ?? u.profileImage ?? u.avatar),
       });
     };
 
@@ -111,6 +113,10 @@ export function groupTeamAssignmentsByLeader(rows) {
         sensitivity: 'base',
       });
     });
+    const leadMember =
+      group.members.find((m) => m.role === 'Team Leader' && m.employee === group.tl) ||
+      group.members.find((m) => m.employee === group.tl);
+    group.leaderAvatarUrl = leadMember?.avatarUrl || null;
   }
   return [...byTl.values()].sort((a, b) => a.tl.localeCompare(b.tl, undefined, { sensitivity: 'base' }));
 }

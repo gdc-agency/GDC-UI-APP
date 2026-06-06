@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
-import React, { useEffect, useRef, useState } from 'react';
+import { useTheme } from '@/context/theme-context';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,10 +27,108 @@ export function MessageActionMenu({
   onClose,
   onAction,
 }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const backdrop = useRef(new Animated.Value(0)).current;
   const anim = useRef(new Animated.Value(0)).current;
   const [deleteStep, setDeleteStep] = useState(false);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: { flex: 1 },
+        backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.modalBackdrop },
+        contextAnchor: {
+          position: 'absolute',
+          top: '36%',
+          maxWidth: 220,
+          width: '58%',
+        },
+        contextAnchorOther: { left: 18 },
+        contextAnchorMe: { right: 18, alignItems: 'flex-end' },
+        contextCard: {
+          backgroundColor: colors.card,
+          borderRadius: 12,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.borderStrong,
+          overflow: 'hidden',
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.14,
+          shadowRadius: 14,
+          elevation: 12,
+        },
+        contextRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 14,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+        },
+        contextRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderStrong },
+        contextLabel: { fontSize: 16, fontWeight: '500', color: colors.text },
+        contextLabelDanger: { color: '#ef4444', fontWeight: '600' },
+        sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+        deleteSheetWrap: {
+          paddingHorizontal: 14,
+        },
+        deleteSheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          paddingHorizontal: 18,
+          paddingTop: 10,
+          paddingBottom: 8,
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 16,
+        },
+        sheetHandle: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.borderStrong,
+          marginBottom: 12,
+        },
+        deleteTitle: {
+          textAlign: 'center',
+          fontSize: 17,
+          fontWeight: '700',
+          color: colors.text,
+          marginBottom: 14,
+        },
+        deleteActionGroup: {
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.borderStrong,
+          borderRadius: 12,
+          overflow: 'hidden',
+          marginBottom: 10,
+        },
+        deleteRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingVertical: 15,
+          paddingHorizontal: 16,
+        },
+        deleteRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderStrong },
+        deleteLabel: { fontSize: 16, fontWeight: '500', color: '#ef4444' },
+        deleteCancelGroup: {
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.borderStrong,
+          borderRadius: 12,
+          paddingVertical: 15,
+          alignItems: 'center',
+          marginBottom: 4,
+        },
+        deleteCancelText: { fontSize: 16, fontWeight: '600', color: colors.primaryMid },
+        rowPressed: { backgroundColor: colors.surfaceMuted },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -121,7 +219,7 @@ export function MessageActionMenu({
                     <MaterialCommunityIcons
                       name={row.icon}
                       size={20}
-                      color={row.danger ? '#ef4444' : BrandColors.text}
+                      color={row.danger ? '#ef4444' : colors.text}
                     />
                     <Text style={[styles.contextLabel, row.danger && styles.contextLabelDanger]}>{row.label}</Text>
                   </Pressable>
@@ -182,96 +280,3 @@ export function MessageActionMenu({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.45)' },
-  contextAnchor: {
-    position: 'absolute',
-    top: '36%',
-    maxWidth: 220,
-    width: '58%',
-  },
-  contextAnchorOther: { left: 18 },
-  contextAnchorMe: { right: 18, alignItems: 'flex-end' },
-  contextCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d1d5db',
-    overflow: 'hidden',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    elevation: 12,
-  },
-  contextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  contextRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
-  contextLabel: { fontSize: 16, fontWeight: '500', color: BrandColors.text },
-  contextLabelDanger: { color: '#ef4444', fontWeight: '600' },
-  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
-  deleteSheetWrap: {
-    paddingHorizontal: 14,
-  },
-  deleteSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 8,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
-    marginBottom: 12,
-  },
-  deleteTitle: {
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '700',
-    color: BrandColors.text,
-    marginBottom: 14,
-  },
-  deleteActionGroup: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d1d5db',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  deleteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 15,
-    paddingHorizontal: 16,
-  },
-  deleteRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
-  deleteLabel: { fontSize: 16, fontWeight: '500', color: '#ef4444' },
-  deleteCancelGroup: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d1d5db',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  deleteCancelText: { fontSize: 16, fontWeight: '600', color: '#007aff' },
-  rowPressed: { backgroundColor: '#f1f5f9' },
-});

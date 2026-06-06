@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 
 function makeRng(seed) {
   // simple deterministic PRNG (mulberry32)
@@ -26,9 +26,57 @@ function clamp(n, min, max) {
  * pointerEvents is disabled so it never blocks taps.
  */
 export function FloatingParticles({ density = 1, seed = 1337, style, rising = true, twinkles = true }) {
+  const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const risingRef = React.useRef(null);
   const twinkleRef = React.useRef(null);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: {
+          ...StyleSheet.absoluteFillObject,
+          overflow: 'hidden',
+        },
+        rising: {
+          position: 'absolute',
+          bottom: 0,
+          borderRadius: 999,
+          overflow: 'hidden',
+          backgroundColor: 'transparent',
+          shadowColor: colors.primaryLight,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.72,
+          shadowRadius: 12,
+          ...(Platform.OS === 'android' ? { elevation: 8 } : null),
+        },
+        twinkle: {
+          position: 'absolute',
+          borderRadius: 999,
+          overflow: 'hidden',
+          backgroundColor: 'transparent',
+          shadowColor: colors.primaryLight,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.55,
+          shadowRadius: 10,
+          ...(Platform.OS === 'android' ? { elevation: 6 } : null),
+        },
+        particleLayer: {
+          ...StyleSheet.absoluteFillObject,
+          borderRadius: 999,
+        },
+        particleWhite: {
+          backgroundColor: 'rgba(255,255,255,0.9)',
+        },
+        particleBlue: {
+          backgroundColor: 'rgba(56,189,248,0.78)', // sky blue (visible on white screens)
+        },
+        particleBlueSoft: {
+          backgroundColor: 'rgba(56,189,248,0.55)',
+        },
+      }),
+    [colors],
+  );
 
   // Create particles once; keep counts stable to avoid React Compiler edge cases.
   if (!risingRef.current) {
@@ -256,47 +304,3 @@ export function FloatingParticles({ density = 1, seed = 1337, style, rising = tr
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  rising: {
-    position: 'absolute',
-    bottom: 0,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-    shadowColor: BrandColors.primaryLight,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.72,
-    shadowRadius: 12,
-    ...(Platform.OS === 'android' ? { elevation: 8 } : null),
-  },
-  twinkle: {
-    position: 'absolute',
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-    shadowColor: BrandColors.primaryLight,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-    ...(Platform.OS === 'android' ? { elevation: 6 } : null),
-  },
-  particleLayer: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 999,
-  },
-  particleWhite: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-  },
-  particleBlue: {
-    backgroundColor: 'rgba(56,189,248,0.78)', // sky blue (visible on white screens)
-  },
-  particleBlueSoft: {
-    backgroundColor: 'rgba(56,189,248,0.55)',
-  },
-});
-

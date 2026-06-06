@@ -1,18 +1,19 @@
 import { Redirect, Stack } from 'expo-router';
 import { View } from 'react-native';
 
-import { BrandColors } from '@/constants/brand';
 import { SkeletonCardGrid, SkeletonGroup, SkeletonText } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
 import { GdcInboxProvider } from '@/context/gdc-inbox-context';
+import { useTheme } from '@/context/theme-context';
 
 export default function DashboardRootLayout() {
   const { user, hydrated } = useAuth();
+  const { colors } = useTheme();
 
   if (!hydrated) {
     return (
       <SkeletonGroup speedMs={1700} delayMs={120}>
-        <View style={{ flex: 1, backgroundColor: BrandColors.pageBg, paddingTop: 28, paddingHorizontal: 18 }}>
+        <View style={{ flex: 1, backgroundColor: colors.pageBg, paddingTop: 28, paddingHorizontal: 18 }}>
           <SkeletonText lines={2} widths={['52%', '34%']} lineH={14} />
           <View style={{ height: 14 }} />
           <SkeletonCardGrid cols={2} rows={2} />
@@ -32,7 +33,7 @@ export default function DashboardRootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#F2F4FC' },
+          contentStyle: { backgroundColor: colors.pageBg },
         }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="group-info" options={{ animation: 'slide_from_right' }} />

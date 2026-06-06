@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,7 +20,7 @@ import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 
 const SHEET_SLIDE = 480;
 
-const ContactRow = memo(function ContactRow({ item, loading, onPress }) {
+const ContactRow = memo(function ContactRow({ item, loading, onPress, styles, colors }) {
   const line = item.displayName || item.name;
   return (
     <Pressable
@@ -50,9 +50,9 @@ const ContactRow = memo(function ContactRow({ item, loading, onPress }) {
         ) : null}
       </View>
       {loading ? (
-        <ActivityIndicator size="small" color={BrandColors.primaryMid} />
+        <ActivityIndicator size="small" color={colors.primaryMid} />
       ) : (
-        <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
+        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
       )}
     </Pressable>
   );
@@ -79,10 +79,126 @@ export function NewChatPicker({
   onSelectContact,
   onCreateGroup,
 }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
   const [search, setSearch] = useState('');
   const [startingId, setStartingId] = useState(/** @type {string | null} */ (null));
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: { flex: 1, justifyContent: 'flex-end' },
+        backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.modalBackdrop },
+        sheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingTop: 8,
+          paddingHorizontal: 16,
+          minHeight: 320,
+          ...Platform.select({
+            ios: {
+              shadowColor: '#0f172a',
+              shadowOffset: { width: 0, height: -6 },
+              shadowOpacity: 0.14,
+              shadowRadius: 18,
+            },
+            android: { elevation: 18 },
+            default: {},
+          }),
+        },
+        grabber: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 999,
+          backgroundColor: colors.borderStrong,
+          marginBottom: 12,
+        },
+        sheetTitle: {
+          fontSize: 20,
+          fontWeight: '800',
+          color: colors.text,
+          marginBottom: 14,
+        },
+        groupEntry: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingVertical: 12,
+          paddingHorizontal: 4,
+          marginBottom: 8,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderStrong,
+        },
+        groupEntryPressed: { opacity: 0.85 },
+        groupIcon: {
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: colors.primaryMid,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        groupEntryText: { flex: 1, fontSize: 16, fontWeight: '700', color: colors.text },
+        searchWrap: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors.surfaceMuted,
+          borderRadius: 14,
+          paddingHorizontal: 12,
+          marginBottom: 10,
+        },
+        searchInput: {
+          flex: 1,
+          paddingVertical: 10,
+          paddingHorizontal: 8,
+          fontSize: 15,
+          color: colors.text,
+        },
+        list: { flexGrow: 0, maxHeight: 420 },
+        listEmptyPad: { paddingVertical: 24 },
+        skeletonBox: { gap: 4, paddingBottom: 12 },
+        emptyText: { textAlign: 'center', color: colors.textSecondary, fontSize: 14, paddingVertical: 20 },
+        contactRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingVertical: 11,
+          paddingHorizontal: 4,
+        },
+        contactRowPressed: { backgroundColor: colors.surfaceMuted, borderRadius: 12 },
+        avatarWrap: { position: 'relative' },
+        contactAvatarImg: { width: 48, height: 48, borderRadius: 24 },
+        avatarSm: {
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: colors.chipActiveBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        avatarText: { fontSize: 18, fontWeight: '800', color: colors.primaryMid },
+        presenceDot: {
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 12,
+          height: 12,
+          borderRadius: 6,
+          borderWidth: 2,
+          borderColor: colors.card,
+          backgroundColor: colors.textSecondary,
+        },
+        presenceDotOnline: { backgroundColor: '#22c55e' },
+        contactMeta: { flex: 1, minWidth: 0 },
+        nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        contactName: { fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 },
+        contactSub: { marginTop: 2, fontSize: 12, color: colors.textMuted },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -169,16 +285,16 @@ export function NewChatPicker({
               <MaterialCommunityIcons name="account-group-outline" size={22} color="#fff" />
             </View>
             <Text style={styles.groupEntryText}>Create group</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
           </Pressable>
 
           <View style={styles.searchWrap}>
-            <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+            <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
             <TextInput
               value={search}
               onChangeText={setSearch}
               placeholder="Search people"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.inputPlaceholder}
               style={styles.searchInput}
               autoCorrect={false}
             />
@@ -212,6 +328,8 @@ export function NewChatPicker({
                   item={item}
                   loading={startingId === String(item.id)}
                   onPress={pickContact}
+                  styles={styles}
+                  colors={colors}
                 />
               )}
             />
@@ -221,114 +339,3 @@ export function NewChatPicker({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.5)' },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    minHeight: 320,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.14,
-        shadowRadius: 18,
-      },
-      android: { elevation: 18 },
-      default: {},
-    }),
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#e2e8f0',
-    marginBottom: 12,
-  },
-  sheetTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: BrandColors.text,
-    marginBottom: 14,
-  },
-  groupEntry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e8ecf4',
-  },
-  groupEntryPressed: { opacity: 0.85 },
-  groupIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: BrandColors.primaryMid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupEntryText: { flex: 1, fontSize: 16, fontWeight: '700', color: BrandColors.text },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5fb',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    fontSize: 15,
-    color: BrandColors.text,
-  },
-  list: { flexGrow: 0, maxHeight: 420 },
-  listEmptyPad: { paddingVertical: 24 },
-  skeletonBox: { gap: 4, paddingBottom: 12 },
-  emptyText: { textAlign: 'center', color: '#94a3b8', fontSize: 14, paddingVertical: 20 },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 4,
-  },
-  contactRowPressed: { backgroundColor: '#f8fafc', borderRadius: 12 },
-  avatarWrap: { position: 'relative' },
-  contactAvatarImg: { width: 48, height: 48, borderRadius: 24 },
-  avatarSm: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontSize: 18, fontWeight: '800', color: BrandColors.primaryMid },
-  presenceDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#fff',
-    backgroundColor: '#cbd5e1',
-  },
-  presenceDotOnline: { backgroundColor: '#22c55e' },
-  contactMeta: { flex: 1, minWidth: 0 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  contactName: { fontSize: 16, fontWeight: '700', color: BrandColors.text, flexShrink: 1 },
-  contactSub: { marginTop: 2, fontSize: 12, color: '#64748b' },
-});

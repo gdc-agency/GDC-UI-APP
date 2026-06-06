@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,14 +23,15 @@ import {
   BRAND_COMPANY_NAME,
   BRAND_LOGO_FRAME,
   BRAND_LOGO_SOURCE,
-  BrandColors,
 } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
 
 const HEADER_RATIO = 0.39;
 
 export default function LoginScreen() {
   const { user, signIn, hydrated } = useAuth();
+  const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = Math.round(Dimensions.get('window').height * HEADER_RATIO);
@@ -41,10 +42,182 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: {
+          flex: 1,
+          backgroundColor: colors.card,
+        },
+        headerBlock: {
+          width: '100%',
+          overflow: 'hidden',
+        },
+        headerGradient: {
+          flex: 1,
+        },
+        headerInner: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 24,
+          paddingTop: 8,
+          paddingBottom: 8,
+        },
+        headerLogoWrap: {
+          marginBottom: 10,
+          width: BRAND_LOGO_FRAME.width,
+          height: BRAND_LOGO_FRAME.height,
+          borderRadius: BRAND_LOGO_FRAME.borderRadius,
+          backgroundColor: BRAND_LOGO_FRAME.backgroundColor,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: BRAND_LOGO_FRAME.padding,
+          overflow: 'hidden',
+        },
+        headerLogoImg: {
+          width: BRAND_LOGO_FRAME.width - BRAND_LOGO_FRAME.padding * 2,
+          height: BRAND_LOGO_FRAME.height - BRAND_LOGO_FRAME.padding * 2,
+        },
+        headerSub: {
+          marginTop: 2,
+          fontSize: 23,
+          fontWeight: '800',
+          color: '#ffffff',
+          textAlign: 'center',
+        },
+        headerTagline: {
+          marginTop: 4,
+          fontSize: 13,
+          fontWeight: '600',
+          color: 'rgba(255,255,255,0.9)',
+          textAlign: 'center',
+        },
+        flex: { flex: 1 },
+        scrollView: {
+          flex: 1,
+          backgroundColor: colors.card,
+        },
+        scroll: {
+          flexGrow: 1,
+          justifyContent: 'flex-start',
+          paddingHorizontal: 28,
+        },
+        formStack: {
+          width: '100%',
+          maxWidth: 420,
+          alignSelf: 'center',
+          minHeight: '100%',
+          justifyContent: 'flex-start',
+          gap: 14,
+        },
+        formBody: {
+          width: '100%',
+          marginTop: 2,
+        },
+        formTitle: {
+          fontSize: 22,
+          fontWeight: '700',
+          color: colors.text,
+          letterSpacing: 0.2,
+          textAlign: 'center',
+          marginBottom: 8,
+        },
+        alert: {
+          backgroundColor: colors.dangerBg,
+          borderRadius: 12,
+          padding: 12,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: colors.dangerBorder,
+          maxHeight: 160,
+        },
+        alertScroll: {
+          maxHeight: 140,
+        },
+        alertText: { color: colors.dangerText, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+        field: { marginBottom: 26 },
+        label: {
+          fontSize: 14,
+          fontWeight: '500',
+          color: colors.textMuted,
+          marginBottom: 12,
+        },
+        input: {
+          fontSize: 16,
+          color: colors.text,
+          backgroundColor: colors.inputBg,
+          paddingVertical: 12,
+          paddingRight: 56,
+          borderBottomWidth: 2,
+          borderBottomColor: colors.inputUnderline,
+        },
+        eye: {
+          position: 'absolute',
+          right: 0,
+          bottom: 10,
+          paddingVertical: 4,
+          paddingHorizontal: 4,
+        },
+        eyeText: {
+          fontSize: 14,
+          fontWeight: '600',
+          color: colors.primaryMid,
+        },
+        forgot: {
+          alignSelf: 'flex-end',
+          marginBottom: 10,
+        },
+        forgotText: {
+          fontSize: 14,
+          fontWeight: '600',
+          color: colors.primaryMid,
+        },
+        btnRow: {
+          flexDirection: 'column',
+          gap: 14,
+          alignItems: 'center',
+          width: '100%',
+        },
+        primaryPill: {
+          width: '100%',
+          backgroundColor: colors.primaryMid,
+          borderRadius: 999,
+          paddingVertical: 16,
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 52,
+        },
+        pillDisabled: { opacity: 0.75 },
+        primaryPillText: {
+          color: '#FFFFFF',
+          fontSize: 16,
+          fontWeight: '700',
+        },
+        secondaryPill: {
+          width: '100%',
+          backgroundColor: colors.card,
+          borderRadius: 999,
+          paddingVertical: 16,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          minHeight: 52,
+        },
+        secondaryPillText: {
+          color: colors.textSecondary,
+          fontSize: 16,
+          fontWeight: '700',
+        },
+      }),
+    [colors],
+  );
+
   if (!hydrated) {
     return (
       <View style={[styles.root, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={BrandColors.primaryMid} />
+        <ActivityIndicator size="large" color={colors.primaryMid} />
       </View>
     );
   }
@@ -70,10 +243,10 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="dark" />
+      <StatusBar style={colors.statusBarStyle === 'light' ? 'light' : 'dark'} />
       <View style={[styles.headerBlock, { height: headerHeight }]}>
         <LinearGradient
-          colors={[BrandColors.splashTop, BrandColors.splashMid, BrandColors.splashBottom]}
+          colors={[colors.splashTop, colors.splashMid, colors.splashBottom]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.headerGradient}>
@@ -82,14 +255,14 @@ export default function LoginScreen() {
               <Image
                 source={BRAND_LOGO_SOURCE}
                 style={styles.headerLogoImg}
-                contentFit="cover"
+                contentFit="contain"
                 contentPosition="center"
               />
             </View>
             <Text style={styles.headerSub}>{BRAND_COMPANY_NAME}</Text>
             <Text style={styles.headerTagline}>Turning Clicks into Clients</Text>
           </View>
-          <WaveDivider fill="#FFFFFF" />
+          <WaveDivider fill={colors.card} />
         </LinearGradient>
       </View>
 
@@ -119,7 +292,7 @@ export default function LoginScreen() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="Enter your mail"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.inputPlaceholder}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -134,7 +307,7 @@ export default function LoginScreen() {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Enter your password"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.inputPlaceholder}
                   secureTextEntry={!showPw}
                   autoComplete="password"
                   style={styles.input}
@@ -183,177 +356,3 @@ export default function LoginScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  headerBlock: {
-    width: '100%',
-    overflow: 'hidden',
-  },
-  headerGradient: {
-    flex: 1,
-  },
-  headerInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  headerLogoWrap: {
-    marginBottom: 10,
-    width: BRAND_LOGO_FRAME.width,
-    height: BRAND_LOGO_FRAME.height,
-    borderRadius: BRAND_LOGO_FRAME.borderRadius,
-    padding: BRAND_LOGO_FRAME.padding,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  headerLogoImg: {
-    width: '100%',
-    height: '100%',
-  },
-  headerSub: {
-    marginTop: 2,
-    fontSize: 23,
-    fontWeight: '800',
-    color: '#ffffff',
-    textAlign: 'center',
-  },
-  headerTagline: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-  },
-  flex: { flex: 1 },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingHorizontal: 28,
-  },
-  formStack: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    minHeight: '100%',
-    justifyContent: 'flex-start',
-    gap: 14,
-  },
-  formBody: {
-    width: '100%',
-    marginTop: 2,
-  },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#334155',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  alert: {
-    backgroundColor: '#fef2f2',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    maxHeight: 160,
-  },
-  alertScroll: {
-    maxHeight: 140,
-  },
-  alertText: { color: '#b91c1c', fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  field: { marginBottom: 26 },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#475569',
-    marginBottom: 12,
-  },
-  input: {
-    fontSize: 16,
-    color: BrandColors.text,
-    paddingVertical: 12,
-    paddingRight: 56,
-    borderBottomWidth: 2,
-    borderBottomColor: BrandColors.inputUnderline,
-  },
-  eye: {
-    position: 'absolute',
-    right: 0,
-    bottom: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  eyeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: BrandColors.primaryMid,
-  },
-  forgot: {
-    alignSelf: 'flex-end',
-    marginBottom: 10,
-  },
-  forgotText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: BrandColors.primaryMid,
-  },
-  btnRow: {
-    flexDirection: 'column',
-    gap: 14,
-    alignItems: 'center',
-    width: '100%',
-  },
-  primaryPill: {
-    width: '100%',
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  pillDisabled: { opacity: 0.75 },
-  primaryPillText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryPill: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    minHeight: 52,
-  },
-  secondaryPillText: {
-    color: '#94a3b8',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});

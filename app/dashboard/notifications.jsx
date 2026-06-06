@@ -1,8 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Platform,
@@ -14,9 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BrandColors } from '@/constants/brand';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
 import {
   clearAllNotifications,
   listNotifications,
@@ -69,11 +68,123 @@ function alertError(title, err) {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { token } = useAuth();
+  const { colors } = useTheme();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [marking, setMarking] = useState(false);
   const [loadError, setLoadError] = useState(null);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safe: { flex: 1, backgroundColor: colors.pageBg },
+        header: {
+          height: 56,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 10,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.borderStrong,
+        },
+        backBtn: {
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        title: { fontSize: 22, fontWeight: '800', color: colors.text },
+        toolbar: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+        },
+        toolbarHint: { fontSize: 13, color: colors.textMuted, flex: 1, marginRight: 8 },
+        toolbarActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+        toolbarDivider: { fontSize: 14, color: colors.textSecondary, fontWeight: '400' },
+        toolbarLink: { fontSize: 14, color: colors.primaryMid, fontWeight: '700' },
+        toolbarLinkDisabled: { opacity: 0.4 },
+        list: { paddingVertical: 10, paddingHorizontal: 14, paddingBottom: 100, gap: 10 },
+        centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+        skeletonWrap: { paddingBottom: 100 },
+        empty: { textAlign: 'center', marginTop: 40, color: colors.textMuted, fontSize: 15, paddingHorizontal: 24 },
+        card: {
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          backgroundColor: colors.card,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          overflow: 'hidden',
+        },
+        cardUnread: {
+          borderColor: colors.chipActiveBorder,
+          backgroundColor: colors.surfaceMuted,
+        },
+        unreadBar: {
+          width: 4,
+          backgroundColor: colors.primaryMid,
+          borderTopLeftRadius: 14,
+          borderBottomLeftRadius: 14,
+        },
+        rowMain: {
+          flex: 1,
+          flexDirection: 'row',
+          gap: 12,
+          paddingVertical: 14,
+          paddingLeft: 12,
+          paddingRight: 8,
+          alignItems: 'flex-start',
+          minWidth: 0,
+        },
+        iconWrap: {
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: colors.infoBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        },
+        body: { flex: 1, minWidth: 0 },
+        rowTitle: { fontSize: 15, fontWeight: '800', color: colors.text, lineHeight: 20 },
+        rowText: { marginTop: 4, fontSize: 13, lineHeight: 19, color: colors.textMuted },
+        metaRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
+        meta: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
+        rowActions: {
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          paddingTop: 14,
+          paddingRight: 12,
+          gap: 8,
+        },
+        deleteBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.card,
+        },
+        unreadDot: {
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: colors.primaryMid,
+          marginTop: 14,
+          flexShrink: 0,
+        },
+      }),
+    [colors],
+  );
 
   const load = useCallback(async () => {
     if (!token) {
@@ -207,7 +318,7 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         {router.canGoBack() ? (
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <MaterialCommunityIcons name="arrow-left" size={22} color={BrandColors.text} />
+            <MaterialCommunityIcons name="arrow-left" size={22} color={colors.text} />
           </Pressable>
         ) : (
           <View style={styles.backBtn} />
@@ -246,7 +357,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={items}
           keyExtractor={(item, index) => (item.id ? `nid-${item.id}` : `nidx-${index}-${item.createdAt || ''}`)}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BrandColors.primaryMid} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primaryMid} />}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <Text style={styles.empty}>
@@ -261,19 +372,19 @@ export default function NotificationsScreen() {
               <Pressable
                 style={styles.rowMain}
                 onPress={() => void onOpenItem(item)}
-                android_ripple={{ color: '#e2e8f0' }}>
+                android_ripple={{ color: colors.borderStrong }}>
                 <View style={styles.iconWrap}>
                   <MaterialCommunityIcons
                     name={iconForCategory(item.category, item.eventKey)}
                     size={20}
-                    color={BrandColors.primaryMid}
+                    color={colors.primaryMid}
                   />
                 </View>
                 <View style={styles.body}>
                   <Text style={styles.rowTitle}>{item.title}</Text>
                   {item.description ? <Text style={styles.rowText}>{item.description}</Text> : null}
                   <View style={styles.metaRow}>
-                    <MaterialCommunityIcons name="clock-outline" size={13} color="#94a3b8" />
+                    <MaterialCommunityIcons name="clock-outline" size={13} color={colors.textSecondary} />
                     <Text style={styles.meta}>{formatTime(item.createdAt)}</Text>
                   </View>
                 </View>
@@ -287,7 +398,7 @@ export default function NotificationsScreen() {
                     e?.stopPropagation?.();
                     onDeleteItem(item);
                   }}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#94a3b8" />
+                  <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.textSecondary} />
                 </Pressable>
               </View>
             </View>
@@ -297,110 +408,3 @@ export default function NotificationsScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: { fontSize: 22, fontWeight: '800', color: BrandColors.text },
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  toolbarHint: { fontSize: 13, color: BrandColors.textMuted, flex: 1, marginRight: 8 },
-  toolbarActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  toolbarDivider: { fontSize: 14, color: '#cbd5e1', fontWeight: '400' },
-  toolbarLink: { fontSize: 14, color: BrandColors.primaryMid, fontWeight: '700' },
-  toolbarLinkDisabled: { opacity: 0.4 },
-  list: { paddingVertical: 10, paddingHorizontal: 14, paddingBottom: 100, gap: 10 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  skeletonWrap: { paddingBottom: 100 },
-  empty: { textAlign: 'center', marginTop: 40, color: BrandColors.textMuted, fontSize: 15, paddingHorizontal: 24 },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-  },
-  cardUnread: {
-    borderColor: '#c7d8f5',
-    backgroundColor: '#fafcff',
-  },
-  unreadBar: {
-    width: 4,
-    backgroundColor: BrandColors.primaryMid,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
-  },
-  rowMain: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 14,
-    paddingLeft: 12,
-    paddingRight: 8,
-    alignItems: 'flex-start',
-    minWidth: 0,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#eaf0ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  body: { flex: 1, minWidth: 0 },
-  rowTitle: { fontSize: 15, fontWeight: '800', color: BrandColors.text, lineHeight: 20 },
-  rowText: { marginTop: 4, fontSize: 13, lineHeight: 19, color: BrandColors.textMuted },
-  metaRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  meta: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
-  rowActions: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingTop: 14,
-    paddingRight: 12,
-    gap: 8,
-  },
-  deleteBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: BrandColors.primaryMid,
-    marginTop: 14,
-    flexShrink: 0,
-  },
-});

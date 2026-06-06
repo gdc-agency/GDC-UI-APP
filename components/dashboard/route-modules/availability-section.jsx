@@ -6,9 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { initialsFromName } from '@/components/dashboard/route-modules/timesheet-user-avatar';
+import { useTheme } from '@/context/theme-context';
 import { isAdminRole } from '@/utils/roles';
-
-import { AvColors, availabilityStyles as av } from './availability-styles';
 
 const ROLE_OPTIONS = [
   { key: 'all', label: 'All Roles' },
@@ -24,14 +23,11 @@ const STATUS_OPTIONS = [
   { key: 'Leave', label: 'Leave' },
 ];
 
-const QUICK_PILLS = [
-  { key: 'all', label: 'All' },
-  { key: 'present', label: 'Present', dot: AvColors.green },
-  { key: 'absent', label: 'Absent', dot: '#EF4444' },
-  { key: 'leave', label: 'Leave', dot: AvColors.orange },
-];
-
 function FilterDropdown({ label, value, options, onChange, openKey, setOpenKey, fieldKey, icon }) {
+  const { moduleStyles } = useTheme();
+  const av = moduleStyles.availability.styles;
+  const AvColors = moduleStyles.availability.colors;
+
   const open = openKey === fieldKey;
   const display = options.find((o) => o.key === value)?.label || value;
 
@@ -66,6 +62,9 @@ function FilterDropdown({ label, value, options, onChange, openKey, setOpenKey, 
 }
 
 function AvSquareAvatar({ name, avatarUrl }) {
+  const { moduleStyles } = useTheme();
+  const av = moduleStyles.availability.styles;
+
   if (avatarUrl) {
     return (
       <Image
@@ -84,23 +83,27 @@ function AvSquareAvatar({ name, avatarUrl }) {
   );
 }
 
-function statusBadgeStyle(label) {
-  if (label === 'Present') {
-    return { box: av.statusBadgePresent, text: av.statusBadgeTextPresent };
-  }
-  if (label === 'Leave') {
-    return { box: av.statusBadgeLeave, text: av.statusBadgeTextLeave };
-  }
-  return { box: av.statusBadgeAbsent, text: av.statusBadgeTextAbsent };
-}
-
-function activityDotColor(activityLabel) {
-  if (activityLabel === 'Working') return AvColors.green;
-  if (activityLabel === 'Leave') return AvColors.orange;
-  return '#EF4444';
-}
-
 function PersonCard({ member }) {
+  const { moduleStyles } = useTheme();
+  const av = moduleStyles.availability.styles;
+  const AvColors = moduleStyles.availability.colors;
+
+  const statusBadgeStyle = (label) => {
+    if (label === 'Present') {
+      return { box: av.statusBadgePresent, text: av.statusBadgeTextPresent };
+    }
+    if (label === 'Leave') {
+      return { box: av.statusBadgeLeave, text: av.statusBadgeTextLeave };
+    }
+    return { box: av.statusBadgeAbsent, text: av.statusBadgeTextAbsent };
+  };
+
+  const activityDotColor = (activityLabel) => {
+    if (activityLabel === 'Working') return AvColors.green;
+    if (activityLabel === 'Leave') return AvColors.orange;
+    return '#EF4444';
+  };
+
   const attendanceLabel = member.attendanceLabel || (member.status === 'Available' ? 'Present' : member.status === 'Leave' ? 'Leave' : 'Absent');
   const badge = statusBadgeStyle(attendanceLabel);
   const activityLabel =
@@ -139,6 +142,9 @@ function PersonCard({ member }) {
 }
 
 function AttendanceStatusBanner({ message, onRetry }) {
+  const { moduleStyles } = useTheme();
+  const av = moduleStyles.availability.styles;
+
   if (!message) return null;
   return (
     <View style={av.errorBanner}>
@@ -166,6 +172,17 @@ function AdminAvailabilityBoard({
   attendanceError,
   onRetryAttendance,
 }) {
+  const { moduleStyles, colors } = useTheme();
+  const av = moduleStyles.availability.styles;
+  const AvColors = moduleStyles.availability.colors;
+
+  const QUICK_PILLS = [
+    { key: 'all', label: 'All' },
+    { key: 'present', label: 'Present', dot: AvColors.green },
+    { key: 'absent', label: 'Absent', dot: AvColors.red },
+    { key: 'leave', label: 'Leave', dot: AvColors.orange },
+  ];
+
   const [openMenu, setOpenMenu] = useState(null);
 
   const memberLabel =
@@ -176,7 +193,7 @@ function AdminAvailabilityBoard({
       <AttendanceStatusBanner message={attendanceError} onRetry={onRetryAttendance} />
       <View style={av.boardHero}>
         <View style={av.boardHeroIconWrap}>
-          <MaterialCommunityIcons name="account-group-outline" size={24} color={AvColors.white} />
+          <MaterialCommunityIcons name="account-group-outline" size={24} color={colors.heroText} />
         </View>
         <Text style={av.boardHeroTitle}>Team Status Board</Text>
       </View>
@@ -239,12 +256,12 @@ function AdminAvailabilityBoard({
         </View>
 
         <View style={av.searchWrap}>
-          <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" />
+          <MaterialCommunityIcons name="magnify" size={20} color={AvColors.inputPlaceholder} />
           <TextInput
             value={availabilitySearch}
             onChangeText={setAvailabilitySearch}
             placeholder="Search name, GDC ID, team..."
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={AvColors.inputPlaceholder}
             style={av.searchInput}
           />
         </View>
@@ -274,6 +291,9 @@ function AdminAvailabilityBoard({
 }
 
 export function AvailabilitySection({ styles, ctx }) {
+  const { moduleStyles } = useTheme();
+  const av = moduleStyles.availability.styles;
+
   const {
     user,
     setAvailabilityRoleFilter,

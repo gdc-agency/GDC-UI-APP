@@ -2,8 +2,9 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
 import { Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 
+import { useTheme } from '@/context/theme-context';
+
 import { PrettyRequestCard } from './pretty-request-card';
-import { RqColors, requestStyles as rq } from './request-styles';
 
 // Status pills removed (replaced by dropdown).
 
@@ -24,6 +25,10 @@ export function AdminRequestsBoard({
   onCreatePress,
   searchPlaceholder = 'Search by name, role or type...',
 }) {
+  const { moduleStyles } = useTheme();
+  const rq = moduleStyles.request.styles;
+  const RqColors = moduleStyles.request.colors;
+
   const { width } = useWindowDimensions();
   const isSmallMobile = width < 380;
   const isNativeMobile = Platform.OS !== 'web';
@@ -51,12 +56,12 @@ export function AdminRequestsBoard({
             ]}
           >
             <View style={[rq.searchWrap, isNativeMobile && { height: 44, paddingVertical: 0 }]}>
-              <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" />
+              <MaterialCommunityIcons name="magnify" size={20} color={RqColors.inputPlaceholder} />
               <TextInput
                 value={requestAdminSearch}
                 onChangeText={setRequestAdminSearch}
                 placeholder={searchPlaceholder}
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={RqColors.inputPlaceholder}
                 style={rq.searchInput}
               />
             </View>
@@ -71,7 +76,7 @@ export function AdminRequestsBoard({
               <Text style={rq.statusDropdownText} numberOfLines={1}>
                 {statusFilter}
               </Text>
-              <MaterialCommunityIcons name="chevron-down" size={18} color="#94A3B8" />
+              <MaterialCommunityIcons name="chevron-down" size={18} color={RqColors.textMuted} />
             </Pressable>
             {statusMenuOpen ? (
               <View style={rq.statusDropdownMenu}>

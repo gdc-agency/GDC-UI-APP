@@ -4,8 +4,9 @@ import { Text, View } from 'react-native';
 
 import { formatAttendanceDuration } from '@/utils/attendance-export';
 
+import { useTheme } from '@/context/theme-context';
+
 import { TimesheetUserAvatar } from './timesheet-user-avatar';
-import { TsColors, timesheetStyles as ts } from './timesheet-styles';
 
 export function formatClockDisplayDate(iso) {
   if (!iso) return '—';
@@ -26,6 +27,9 @@ function durationForEntry(entry) {
 }
 
 function MetaTile({ icon, label, value, tone = 'blue' }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   const iconColor = tone === 'amber' ? '#F59E0B' : '#3B82F6';
   return (
     <View style={ts.logMetaTile}>
@@ -39,6 +43,10 @@ function MetaTile({ icon, label, value, tone = 'blue' }) {
 }
 
 function DurationChip({ duration, variant = 'clock' }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const isManual = variant === 'manual';
   return (
     <View style={[ts.logDurationChip, isManual && ts.logDurationChipAmber]}>
@@ -53,6 +61,10 @@ function DurationChip({ duration, variant = 'clock' }) {
 }
 
 function TimePanel({ label, time, isIn }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   return (
     <View style={ts.logTimePanel}>
       <MaterialCommunityIcons name={isIn ? 'login' : 'logout'} size={22} color={TsColors.blue} />
@@ -68,6 +80,9 @@ function TimePanel({ label, time, isIn }) {
 
 /** Reference-style clock history card (TL my attendance, Admin/HR clock records). */
 export function ClockRecordCard({ entry }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+
   const name = entry.user?.name || entry.userName || '—';
   const dept = entry.user?.team || entry.department || entry.team || '—';
   const role = entry.user?.role || entry.userRole || '—';

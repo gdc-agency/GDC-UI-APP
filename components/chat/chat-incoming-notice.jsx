@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 function formatRelativeTime(atMs) {
@@ -48,9 +48,82 @@ export function ChatIncomingNotice({
   onPress,
   onDismiss,
 }) {
+  const { colors } = useTheme();
   const slide = useRef(new Animated.Value(-120)).current;
   const displayName = senderName && senderName !== title ? senderName : title;
   const unreadLabel = formatUnreadLabel(unreadCount);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        wrap: {
+          paddingHorizontal: 14,
+          zIndex: 20,
+          elevation: 14,
+        },
+        card: {
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: 12,
+          backgroundColor: colors.card,
+          borderRadius: 18,
+          paddingVertical: 14,
+          paddingHorizontal: 14,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.borderStrong,
+          shadowColor: '#0b2c6a',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.12,
+          shadowRadius: 14,
+          elevation: 8,
+        },
+        avatarCol: { position: 'relative' },
+        avatarImg: {
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: colors.borderStrong,
+        },
+        avatarFallback: {
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: colors.primaryMid,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        onlineDot: {
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 13,
+          height: 13,
+          borderRadius: 7,
+          backgroundColor: '#22c55e',
+          borderWidth: 2,
+          borderColor: colors.card,
+        },
+        textCol: { flex: 1, minWidth: 0, paddingTop: 2 },
+        title: { fontSize: 15, fontWeight: '800', color: colors.text },
+        preview: { marginTop: 3, fontSize: 13, color: colors.textMuted, lineHeight: 18 },
+        newMsgPill: {
+          marginTop: 8,
+          alignSelf: 'flex-start',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 5,
+          backgroundColor: colors.primaryMid,
+          borderRadius: 999,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+        },
+        newMsgPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+        metaCol: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 48 },
+        closeBtn: { padding: 2 },
+        relativeTime: { marginTop: 'auto', fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 5 }).start();
@@ -89,7 +162,7 @@ export function ChatIncomingNotice({
 
         <View style={styles.metaCol}>
           <Pressable onPress={onDismiss} hitSlop={12} style={styles.closeBtn}>
-            <MaterialCommunityIcons name="close" size={18} color="#94a3b8" />
+            <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
           </Pressable>
           <Text style={styles.relativeTime}>{formatRelativeTime(at)}</Text>
         </View>
@@ -97,71 +170,3 @@ export function ChatIncomingNotice({
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 14,
-    zIndex: 20,
-    elevation: 14,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e8edf5',
-    shadowColor: '#0b2c6a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  avatarCol: { position: 'relative' },
-  avatarImg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e2e8f0',
-  },
-  avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: BrandColors.primaryMid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  onlineDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: '#22c55e',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  textCol: { flex: 1, minWidth: 0, paddingTop: 2 },
-  title: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  preview: { marginTop: 3, fontSize: 13, color: '#64748b', lineHeight: 18 },
-  newMsgPill: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  newMsgPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  metaCol: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 48 },
-  closeBtn: { padding: 2 },
-  relativeTime: { marginTop: 'auto', fontSize: 11, color: '#94a3b8', fontWeight: '600' },
-});

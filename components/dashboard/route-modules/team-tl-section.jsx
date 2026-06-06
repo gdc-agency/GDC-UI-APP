@@ -4,6 +4,9 @@ import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { useTheme } from '@/context/theme-context';
+
+import { TimesheetUserAvatar } from './timesheet-user-avatar';
 
 export function TeamTlSection({
   styles,
@@ -17,6 +20,7 @@ export function TeamTlSection({
   rosterError = null,
   onRetryRoster,
 }) {
+  const { colors } = useTheme();
   const showRosterBody = () => {
     if (!canViewTeamRoster) {
       return (
@@ -28,7 +32,7 @@ export function TeamTlSection({
     if (rosterLoading) {
       return (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-          <ActivityIndicator color="#0d9488" />
+          <ActivityIndicator color={colors.primaryMid} />
           <Text style={[styles.panelSub, { marginTop: 10, textAlign: 'center' }]}>Loading teams…</Text>
         </View>
       );
@@ -62,16 +66,14 @@ export function TeamTlSection({
     return groupedTeamAssignments.map((group) => (
       <View key={group.tl} style={styles.tlGroupCard}>
         <View style={styles.tlGroupBanner}>
-          <View style={styles.tlGroupBannerIcon}>
-            <MaterialCommunityIcons name="account-supervisor-circle" size={22} color="#1d4ed8" />
-          </View>
+          <TimesheetUserAvatar name={group.tl} avatarUrl={group.leaderAvatarUrl} size={44} />
           <View style={{ flex: 1 }}>
             <Text style={styles.tlGroupLabel}>Team lead</Text>
             <Text style={styles.tlGroupName}>{group.tl}</Text>
             <View style={styles.tlTeamChips}>
               {group.teamNames.map((t) => (
                 <View key={t} style={styles.tlTeamChip}>
-                  <MaterialCommunityIcons name="account-group-outline" size={14} color="#2563eb" />
+                  <MaterialCommunityIcons name="account-group-outline" size={14} color={colors.primaryLight} />
                   <Text style={styles.tlTeamChipText}>{t}</Text>
                 </View>
               ))}
@@ -87,9 +89,7 @@ export function TeamTlSection({
         {group.members.map((row) => (
           <View key={row.id} style={styles.taMemberCard}>
             <View style={styles.taMemberTop}>
-              <View style={styles.taAvatar}>
-                <Text style={styles.taAvatarText}>{(row.employee || '?').slice(0, 1).toUpperCase()}</Text>
-              </View>
+              <TimesheetUserAvatar name={row.employee} avatarUrl={row.avatarUrl} size={44} />
               <View style={styles.taMemberInfo}>
                 <Text style={styles.taMemberName}>{row.employee}</Text>
               </View>
@@ -107,7 +107,7 @@ export function TeamTlSection({
               <View style={styles.taDetailCell}>
                 <Text style={styles.taDetailLabel}>Department</Text>
                 <View style={styles.taDeptRow}>
-                  <MaterialCommunityIcons name="office-building-outline" size={16} color="#0d9488" />
+                  <MaterialCommunityIcons name="office-building-outline" size={16} color={colors.primaryLight} />
                   <Text style={styles.taDetailValue}>{row.department ?? '—'}</Text>
                 </View>
               </View>
@@ -135,21 +135,22 @@ export function TeamTlSection({
           </View>
         </View>
 
-        <View style={styles.panel}>
+        <View style={[styles.panel, { marginBottom: 14 }]}>
           <Text style={styles.panelTitle}>Search</Text>
+          <Text style={styles.panelSub}>Filter teams by member, team, department, role or team lead.</Text>
           <View style={styles.searchWrap}>
-            <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+            <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
             <TextInput
               value={teamAssignSearch}
               onChangeText={setTeamAssignSearch}
               placeholder="Name, email, GDC-ID, team, department, role or TL."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.inputPlaceholder}
               style={styles.searchInput}
             />
           </View>
         </View>
 
-        <View style={styles.panel}>
+        <View style={[styles.panel, { marginTop: 4 }]}>
           <Text style={styles.panelTitle}>Teams by leader</Text>
           <Text style={styles.panelSub}>
             {canViewTeamRoster && !rosterLoading && !rosterError

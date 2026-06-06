@@ -1,27 +1,50 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/context/auth-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemeProvider, useTheme } from '@/context/theme-context';
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+function RootShell() {
+  const { colors, isDark } = useTheme();
+  const navigationTheme = isDark ? DarkTheme : DefaultTheme;
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <View style={{ flex: 1 }}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="dashboard" />
-          </Stack>
-          <StatusBar style="dark" />
-        </View>
+    <NavigationThemeProvider
+      value={{
+        ...navigationTheme,
+        colors: {
+          ...navigationTheme.colors,
+          background: colors.pageBg,
+          card: colors.card,
+          text: colors.text,
+          border: colors.border,
+          primary: colors.primaryMid,
+        },
+      }}>
+      <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.pageBg } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="dashboard" />
+        </Stack>
+        <StatusBar style={colors.statusBarStyle === 'light' ? 'light' : 'dark'} />
+      </View>
+    </NavigationThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RootShell />
+        </AuthProvider>
       </ThemeProvider>
-    </AuthProvider>
+    </SafeAreaProvider>
   );
 }

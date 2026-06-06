@@ -1,8 +1,7 @@
 import { CircularProgressRing } from '@/components/chat/circular-progress-ring';
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
 import { CHAT_BUBBLE_MAX_WIDTH, CHAT_DOC_BUBBLE_WIDTH } from '@/constants/chat-layout';
-import { ChatTheme } from '@/constants/chat-theme';
+import { useTheme } from '@/context/theme-context';
 import { downloadChatDocument, getCachedChatDocumentPath } from '@/utils/chat-document-download';
 import { openChatDocument } from '@/utils/chat-document-open';
 import { getChatFileMeta } from '@/utils/chat-file-meta';
@@ -12,7 +11,7 @@ import {
   statusIconColor,
   statusIconName,
 } from '@/utils/chat-message-status';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -22,9 +21,7 @@ import {
   View,
 } from 'react-native';
 
-const INNER_CARD = '#f0f2f5';
 const ACTION_SIZE = 40;
-const WA_BLUE = ChatTheme.bubbleOut;
 
 /** @param {Record<string, unknown>} item */
 function resolveDisplayFileName(item) {
@@ -36,7 +33,7 @@ function resolveDisplayFileName(item) {
   return 'Document';
 }
 
-function FileIconTile({ fileMeta }) {
+function FileIconTile({ fileMeta, styles }) {
   return (
     <View style={[styles.iconTile, { backgroundColor: fileMeta.badgeColor }]}>
       <View style={styles.iconFold} />
@@ -46,24 +43,24 @@ function FileIconTile({ fileMeta }) {
   );
 }
 
-function DownloadIdleButton({ onPress }) {
+function DownloadIdleButton({ onPress, styles, bubbleOut }) {
   return (
     <Pressable onPress={onPress} hitSlop={10} style={styles.downloadIdle}>
-      <MaterialCommunityIcons name="arrow-down" size={20} color={WA_BLUE} />
+      <MaterialCommunityIcons name="arrow-down" size={20} color={bubbleOut} />
     </Pressable>
   );
 }
 
-function TransferRing({ progress, outgoing }) {
+function TransferRing({ progress, outgoing, bubbleOut }) {
   return (
     <CircularProgressRing
       progress={progress}
       size={ACTION_SIZE}
       strokeWidth={3}
       trackColor={outgoing ? 'rgba(255,255,255,0.35)' : '#dfe5e7'}
-      progressColor={outgoing ? '#fff' : WA_BLUE}
+      progressColor={outgoing ? '#fff' : bubbleOut}
       centerIcon="arrow-down"
-      centerIconColor={outgoing ? '#fff' : WA_BLUE}
+      centerIconColor={outgoing ? '#fff' : bubbleOut}
       showLabel={false}
     />
   );
@@ -77,9 +74,179 @@ export function DocumentMessageCard({
   compact = false,
   onLongPress,
   groupSenderName = '',
-  groupSenderColor = ChatTheme.groupSenderName,
+  groupSenderColor,
   showGroupSender = false,
 }) {
+  const { colors, chatTheme } = useTheme();
+  const resolvedGroupSenderColor = groupSenderColor ?? chatTheme.groupSenderName;
+
+  const styles = useMemo(() => {
+    const docBubbleBase = {
+      width: CHAT_DOC_BUBBLE_WIDTH,
+      maxWidth: CHAT_BUBBLE_MAX_WIDTH,
+      minWidth: 248,
+    };
+    const innerCard = colors.surfaceMuted;
+
+    return StyleSheet.create({
+      root: {
+        alignSelf: 'flex-start',
+        width: CHAT_DOC_BUBBLE_WIDTH,
+        maxWidth: CHAT_BUBBLE_MAX_WIDTH,
+        minWidth: 248,
+      },
+      rootMe: { alignSelf: 'flex-end' },
+      compact: { minWidth: 0, width: 'auto' },
+      bubbleOut: {
+        ...docBubbleBase,
+        backgroundColor: chatTheme.bubbleOut,
+        borderRadius: 12,
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 2,
+        paddingHorizontal: 10,
+        paddingTop: 8,
+        paddingBottom: 7,
+        alignSelf: 'flex-end',
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+      bubbleOutSelected: {
+        backgroundColor: colors.infoBg,
+        borderWidth: 1,
+        borderColor: colors.chipActiveBorder,
+      },
+      bubbleIn: {
+        ...docBubbleBase,
+        backgroundColor: chatTheme.bubbleIn,
+        borderRadius: 12,
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 2,
+        paddingHorizontal: 8,
+        paddingTop: 7,
+        paddingBottom: 6,
+        alignSelf: 'flex-start',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(0,0,0,0.05)',
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.07,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+      bubbleInSelected: {
+        borderWidth: 1,
+        borderColor: colors.chipActiveBorder,
+      },
+      groupNameInBubble: {
+        fontSize: 13,
+        fontWeight: '800',
+        marginBottom: 5,
+        marginLeft: 2,
+      },
+      innerCard: {
+        backgroundColor: innerCard,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 9,
+        width: '100%',
+      },
+      fileRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+      },
+      iconTile: {
+        width: 44,
+        height: 50,
+        borderRadius: 5,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingBottom: 4,
+        overflow: 'hidden',
+        flexShrink: 0,
+        marginRight: 10,
+      },
+      iconFold: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: 11,
+        height: 11,
+        backgroundColor: 'rgba(255,255,255,0.28)',
+        borderBottomLeftRadius: 3,
+      },
+      iconLabel: {
+        color: '#fff',
+        fontSize: 8,
+        fontWeight: '800',
+        marginTop: 1,
+      },
+      textCol: {
+        flex: 1,
+        flexShrink: 1,
+        minWidth: 72,
+        paddingRight: 6,
+      },
+      fileNameOut: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+        lineHeight: 19,
+      },
+      fileNameIn: {
+        color: chatTheme.bubbleInText,
+        fontSize: 14,
+        fontWeight: '600',
+        lineHeight: 19,
+      },
+      fileNameSelected: { color: colors.primaryMid },
+      metaOut: { marginTop: 3, color: 'rgba(255,255,255,0.92)', fontSize: 12 },
+      metaIn: { marginTop: 3, color: chatTheme.metaMuted, fontSize: 12 },
+      downloadIdle: {
+        width: ACTION_SIZE,
+        height: ACTION_SIZE,
+        borderRadius: ACTION_SIZE / 2,
+        borderWidth: 2,
+        borderColor: chatTheme.bubbleOut,
+        backgroundColor: colors.card,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginLeft: 4,
+      },
+      actionFailOut: {
+        width: ACTION_SIZE,
+        height: ACTION_SIZE,
+        borderRadius: ACTION_SIZE / 2,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginLeft: 4,
+      },
+      footerOut: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 4,
+        marginTop: 6,
+        paddingTop: 2,
+        minHeight: 16,
+      },
+      timeOut: { color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: '500' },
+      footerIn: {
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        marginTop: 4,
+        paddingLeft: 2,
+      },
+      timeIn: { color: chatTheme.metaMuted, fontSize: 11, fontWeight: '500' },
+    });
+  }, [colors, chatTheme]);
+
   const isMe = !!item.me;
   const fileName = resolveDisplayFileName(item);
   const fileMeta = getChatFileMeta(fileName);
@@ -175,14 +342,16 @@ export function DocumentMessageCard({
         </View>
       );
     }
-    return <TransferRing progress={uploadProgress} outgoing />;
+    return <TransferRing progress={uploadProgress} outgoing bubbleOut={chatTheme.bubbleOut} />;
   };
 
   const renderReceiverAction = () => {
     if (downloadPhase === 'downloading') {
-      return <TransferRing progress={downloadProgress} outgoing={false} />;
+      return <TransferRing progress={downloadProgress} outgoing={false} bubbleOut={chatTheme.bubbleOut} />;
     }
-    return <DownloadIdleButton onPress={handleDownloadPress} />;
+    return (
+      <DownloadIdleButton onPress={handleDownloadPress} styles={styles} bubbleOut={chatTheme.bubbleOut} />
+    );
   };
 
   const renderFileInfo = (outgoing) => (
@@ -203,7 +372,7 @@ export function DocumentMessageCard({
 
   const renderFileRow = (outgoing) => (
     <View style={styles.fileRow}>
-      <FileIconTile fileMeta={fileMeta} />
+      <FileIconTile fileMeta={fileMeta} styles={styles} />
       {renderFileInfo(outgoing)}
       {outgoing ? (showSenderAction ? renderSenderAction() : null) : showReceiverAction ? renderReceiverAction() : null}
     </View>
@@ -226,7 +395,7 @@ export function DocumentMessageCard({
   const renderReceiver = () => (
     <View style={[styles.bubbleIn, isActionTarget && styles.bubbleInSelected]}>
       {showGroupSender && groupSenderName ? (
-        <Text style={[styles.groupNameInBubble, { color: groupSenderColor }]} numberOfLines={1}>
+        <Text style={[styles.groupNameInBubble, { color: resolvedGroupSenderColor }]} numberOfLines={1}>
           {groupSenderName}
         </Text>
       ) : null}
@@ -262,167 +431,3 @@ export function DocumentMessageCard({
     </Pressable>
   );
 }
-
-const docBubbleBase = {
-  width: CHAT_DOC_BUBBLE_WIDTH,
-  maxWidth: CHAT_BUBBLE_MAX_WIDTH,
-  minWidth: 248,
-};
-
-const styles = StyleSheet.create({
-  root: {
-    alignSelf: 'flex-start',
-    width: CHAT_DOC_BUBBLE_WIDTH,
-    maxWidth: CHAT_BUBBLE_MAX_WIDTH,
-    minWidth: 248,
-  },
-  rootMe: { alignSelf: 'flex-end' },
-  compact: { minWidth: 0, width: 'auto' },
-  bubbleOut: {
-    ...docBubbleBase,
-    backgroundColor: ChatTheme.bubbleOut,
-    borderRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 2,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 7,
-    alignSelf: 'flex-end',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  bubbleOutSelected: {
-    backgroundColor: '#eef4ff',
-    borderWidth: 1,
-    borderColor: '#c7dcff',
-  },
-  bubbleIn: {
-    ...docBubbleBase,
-    backgroundColor: ChatTheme.bubbleIn,
-    borderRadius: 12,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 2,
-    paddingHorizontal: 8,
-    paddingTop: 7,
-    paddingBottom: 6,
-    alignSelf: 'flex-start',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  bubbleInSelected: {
-    borderWidth: 1,
-    borderColor: '#c7dcff',
-  },
-  groupNameInBubble: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 5,
-    marginLeft: 2,
-  },
-  innerCard: {
-    backgroundColor: INNER_CARD,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    width: '100%',
-  },
-  fileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-  },
-  iconTile: {
-    width: 44,
-    height: 50,
-    borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 4,
-    overflow: 'hidden',
-    flexShrink: 0,
-    marginRight: 10,
-  },
-  iconFold: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 11,
-    height: 11,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-    borderBottomLeftRadius: 3,
-  },
-  iconLabel: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800',
-    marginTop: 1,
-  },
-  textCol: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 72,
-    paddingRight: 6,
-  },
-  fileNameOut: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 19,
-  },
-  fileNameIn: {
-    color: ChatTheme.bubbleInText,
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 19,
-  },
-  fileNameSelected: { color: BrandColors.primaryMid },
-  metaOut: { marginTop: 3, color: 'rgba(255,255,255,0.92)', fontSize: 12 },
-  metaIn: { marginTop: 3, color: ChatTheme.metaMuted, fontSize: 12 },
-  downloadIdle: {
-    width: ACTION_SIZE,
-    height: ACTION_SIZE,
-    borderRadius: ACTION_SIZE / 2,
-    borderWidth: 2,
-    borderColor: WA_BLUE,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginLeft: 4,
-  },
-  actionFailOut: {
-    width: ACTION_SIZE,
-    height: ACTION_SIZE,
-    borderRadius: ACTION_SIZE / 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginLeft: 4,
-  },
-  footerOut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-    marginTop: 6,
-    paddingTop: 2,
-    minHeight: 16,
-  },
-  timeOut: { color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: '500' },
-  footerIn: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginTop: 4,
-    paddingLeft: 2,
-  },
-  timeIn: { color: ChatTheme.metaMuted, fontSize: 11, fontWeight: '500' },
-});

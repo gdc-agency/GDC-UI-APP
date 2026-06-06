@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
 import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 
-import { TlColors, tlStyles as tls } from './timesheet-tl-styles';
+import { useTheme } from '@/context/theme-context';
 
 const TL_SUB_TABS = [
   {
@@ -27,6 +27,10 @@ const TL_SUB_TABS = [
 
 /** Equal-width segmented tabs — no horizontal scroll on narrow screens. */
 export function TlTimesheetTabNav({ slug, router, tlTimesheetTab, setTlTimesheetTab }) {
+  const { moduleStyles } = useTheme();
+  const tls = moduleStyles.timesheetTl.styles;
+  const TlColors = moduleStyles.timesheetTl.colors;
+
   const { width } = useWindowDimensions();
   const useShortLabel = width < 400;
   const showIcon = width >= 360;

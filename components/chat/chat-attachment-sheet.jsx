@@ -1,5 +1,6 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import React, { useCallback, useEffect, useRef } from 'react';
+import { useTheme } from '@/context/theme-context';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   Modal,
@@ -22,8 +23,103 @@ const SHEET_SLIDE = 360;
  * }} props
  */
 export function ChatAttachmentSheet({ visible, onClose, onPickGallery, onPickFiles }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: {
+          flex: 1,
+          justifyContent: 'flex-end',
+        },
+        backdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: colors.modalBackdrop,
+        },
+        sheet: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingTop: 10,
+          paddingHorizontal: 24,
+          ...Platform.select({
+            ios: {
+              shadowColor: '#0f172a',
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: 0.12,
+              shadowRadius: 16,
+            },
+            android: { elevation: 16 },
+            default: {},
+          }),
+        },
+        grabber: {
+          alignSelf: 'center',
+          width: 40,
+          height: 4,
+          borderRadius: 999,
+          backgroundColor: colors.borderStrong,
+          marginBottom: 22,
+        },
+        optionsRow: {
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          gap: 48,
+          paddingBottom: 8,
+        },
+        option: {
+          alignItems: 'center',
+          minWidth: 88,
+        },
+        optionPressed: {
+          opacity: 0.82,
+          transform: [{ scale: 0.96 }],
+        },
+        optionIcon: {
+          width: 64,
+          height: 64,
+          borderRadius: 32,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 10,
+        },
+        optionIconGallery: {
+          backgroundColor: '#0d9ef7',
+        },
+        optionIconFiles: {
+          backgroundColor: '#8e24aa',
+        },
+        optionLabel: {
+          fontSize: 15,
+          fontWeight: '800',
+          color: colors.text,
+          letterSpacing: 0.1,
+        },
+        divider: {
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: colors.borderStrong,
+          marginTop: 12,
+          marginBottom: 4,
+        },
+        cancelBtn: {
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 16,
+        },
+        cancelBtnPressed: {
+          opacity: 0.7,
+        },
+        cancelText: {
+          fontSize: 16,
+          fontWeight: '700',
+          color: colors.primaryMid,
+        },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -127,93 +223,3 @@ export function ChatAttachmentSheet({ visible, onClose, onPickGallery, onPickFil
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.52)',
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingTop: 10,
-    paddingHorizontal: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-      },
-      android: { elevation: 16 },
-      default: {},
-    }),
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#e2e8f0',
-    marginBottom: 22,
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    gap: 48,
-    paddingBottom: 8,
-  },
-  option: {
-    alignItems: 'center',
-    minWidth: 88,
-  },
-  optionPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.96 }],
-  },
-  optionIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  optionIconGallery: {
-    backgroundColor: '#0d9ef7',
-  },
-  optionIconFiles: {
-    backgroundColor: '#8e24aa',
-  },
-  optionLabel: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#334155',
-    letterSpacing: 0.1,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e2e8f0',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  cancelBtnPressed: {
-    opacity: 0.7,
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1266f1',
-  },
-});

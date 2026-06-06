@@ -1,18 +1,12 @@
 import { Platform, StyleSheet } from 'react-native';
 
-import { TsColors } from './timesheet-styles';
+import { getTlColors, getTsColors } from '@/constants/themed-palettes';
 
-export const TlColors = {
-  indigo: '#4F46E5',
-  indigoLight: '#EEF2FF',
-  violet: '#7C3AED',
-  slate: '#64748B',
-  border: '#E2E8F0',
-  card: '#FFFFFF',
-  bg: '#F8FAFC',
-};
-
-export const tlStyles = StyleSheet.create({
+/** @param {import('@/constants/themes').AppThemeColors} c */
+export function createTlStyles(c) {
+  const TlColors = getTlColors(c);
+  const TsColors = getTsColors(c);
+  return StyleSheet.create({
   stack: { gap: 14 },
   heroCard: {
     backgroundColor: TlColors.card,
@@ -348,3 +342,4 @@ export const tlStyles = StyleSheet.create({
   pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pdfBtnText: { fontSize: 13, fontWeight: '800', color: '#DC2626' },
 });
+}

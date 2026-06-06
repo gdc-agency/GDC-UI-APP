@@ -2,8 +2,10 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { useTheme } from '@/context/theme-context';
+
 import { TimesheetUserAvatar } from './timesheet-user-avatar';
-import { TsColors, statusDotStyle, timesheetStyles as ts } from './timesheet-styles';
+import { statusDotStyle } from './timesheet-styles';
 
 export function dayNum(iso) {
   if (!iso) return '—';
@@ -25,8 +27,8 @@ export function roleSubtitle(role, team) {
   return r || t || '—';
 }
 
-function StatusDot({ code }) {
-  const s = statusDotStyle(code);
+function StatusDot({ code, ts, tsColors }) {
+  const s = statusDotStyle(code, tsColors);
   return (
     <View style={[ts.statusDot, { backgroundColor: s.bg }]}>
       <Text style={ts.statusDotText}>{s.label}</Text>
@@ -35,6 +37,10 @@ function StatusDot({ code }) {
 }
 
 export function AttendanceLegend() {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const items = [
     { label: 'Present', color: TsColors.green },
     { label: 'Absent', color: TsColors.red },
@@ -57,6 +63,10 @@ export function AttendanceLegend() {
  * Expandable attendance card — 7d timeline + legend, 30d summary counts (admin style).
  */
 export function AttendanceMemberCard({ entry, timesheetDays, timesheetWindow, expanded, onToggle }) {
+  const { moduleStyles } = useTheme();
+  const ts = moduleStyles.timesheet.styles;
+  const TsColors = moduleStyles.timesheet.colors;
+
   const showTimeline = timesheetWindow === '7d' && Array.isArray(entry.cells) && entry.cells.length > 0;
 
   return (
@@ -88,7 +98,7 @@ export function AttendanceMemberCard({ entry, timesheetDays, timesheetWindow, ex
                   <View key={`${entry.gdcId}-${day}`} style={ts.timelineCol}>
                     <Text style={ts.timelineDate}>{dayNum(day)}</Text>
                     <Text style={ts.timelineDay}>{dayShort(day)}</Text>
-                    <StatusDot code={entry.cells[idx] || 'A'} />
+                    <StatusDot code={entry.cells[idx] || 'A'} ts={ts} tsColors={TsColors} />
                   </View>
                 ))}
               </View>
@@ -97,7 +107,7 @@ export function AttendanceMemberCard({ entry, timesheetDays, timesheetWindow, ex
           ) : timesheetWindow === 'today' ? (
             <View style={ts.summaryCountsRow}>
               <View style={ts.summaryCountItem}>
-                <StatusDot code={entry.cells?.[0] || 'A'} />
+                <StatusDot code={entry.cells?.[0] || 'A'} ts={ts} tsColors={TsColors} />
                 <Text style={ts.summaryCountLbl}>Today</Text>
               </View>
             </View>

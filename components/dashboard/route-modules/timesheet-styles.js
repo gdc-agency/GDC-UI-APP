@@ -1,19 +1,12 @@
 import { Platform, StyleSheet } from 'react-native';
 
-export const TsColors = {
-  blue: '#2563EB',
-  green: '#22C55E',
-  red: '#EF4444',
-  orange: '#F59E0B',
-  purple: '#8B5CF6',
-  border: '#E5E7EB',
-  bg: '#F8FAFC',
-  text: '#111827',
-  textMuted: '#6B7280',
-  white: '#FFFFFF',
-};
+import { getTsColors } from '@/constants/themed-palettes';
+import { lightTheme } from '@/constants/themes';
 
-export const timesheetStyles = StyleSheet.create({
+/** @param {import('@/constants/themes').AppThemeColors} c */
+export function createTimesheetStyles(c) {
+  const TsColors = getTsColors(c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: TsColors.bg },
   scroll: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
   headerBlock: {
@@ -22,7 +15,7 @@ export const timesheetStyles = StyleSheet.create({
   screenTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#0F172A',
+    color: TsColors.text,
     letterSpacing: -0.3,
     marginBottom: 14,
   },
@@ -48,7 +41,7 @@ export const timesheetStyles = StyleSheet.create({
     opacity: 0.92,
   },
   segmentBtnActive: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: TsColors.segmentActiveBg,
   },
   segmentBtnContent: {
     alignItems: 'center',
@@ -59,7 +52,7 @@ export const timesheetStyles = StyleSheet.create({
   segmentText: {
     fontSize: 10,
     fontWeight: '500',
-    color: '#64748B',
+    color: TsColors.textMuted,
     textAlign: 'center',
     lineHeight: 13,
     letterSpacing: 0.05,
@@ -231,7 +224,7 @@ export const timesheetStyles = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
-  roleMenuItem: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  roleMenuItem: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: TsColors.divider },
   roleMenuItemText: { fontSize: 13, fontWeight: '600', color: TsColors.text },
   dateMenu: {
     position: 'absolute',
@@ -281,13 +274,13 @@ export const timesheetStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: TsColors.avatarBg,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImage: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: TsColors.surfaceMuted,
   },
   avatarText: { fontSize: 14, fontWeight: '800', color: TsColors.blue },
   employeeMeta: { flex: 1, minWidth: 0 },
@@ -297,7 +290,7 @@ export const timesheetStyles = StyleSheet.create({
   employeeGdc: { fontSize: 11, fontWeight: '600', color: TsColors.textMuted },
   expandedBody: {
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: TsColors.divider,
     paddingHorizontal: 12,
     paddingBottom: 14,
     paddingTop: 10,
@@ -332,7 +325,7 @@ export const timesheetStyles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: TsColors.divider,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
@@ -347,10 +340,10 @@ export const timesheetStyles = StyleSheet.create({
   },
   emptyText: { fontSize: 13, color: TsColors.textMuted, fontWeight: '600', textAlign: 'center' },
   banner: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: TsColors.exportBtnDangerBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: TsColors.red,
     padding: 12,
     marginBottom: 12,
     flexDirection: 'row',
@@ -358,7 +351,7 @@ export const timesheetStyles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
-  bannerText: { flex: 1, fontSize: 12, color: '#991B1B', fontWeight: '600' },
+  bannerText: { flex: 1, fontSize: 12, color: TsColors.red, fontWeight: '600' },
   bannerBtn: {
     backgroundColor: TsColors.blue,
     borderRadius: 8,
@@ -383,7 +376,7 @@ export const timesheetStyles = StyleSheet.create({
   clockRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   clockPill: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TsColors.timePanelBg,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: TsColors.border,
@@ -394,7 +387,7 @@ export const timesheetStyles = StyleSheet.create({
   logScreenTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0F172A',
+    color: TsColors.text,
     letterSpacing: -0.3,
     marginBottom: 14,
   },
@@ -402,7 +395,7 @@ export const timesheetStyles = StyleSheet.create({
     backgroundColor: TsColors.white,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
+    borderColor: TsColors.dividerSoft,
     padding: 14,
     marginBottom: 14,
     gap: 12,
@@ -431,10 +424,10 @@ export const timesheetStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TsColors.inputBg,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: TsColors.inputBorder,
     paddingHorizontal: 12,
     paddingVertical: 11,
     minHeight: 44,
@@ -449,7 +442,7 @@ export const timesheetStyles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '500',
-    color: '#94A3B8',
+    color: TsColors.inputPlaceholder,
   },
   logExportBar: {
     flexDirection: 'row',
@@ -466,12 +459,12 @@ export const timesheetStyles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    backgroundColor: '#EFF6FF',
+    borderColor: TsColors.infoBorder,
+    backgroundColor: TsColors.exportBtnBg,
   },
   logPdfBtnSecondary: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FFF5F5',
+    borderColor: TsColors.red,
+    backgroundColor: TsColors.exportBtnDangerBg,
   },
   logPdfBtnDisabled: {
     opacity: 0.6,
@@ -527,7 +520,7 @@ export const timesheetStyles = StyleSheet.create({
     backgroundColor: TsColors.white,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
+    borderColor: TsColors.dividerSoft,
     padding: 14,
     marginBottom: 12,
     ...Platform.select({
@@ -567,13 +560,13 @@ export const timesheetStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: TsColors.durationChipBg,
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   logDurationChipAmber: {
-    backgroundColor: '#FFEDD5',
+    backgroundColor: TsColors.durationChipAmberBg,
   },
   logDurationChipText: {
     fontSize: 13,
@@ -602,7 +595,7 @@ export const timesheetStyles = StyleSheet.create({
   },
   logMetaBar: {
     flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: TsColors.metaBarBg,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 8,
@@ -610,7 +603,7 @@ export const timesheetStyles = StyleSheet.create({
     gap: 4,
   },
   logMetaBarManual: {
-    backgroundColor: '#FFF7ED',
+    backgroundColor: TsColors.metaBarManualBg,
   },
   logMetaTile: {
     flex: 1,
@@ -622,7 +615,7 @@ export const timesheetStyles = StyleSheet.create({
     marginTop: 4,
     fontSize: 10,
     fontWeight: '600',
-    color: '#64748B',
+    color: TsColors.textMuted,
     textAlign: 'center',
   },
   logMetaTileVal: {
@@ -642,12 +635,12 @@ export const timesheetStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TsColors.timePanelBg,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#EEF2F7',
+    borderColor: TsColors.timePanelBorder,
   },
   logTimePanelLbl: {
     fontSize: 10,
@@ -697,18 +690,20 @@ export const timesheetStyles = StyleSheet.create({
   },
 });
 
-export function statusDotStyle(code) {
+}
+
+export function statusDotStyle(code, ts = getTsColors(lightTheme)) {
   switch (String(code || '').toUpperCase()) {
     case 'P':
-      return { bg: TsColors.green, label: 'P' };
+      return { bg: ts.green, label: 'P' };
     case 'A':
-      return { bg: TsColors.red, label: 'A' };
+      return { bg: ts.red, label: 'A' };
     case 'LV':
-      return { bg: TsColors.orange, label: 'L' };
+      return { bg: ts.orange, label: 'L' };
     case 'LT':
-      return { bg: TsColors.purple, label: 'L' };
+      return { bg: ts.purple, label: 'L' };
     case 'H':
-      return { bg: TsColors.blue, label: 'H' };
+      return { bg: ts.blue, label: 'H' };
     case 'W':
       return { bg: '#9CA3AF', label: '-' };
     default:

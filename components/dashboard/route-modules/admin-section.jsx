@@ -16,9 +16,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { useTheme } from '@/context/theme-context';
 import { displayRoleOptionsForPromotion } from '@/utils/admin-directory';
 
+import { TimesheetUserAvatar } from './timesheet-user-avatar';
+
 export function AdminSection({ styles, ctx }) {
+  const { colors, isDark } = useTheme();
   const {
     isCompactMobile = false,
     adminControlTab,
@@ -84,8 +88,8 @@ export function AdminSection({ styles, ctx }) {
       title: 'Employees management',
       icon: 'account-group-outline',
       color: '#7c3aed',
-      tintBg: '#f5f3ff',
-      tintBgActive: '#ede9fe',
+      tintBg: isDark ? '#1e1b4b' : '#f5f3ff',
+      tintBgActive: isDark ? '#312e81' : '#ede9fe',
     },
     {
       id: 'time',
@@ -93,8 +97,8 @@ export function AdminSection({ styles, ctx }) {
       title: 'Time control',
       icon: 'timer-outline',
       color: '#f97316',
-      tintBg: '#fff7ed',
-      tintBgActive: '#ffedd5',
+      tintBg: isDark ? '#431407' : '#fff7ed',
+      tintBgActive: isDark ? '#7c2d12' : '#ffedd5',
     },
     {
       id: 'departments',
@@ -102,8 +106,8 @@ export function AdminSection({ styles, ctx }) {
       title: 'Departments control',
       icon: 'office-building-outline',
       color: '#0d9488',
-      tintBg: '#f0fdfa',
-      tintBgActive: '#ccfbf1',
+      tintBg: isDark ? '#042f2e' : '#f0fdfa',
+      tintBgActive: isDark ? '#134e4a' : '#ccfbf1',
     },
   ];
   const activeAdminTab = adminTabs.find((tab) => tab.id === adminControlTab) ?? adminTabs[0];
@@ -181,7 +185,7 @@ export function AdminSection({ styles, ctx }) {
                   value={adminUserSearch}
                   onChangeText={setAdminUserSearch}
                   placeholder="Search by name or GDC ID..."
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.inputPlaceholder}
                   style={styles.searchInput}
                 />
               </View>
@@ -191,14 +195,12 @@ export function AdminSection({ styles, ctx }) {
             </View>
             <Text style={styles.adminSectionTitle}>User Directory</Text>
             {adminUsersLoading ? (
-              <ActivityIndicator style={{ marginVertical: 20 }} color="#2563eb" />
+              <ActivityIndicator style={{ marginVertical: 20 }} color={colors.primaryMid} />
             ) : null}
             {filteredAdminUsers.map((member) => (
               <View key={member.id != null ? `user-${member.id}` : member.gdcId} style={styles.adminUserCard}>
                 <View style={styles.adminUserTop}>
-                  <View style={styles.adminMemberAvatar}>
-                    <Text style={styles.adminMemberAvatarText}>{member.name.slice(0, 1)}</Text>
-                  </View>
+                  <TimesheetUserAvatar name={member.name} avatarUrl={member.avatarUrl} size={44} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.adminMemberName}>{member.name}</Text>
                     <Text style={styles.adminMemberEmail}>{member.email}</Text>
@@ -284,9 +286,9 @@ export function AdminSection({ styles, ctx }) {
               <View style={styles.timeField}>
                 <Text style={styles.timeFieldLabel}>Date</Text>
                 <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftDate} onChangeText={setShiftDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" style={styles.timeInput} />
+                  <TextInput value={shiftDate} onChangeText={setShiftDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
                   <Pressable onPress={openShiftDatePicker}>
-                    <MaterialCommunityIcons name="calendar-blank-outline" size={16} color="#94a3b8" />
+                    <MaterialCommunityIcons name="calendar-blank-outline" size={16} color={colors.textSecondary} />
                   </Pressable>
                 </View>
               </View>
@@ -295,18 +297,18 @@ export function AdminSection({ styles, ctx }) {
               <View style={styles.timeFieldHalf}>
                 <Text style={styles.timeFieldLabel}>Office start</Text>
                 <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftStart} onChangeText={setShiftStart} placeholder="10:00 AM" placeholderTextColor="#94a3b8" style={styles.timeInput} />
+                  <TextInput value={shiftStart} onChangeText={setShiftStart} placeholder="10:00 AM" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
                   <Pressable onPress={() => openShiftTimePicker('start')}>
-                    <MaterialCommunityIcons name="clock-outline" size={16} color="#94a3b8" />
+                    <MaterialCommunityIcons name="clock-outline" size={16} color={colors.textSecondary} />
                   </Pressable>
                 </View>
               </View>
               <View style={styles.timeFieldHalf}>
                 <Text style={styles.timeFieldLabel}>Office end</Text>
                 <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftEnd} onChangeText={setShiftEnd} placeholder="07:00 PM" placeholderTextColor="#94a3b8" style={styles.timeInput} />
+                  <TextInput value={shiftEnd} onChangeText={setShiftEnd} placeholder="07:00 PM" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
                   <Pressable onPress={() => openShiftTimePicker('end')}>
-                    <MaterialCommunityIcons name="clock-time-eight-outline" size={16} color="#94a3b8" />
+                    <MaterialCommunityIcons name="clock-time-eight-outline" size={16} color={colors.textSecondary} />
                   </Pressable>
                 </View>
               </View>
@@ -346,7 +348,7 @@ export function AdminSection({ styles, ctx }) {
                 value={newDepartment}
                 onChangeText={setNewDepartment}
                 placeholder="e.g. Graphic Design"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.inputPlaceholder}
                 style={styles.deptNameInput}
               />
             </View>
@@ -390,14 +392,14 @@ export function AdminSection({ styles, ctx }) {
           <Pressable style={styles.adminRoleModal} onPress={(e) => e.stopPropagation()}>
             <View style={styles.adminRoleModalHead}>
               <View style={styles.adminRoleModalIcon}>
-                <MaterialCommunityIcons name="account-star-outline" size={24} color="#2563eb" />
+                <MaterialCommunityIcons name="account-star-outline" size={24} color={colors.primaryMid} />
               </View>
               <Pressable
                 style={styles.adminRoleModalClose}
                 onPress={closeRoleModal}
                 disabled={Boolean(adminRoleSavingTarget)}
                 hitSlop={8}>
-                <MaterialCommunityIcons name="close" size={22} color="#94a3b8" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -428,12 +430,12 @@ export function AdminSection({ styles, ctx }) {
                         selected && styles.adminRoleOptionIconWrapSelected,
                       ]}>
                       {saving ? (
-                        <ActivityIndicator size="small" color="#2563eb" />
+                        <ActivityIndicator size="small" color={colors.primaryMid} />
                       ) : (
                         <MaterialCommunityIcons
                           name={iconName}
                           size={20}
-                          color={selected ? '#2563eb' : '#94a3b8'}
+                          color={selected ? colors.primaryMid : colors.textSecondary}
                         />
                       )}
                     </View>

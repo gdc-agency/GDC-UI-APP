@@ -1,25 +1,11 @@
 import { Platform, StyleSheet } from 'react-native';
 
-export const AvColors = {
-  blue: '#2563EB',
-  green: '#16A34A',
-  greenBg: '#DCFCE7',
-  greenText: '#15803D',
-  red: '#DC2626',
-  redBg: '#FEE2E2',
-  orange: '#EA580C',
-  orangeBg: '#FFEDD5',
-  orangeText: '#C2410C',
-  purple: '#7C3AED',
-  border: '#E5E7EB',
-  bg: '#F1F5F9',
-  card: '#FFFFFF',
-  text: '#0F172A',
-  textMuted: '#64748B',
-  white: '#FFFFFF',
-};
+import { getAvColors } from '@/constants/themed-palettes';
 
-export const availabilityStyles = StyleSheet.create({
+/** @param {import('@/constants/themes').AppThemeColors} c */
+export function createAvailabilityStyles(c) {
+  const AvColors = getAvColors(c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: AvColors.bg },
   scroll: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 },
   boardHero: {
@@ -44,14 +30,14 @@ export const availabilityStyles = StyleSheet.create({
     flex: 1,
     fontSize: 20,
     fontWeight: '800',
-    color: AvColors.white,
+    color: c.heroText,
     letterSpacing: -0.3,
   },
   card: {
     backgroundColor: AvColors.card,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
+    borderColor: AvColors.dividerSoft,
     padding: 16,
     marginBottom: 14,
     ...Platform.select({
@@ -100,10 +86,10 @@ export const availabilityStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AvColors.inputBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AvColors.inputBorder,
     paddingHorizontal: 12,
     paddingVertical: 11,
     minHeight: 44,
@@ -118,7 +104,7 @@ export const availabilityStyles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '500',
-    color: '#94A3B8',
+    color: AvColors.inputPlaceholder,
   },
   dropdownMenu: {
     position: 'absolute',
@@ -126,7 +112,7 @@ export const availabilityStyles = StyleSheet.create({
     left: 0,
     right: 0,
     marginTop: 4,
-    backgroundColor: AvColors.white,
+    backgroundColor: AvColors.dropdownBg,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: AvColors.border,
@@ -137,7 +123,7 @@ export const availabilityStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: AvColors.divider,
   },
   dropdownItemText: {
     fontSize: 13,
@@ -158,12 +144,12 @@ export const availabilityStyles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: AvColors.white,
+    borderColor: AvColors.inputBorder,
+    backgroundColor: AvColors.chipBg,
   },
   pillActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
+    backgroundColor: AvColors.chipActiveBg,
+    borderColor: AvColors.chipActiveBorder,
   },
   pillText: {
     fontSize: 13,
@@ -171,7 +157,7 @@ export const availabilityStyles = StyleSheet.create({
     color: AvColors.text,
   },
   pillTextActive: {
-    color: AvColors.blue,
+    color: AvColors.chipActiveText,
     fontWeight: '700',
   },
   pillDot: {
@@ -183,10 +169,10 @@ export const availabilityStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AvColors.inputBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AvColors.inputBorder,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
@@ -219,8 +205,8 @@ export const availabilityStyles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
-    backgroundColor: AvColors.white,
+    borderColor: AvColors.dividerSoft,
+    backgroundColor: AvColors.surfaceElevated,
     marginBottom: 10,
   },
   personMain: {
@@ -267,7 +253,7 @@ export const availabilityStyles = StyleSheet.create({
     backgroundColor: AvColors.orangeBg,
   },
   statusBadgeLeave: {
-    backgroundColor: '#FFE4E6',
+    backgroundColor: AvColors.redBg,
   },
   statusBadgeText: {
     fontSize: 12,
@@ -275,7 +261,7 @@ export const availabilityStyles = StyleSheet.create({
   },
   statusBadgeTextPresent: { color: AvColors.greenText },
   statusBadgeTextAbsent: { color: AvColors.orangeText },
-  statusBadgeTextLeave: { color: '#BE123C' },
+  statusBadgeTextLeave: { color: AvColors.orangeText },
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,7 +291,7 @@ export const availabilityStyles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: AvColors.avatarBg,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -324,20 +310,21 @@ export const availabilityStyles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: AvColors.redBg,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: AvColors.red,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
   },
-  errorBannerText: { flex: 1, fontSize: 13, color: '#991B1B', fontWeight: '600' },
+  errorBannerText: { flex: 1, fontSize: 13, color: AvColors.orangeText, fontWeight: '600' },
   errorBannerBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#DC2626',
+    backgroundColor: AvColors.red,
   },
   errorBannerBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 });
+}

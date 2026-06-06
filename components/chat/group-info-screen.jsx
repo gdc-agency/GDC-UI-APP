@@ -1,6 +1,6 @@
 import { GroupMemberActionSheet } from '@/components/chat/group-member-action-sheet';
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
+import { useTheme } from '@/context/theme-context';
 import { groupMemberRole, resolveGroupMember } from '@/utils/resolve-group-member';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,7 +30,7 @@ function matchesAddSearch(contact, query) {
   return name.includes(q) || role.includes(q) || gdc.includes(q) || email.includes(q);
 }
 
-const RoleBadge = memo(function RoleBadge({ role }) {
+const RoleBadge = memo(function RoleBadge({ role, styles }) {
   if (role === 'creator') {
     return (
       <View style={[styles.roleBadge, styles.badgeCreator]}>
@@ -53,7 +53,7 @@ const RoleBadge = memo(function RoleBadge({ role }) {
   );
 });
 
-const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage, onMenu }) {
+const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage, onMenu, styles }) {
   const line = item.displayName || item.name || 'Member';
   const showMenu = canManage && !isMe && role !== 'creator' && typeof onMenu === 'function';
 
@@ -76,7 +76,7 @@ const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage,
         </Text>
         <Text style={styles.memberStatus}>{item.online ? 'Online' : 'Offline'}</Text>
       </View>
-      <RoleBadge role={role} />
+      <RoleBadge role={role} styles={styles} />
       {showMenu ? (
         <Pressable
           style={styles.menuBtn}
@@ -111,6 +111,208 @@ export function GroupInfoScreen({
   onDemote,
   onRefreshDirectory,
 }) {
+  const { colors } = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safe: { flex: 1, backgroundColor: colors.pageBg },
+        header: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 8,
+          paddingVertical: 10,
+          backgroundColor: colors.card,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderStrong,
+        },
+        backBtn: { padding: 8 },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+        scroll: { flex: 1 },
+        hero: {
+          backgroundColor: colors.card,
+          alignItems: 'center',
+          paddingVertical: 24,
+          paddingHorizontal: 16,
+          marginBottom: 10,
+        },
+        avatarBlock: { position: 'relative', marginBottom: 16 },
+        groupAvatar: { width: 108, height: 108, borderRadius: 54 },
+        groupAvatarFb: {
+          width: 108,
+          height: 108,
+          borderRadius: 54,
+          backgroundColor: colors.infoBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        avatarLoader: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: 'rgba(0,0,0,0.35)',
+          borderRadius: 54,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        editPhotoBadge: {
+          position: 'absolute',
+          right: 4,
+          bottom: 4,
+          backgroundColor: colors.primaryMid,
+          borderRadius: 16,
+          padding: 8,
+        },
+        nameRow: { flexDirection: 'row', gap: 8, width: '100%', maxWidth: 400 },
+        nameInput: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          borderRadius: 12,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+          fontSize: 16,
+          backgroundColor: colors.inputBg,
+          color: colors.text,
+        },
+        saveBtn: {
+          backgroundColor: colors.primaryMid,
+          borderRadius: 12,
+          paddingHorizontal: 18,
+          justifyContent: 'center',
+          minWidth: 88,
+        },
+        saveBtnDisabled: { opacity: 0.85 },
+        saveBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+        groupTitle: { fontSize: 22, fontWeight: '800', color: colors.text, textAlign: 'center' },
+        createdByRow: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          marginTop: 10,
+        },
+        createdBy: { fontSize: 14, color: colors.textMuted },
+        createdByName: { fontWeight: '700', color: colors.text },
+        sectionCard: {
+          backgroundColor: colors.card,
+          marginHorizontal: 12,
+          borderRadius: 16,
+          padding: 14,
+          marginBottom: 12,
+        },
+        sectionHead: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 10,
+        },
+        sectionTitle: { fontSize: 14, fontWeight: '800', color: colors.textMuted },
+        addMemberBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        addMemberText: { color: colors.primaryMid, fontWeight: '700', fontSize: 14 },
+        addPanel: { backgroundColor: colors.surfaceMuted, borderRadius: 12, padding: 10, marginBottom: 12 },
+        addSearch: {
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          borderRadius: 10,
+          padding: 10,
+          marginBottom: 8,
+          backgroundColor: colors.inputBg,
+          color: colors.text,
+        },
+        addEmpty: { fontSize: 13, color: colors.textSecondary, paddingVertical: 8, textAlign: 'center' },
+        addRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: 8,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderStrong,
+        },
+        addRowText: { fontSize: 15, color: colors.text, flex: 1 },
+        primaryBtn: {
+          backgroundColor: colors.primaryMid,
+          borderRadius: 10,
+          paddingVertical: 12,
+          alignItems: 'center',
+          marginTop: 8,
+        },
+        primaryBtnOff: { opacity: 0.5 },
+        primaryBtnText: { color: '#fff', fontWeight: '700' },
+        memberRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 10,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderLight,
+          minHeight: ROW_H,
+        },
+        avatarWrap: { position: 'relative', marginRight: 12 },
+        avatar: { width: 48, height: 48, borderRadius: 24 },
+        avatarFb: {
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: colors.chipActiveBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        avatarLetter: { fontWeight: '800', fontSize: 18, color: colors.primaryMid },
+        presenceDot: {
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 12,
+          height: 12,
+          borderRadius: 6,
+          backgroundColor: colors.textSecondary,
+          borderWidth: 2,
+          borderColor: colors.card,
+        },
+        presenceOn: { backgroundColor: '#22c55e' },
+        memberMeta: { flex: 1, minWidth: 0 },
+        memberName: { fontSize: 16, fontWeight: '700', color: colors.text },
+        memberStatus: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+        roleBadge: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          marginRight: 4,
+        },
+        badgeCreator: { backgroundColor: '#fef9c3' },
+        badgeAdmin: { backgroundColor: colors.infoBg },
+        badgeMember: { backgroundColor: colors.surfaceMuted },
+        roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+        badgeCreatorText: { color: '#92400e' },
+        badgeAdminText: { color: colors.primaryMid },
+        badgeMemberText: { color: colors.textMuted },
+        menuBtn: { padding: 6, marginLeft: 2 },
+        menuBtnSpacer: { width: 34 },
+        dangerSection: {
+          backgroundColor: colors.card,
+          marginHorizontal: 12,
+          borderRadius: 16,
+          marginBottom: 24,
+          overflow: 'hidden',
+        },
+        dangerBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingVertical: 16,
+          paddingHorizontal: 16,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.borderLight,
+        },
+        dangerText: { color: '#ef4444', fontWeight: '700', fontSize: 15 },
+      }),
+    [colors],
+  );
+
   const server = thread?.server && typeof thread.server === 'object' ? thread.server : {};
   const chatId = thread?.id != null ? String(thread.id) : '';
   const memberIds = Array.isArray(server.memberIds) ? server.memberIds.map(String) : [];
@@ -292,9 +494,10 @@ export function GroupInfoScreen({
         isMe={String(item.id) === String(myUserId)}
         canManage={isAdmin}
         onMenu={openMemberMenu}
+        styles={styles}
       />
     ),
-    [isAdmin, memberBusy, myUserId, openMemberMenu],
+    [isAdmin, memberBusy, myUserId, openMemberMenu, styles],
   );
 
   const creatorName = creatorProfile.displayName || creatorProfile.name || 'Unknown';
@@ -303,7 +506,7 @@ export function GroupInfoScreen({
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backBtn} hitSlop={12}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color={BrandColors.text} />
+          <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Group info</Text>
         <View style={{ width: 40 }} />
@@ -316,7 +519,7 @@ export function GroupInfoScreen({
               <Image source={{ uri: String(avatarUrl) }} style={styles.groupAvatar} contentFit="cover" />
             ) : (
               <View style={styles.groupAvatarFb}>
-                <MaterialCommunityIcons name="account-group" size={40} color={BrandColors.primaryMid} />
+                <MaterialCommunityIcons name="account-group" size={40} color={colors.primaryMid} />
               </View>
             )}
             {savingAvatar ? (
@@ -378,7 +581,7 @@ export function GroupInfoScreen({
                 style={styles.addMemberBtn}
                 onPress={() => setAddOpen((v) => !v)}
                 disabled={memberBusy}>
-                <MaterialCommunityIcons name="account-plus-outline" size={20} color={BrandColors.primaryMid} />
+                <MaterialCommunityIcons name="account-plus-outline" size={20} color={colors.primaryMid} />
                 <Text style={styles.addMemberText}>Add members</Text>
               </Pressable>
             ) : null}
@@ -415,7 +618,7 @@ export function GroupInfoScreen({
                     }>
                     <Text style={styles.addRowText}>{c.displayName || c.name}</Text>
                     {on ? (
-                      <MaterialCommunityIcons name="check-circle" size={18} color={BrandColors.primaryMid} />
+                      <MaterialCommunityIcons name="check-circle" size={18} color={colors.primaryMid} />
                     ) : null}
                   </Pressable>
                 );
@@ -513,197 +716,3 @@ export function GroupInfoScreen({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f0f2f8' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
-  backBtn: { padding: 8 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: BrandColors.text },
-  scroll: { flex: 1 },
-  hero: {
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  avatarBlock: { position: 'relative', marginBottom: 16 },
-  groupAvatar: { width: 108, height: 108, borderRadius: 54 },
-  groupAvatarFb: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLoader: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editPhotoBadge: {
-    position: 'absolute',
-    right: 4,
-    bottom: 4,
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 16,
-    padding: 8,
-  },
-  nameRow: { flexDirection: 'row', gap: 8, width: '100%', maxWidth: 400 },
-  nameInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#fafbff',
-  },
-  saveBtn: {
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-    minWidth: 88,
-  },
-  saveBtnDisabled: { opacity: 0.85 },
-  saveBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  groupTitle: { fontSize: 22, fontWeight: '800', color: BrandColors.text, textAlign: 'center' },
-  createdByRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 10,
-  },
-  createdBy: { fontSize: 14, color: '#64748b' },
-  createdByName: { fontWeight: '700', color: BrandColors.text },
-  sectionCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: '800', color: '#64748b' },
-  addMemberBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  addMemberText: { color: BrandColors.primaryMid, fontWeight: '700', fontSize: 14 },
-  addPanel: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 10, marginBottom: 12 },
-  addSearch: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  addEmpty: { fontSize: 13, color: '#94a3b8', paddingVertical: 8, textAlign: 'center' },
-  addRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
-  addRowText: { fontSize: 15, color: BrandColors.text, flex: 1 },
-  primaryBtn: {
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryBtnOff: { opacity: 0.5 },
-  primaryBtnText: { color: '#fff', fontWeight: '700' },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#f1f5f9',
-    minHeight: ROW_H,
-  },
-  avatarWrap: { position: 'relative', marginRight: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 24 },
-  avatarFb: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: { fontWeight: '800', fontSize: 18, color: BrandColors.primaryMid },
-  presenceDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#94a3b8',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  presenceOn: { backgroundColor: '#22c55e' },
-  memberMeta: { flex: 1, minWidth: 0 },
-  memberName: { fontSize: 16, fontWeight: '700', color: BrandColors.text },
-  memberStatus: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  roleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 4,
-  },
-  badgeCreator: { backgroundColor: '#fef9c3' },
-  badgeAdmin: { backgroundColor: '#eff6ff' },
-  badgeMember: { backgroundColor: '#f1f5f9' },
-  roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  badgeCreatorText: { color: '#92400e' },
-  badgeAdminText: { color: BrandColors.primaryMid },
-  badgeMemberText: { color: '#64748b' },
-  menuBtn: { padding: 6, marginLeft: 2 },
-  menuBtnSpacer: { width: 34 },
-  dangerSection: {
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
-    borderRadius: 16,
-    marginBottom: 24,
-    overflow: 'hidden',
-  },
-  dangerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#f1f5f9',
-  },
-  dangerText: { color: '#ef4444', fontWeight: '700', fontSize: 15 },
-});

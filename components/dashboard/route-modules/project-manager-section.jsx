@@ -15,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { useTheme } from '@/context/theme-context';
 import { isAdminRole } from '@/utils/roles';
 import { promptTaskAttachmentActions } from '@/utils/task-document-open';
 
@@ -84,7 +85,9 @@ export function ProjectManagerSection({
   taskAssignableError,
   saveProjectTaskPhase = 'idle',
 }) {
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const selectedDetailStatusTone = selectedProjectTask ? projectStatusTone(selectedProjectTask.status) : null;
   const [iosDeadlinePickerOpen, setIosDeadlinePickerOpen] = useState(false);
   const [hrAssignMenuOpen, setHrAssignMenuOpen] = useState(false);
   const hrAssignDropdownAnim = useRef(new Animated.Value(0)).current;
@@ -187,12 +190,12 @@ export function ProjectManagerSection({
           <Text style={styles.panelTitle}>Filters</Text>
           <Text style={styles.panelSub}>Search by task, filter by status and deadline range.</Text>
           <View style={styles.searchWrap}>
-            <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
+            <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
             <TextInput
               value={projectSearch}
               onChangeText={setProjectSearch}
               placeholder="Search project tasks..."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.inputPlaceholder}
               style={styles.searchInput}
             />
           </View>
@@ -206,7 +209,7 @@ export function ProjectManagerSection({
                       .map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`)
                       .join(' ')}
               </Text>
-              <MaterialCommunityIcons name={projectStatusMenuOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#94a3b8" />
+              <MaterialCommunityIcons name={projectStatusMenuOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </Pressable>
             {projectStatusMenuOpen ? (
               <View style={styles.pmFilterSelectMenuInline}>
@@ -237,7 +240,7 @@ export function ProjectManagerSection({
               onPress={() => openProjectFilterDate('from')}
               accessibilityRole="button"
               accessibilityLabel="Filter tasks from deadline date">
-              <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#2563eb" />
+              <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.primaryLight} />
               <Text
                 style={[
                   styles.filterDateFieldSingle,
@@ -253,7 +256,7 @@ export function ProjectManagerSection({
               onPress={() => openProjectFilterDate('to')}
               accessibilityRole="button"
               accessibilityLabel="Filter tasks to deadline date">
-              <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#2563eb" />
+              <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.primaryLight} />
               <Text
                 style={[
                   styles.filterDateFieldSingle,
@@ -296,7 +299,9 @@ export function ProjectManagerSection({
               <Text style={styles.emptyText}>No tasks match current filters.</Text>
             </View>
           ) : (
-            filteredProjectTasks.map((task) => (
+            filteredProjectTasks.map((task) => {
+              const statusTone = projectStatusTone(task.status);
+              return (
               <Pressable key={task.id} style={[styles.projectCard, isCompactMobile && styles.projectCardCompact]} onPress={() => setSelectedProjectTask(task)}>
                 <View style={[styles.projectDateStrip, isCompactMobile && styles.projectDateStripCompact]}>
                   <Text style={styles.projectDateDay}>{task.deadline ? task.deadline.slice(-2) : '--'}</Text>
@@ -315,13 +320,15 @@ export function ProjectManagerSection({
                           <MaterialCommunityIcons name="pencil-outline" size={16} color="#ffffff" />
                         </Pressable>
                         <Pressable onPress={() => handleDeleteProjectTask(task.id)} style={styles.deleteBtn} onPressIn={(e) => e.stopPropagation()}>
-                          <MaterialCommunityIcons name="trash-can-outline" size={16} color="#e11d48" />
+                          <MaterialCommunityIcons name="trash-can-outline" size={16} color={colors.dangerText} />
                         </Pressable>
                       </View>
                     ) : null}
                   </View>
-                  <View style={[styles.projectStatePill, projectStatusTone(task.status)]}>
-                    <Text style={styles.projectStateText}>{String(task.status || 'Pending').toUpperCase()}</Text>
+                  <View style={[styles.projectStatePill, statusTone.pill]}>
+                    <Text style={[styles.projectStateText, statusTone.text]}>
+                      {String(task.status || 'Pending').toUpperCase()}
+                    </Text>
                   </View>
                   <View style={styles.projectIdentityRow}>
                     <View style={styles.projectAssigneeBadge}>
@@ -331,22 +338,23 @@ export function ProjectManagerSection({
                     </View>
                   </View>
                   <View style={styles.projectInfoLine}>
-                    <MaterialCommunityIcons name="briefcase-outline" size={17} color="#f97316" />
+                    <MaterialCommunityIcons name="briefcase-outline" size={17} color={colors.primaryLight} />
                     <Text style={styles.projectInfoText} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit={false}>
                       {task.description || '—'}
                     </Text>
                   </View>
                   <View style={styles.projectInfoLine}>
-                    <MaterialCommunityIcons name="account-outline" size={17} color="#f97316" />
+                    <MaterialCommunityIcons name="account-outline" size={17} color={colors.primaryLight} />
                     <Text style={styles.projectInfoText}>{task.assignedRole || task.assignee || 'Employee'}</Text>
                   </View>
                   <View style={styles.projectDueLine}>
-                    <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
+                    <MaterialCommunityIcons name="calendar-month-outline" size={18} color={colors.textSecondary} />
                     <Text style={styles.projectDueText}>{formatProjectDueDate(task.deadline)}</Text>
                   </View>
                 </View>
               </Pressable>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -365,7 +373,7 @@ export function ProjectManagerSection({
                 <Text style={styles.modalTitle}>{editingTaskId ? 'Update Project Task' : 'Create Project Task'}</Text>
                 <View style={[styles.formLabelRow, styles.formLabelRowTight]}>
                   <View style={styles.formIconCol}>
-                    <MaterialCommunityIcons name="format-list-checks" size={20} color="#2563eb" />
+                    <MaterialCommunityIcons name="format-list-checks" size={20} color={colors.primaryLight} />
                   </View>
                   <Text style={styles.formLabelUpper}>TASK TITLE</Text>
                 </View>
@@ -373,14 +381,14 @@ export function ProjectManagerSection({
                   value={taskTitle}
                   onChangeText={setTaskTitle}
                   placeholder="e.g. Update documentation"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.inputPlaceholder}
                   style={styles.input}
                 />
                 {isAdminRole(user?.role) ? (
                   <View>
                     <View style={styles.formLabelRow}>
                       <View style={styles.formIconCol}>
-                        <MaterialCommunityIcons name="account-outline" size={20} color="#2563eb" />
+                        <MaterialCommunityIcons name="account-outline" size={20} color={colors.primaryLight} />
                       </View>
                       <Text style={styles.formLabelUpper}>ASSIGN TO *</Text>
                     </View>
@@ -388,7 +396,7 @@ export function ProjectManagerSection({
                       <Text style={[styles.panelSub, { marginTop: 6 }]}>Loading HR users…</Text>
                     ) : null}
                     {!taskAssignableLoading && taskAssignableError ? (
-                      <Text style={{ fontSize: 12, color: '#dc2626', fontWeight: '600', marginTop: 6 }}>{taskAssignableError}</Text>
+                      <Text style={{ fontSize: 12, color: colors.dangerText, fontWeight: '600', marginTop: 6 }}>{taskAssignableError}</Text>
                     ) : null}
                     {!taskAssignableLoading && !taskAssignableError && hrAssignableUsers.length > 0 ? (
                       <View style={[styles.hrAssignSelectWrap, hrAssignMenuOpen && styles.hrAssignSelectWrapRaised]}>
@@ -403,7 +411,7 @@ export function ProjectManagerSection({
                             numberOfLines={1}>
                             {String(taskAssignee || '').trim() || 'Select HR'}
                           </Text>
-                          <MaterialCommunityIcons name={hrAssignMenuOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#64748b" />
+                          <MaterialCommunityIcons name={hrAssignMenuOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
                         </Pressable>
                         <Animated.View
                           pointerEvents={hrAssignMenuOpen ? 'auto' : 'none'}
@@ -445,7 +453,7 @@ export function ProjectManagerSection({
                                     last && styles.hrAssignSelectOptionLast,
                                     selected && styles.hrAssignSelectOptionActive,
                                   ]}>
-                                  <MaterialCommunityIcons name="account-outline" size={18} color="#2563eb" />
+                                  <MaterialCommunityIcons name="account-outline" size={18} color={colors.primaryLight} />
                                   <Text
                                     style={[styles.hrAssignSelectOptionText, selected && styles.hrAssignSelectOptionTextActive]}
                                     numberOfLines={1}>
@@ -466,23 +474,23 @@ export function ProjectManagerSection({
                 ) : null}
                 <View style={styles.formLabelRow}>
                   <View style={styles.formIconCol}>
-                    <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#2563eb" />
+                    <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.primaryLight} />
                   </View>
                   <Text style={styles.formLabelUpper}>DEADLINE *</Text>
                 </View>
                 <Pressable
                   onPress={openTaskDeadlinePicker}
                   style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }]}>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: taskDeadline?.trim() ? '#334155' : '#94a3b8' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: taskDeadline?.trim() ? colors.text : colors.inputPlaceholder }}>
                     {taskDeadline?.trim() && /^\d{4}-\d{2}-\d{2}$/.test(taskDeadline.trim())
                       ? taskDeadline.trim()
                       : 'mm/dd/yyyy'}
                   </Text>
-                  <MaterialCommunityIcons name="calendar-month-outline" size={24} color="#64748b" />
+                  <MaterialCommunityIcons name="calendar-month-outline" size={24} color={colors.textSecondary} />
                 </Pressable>
                 <View style={styles.formLabelRow}>
                   <View style={styles.formIconCol}>
-                    <MaterialCommunityIcons name="paperclip" size={20} color="#2563eb" />
+                    <MaterialCommunityIcons name="paperclip" size={20} color={colors.primaryLight} />
                   </View>
                   <Text style={styles.formLabelUpper}>ATTACHMENT</Text>
                   <Text style={styles.formLabelMuted}> (optional · max 5 MB)</Text>
@@ -499,7 +507,7 @@ export function ProjectManagerSection({
                 </View>
                 <View style={styles.formLabelRow}>
                   <View style={styles.formIconCol}>
-                    <MaterialCommunityIcons name="text-long" size={20} color="#2563eb" />
+                    <MaterialCommunityIcons name="text-long" size={20} color={colors.primaryLight} />
                   </View>
                   <Text style={styles.formLabelUpper}>DESCRIPTION</Text>
                   <Text style={styles.formLabelMuted}> (optional)</Text>
@@ -508,7 +516,7 @@ export function ProjectManagerSection({
                   value={taskDescription}
                   onChangeText={setTaskDescription}
                   placeholder="Task description"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.inputPlaceholder}
                   style={[styles.input, styles.textAreaSm]}
                   multiline
                   textAlignVertical="top"
@@ -564,7 +572,7 @@ export function ProjectManagerSection({
               value={iosDeadlineDraft}
               mode="date"
               display="spinner"
-              themeVariant="light"
+              themeVariant={isDark ? 'dark' : 'light'}
               onChange={(_, selected) => {
                 if (selected) setIosDeadlineDraft(selected);
               }}
@@ -598,7 +606,7 @@ export function ProjectManagerSection({
               value={iosFilterDraft}
               mode="date"
               display="spinner"
-              themeVariant="light"
+              themeVariant={isDark ? 'dark' : 'light'}
               onChange={(_, selected) => {
                 if (selected) setIosFilterDraft(selected);
               }}
@@ -639,7 +647,7 @@ export function ProjectManagerSection({
                 <View style={styles.taskDetailHeader}>
                   <View style={{ flex: 1 }}>
                     <View style={styles.taskDetailTitleRow}>
-                      <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#3b82f6" />
+                      <MaterialCommunityIcons name="clipboard-text-outline" size={20} color={colors.primaryLight} />
                       <Text style={styles.taskDetailHeaderTitle}>Task Details</Text>
                     </View>
                     <Text style={styles.taskDetailHeaderSub}>
@@ -656,7 +664,7 @@ export function ProjectManagerSection({
                             handleEditProjectTask(selectedProjectTask);
                             setSelectedProjectTask(null);
                           }}>
-                          <MaterialCommunityIcons name="pencil-outline" size={16} color="#0369a1" />
+                          <MaterialCommunityIcons name="pencil-outline" size={16} color={colors.primaryLight} />
                         </Pressable>
                         <Pressable
                           style={[styles.taskDetailActionBtn, styles.taskDetailDeleteBtn]}
@@ -664,12 +672,12 @@ export function ProjectManagerSection({
                             handleDeleteProjectTask(selectedProjectTask.id);
                             setSelectedProjectTask(null);
                           }}>
-                          <MaterialCommunityIcons name="trash-can-outline" size={16} color="#e11d48" />
+                          <MaterialCommunityIcons name="trash-can-outline" size={16} color={colors.dangerText} />
                         </Pressable>
                       </>
                     ) : null}
                     <Pressable onPress={() => setSelectedProjectTask(null)} hitSlop={8}>
-                      <MaterialCommunityIcons name="close" size={20} color="#94a3b8" />
+                      <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
                     </Pressable>
                   </View>
                 </View>
@@ -684,7 +692,7 @@ export function ProjectManagerSection({
                         onPress={() => promptTaskAttachmentActions(selectedProjectTask)}>
                         <Text style={styles.taskDetailAttachmentLabel}>Attachment</Text>
                         <View style={styles.taskDetailAttachmentRow}>
-                          <MaterialCommunityIcons name="paperclip" size={18} color="#2563eb" />
+                          <MaterialCommunityIcons name="paperclip" size={18} color={colors.primaryLight} />
                           <Text style={styles.taskDetailAttachmentName} numberOfLines={2} ellipsizeMode="tail">
                             {selectedProjectTask.attachmentName}
                           </Text>
@@ -701,11 +709,15 @@ export function ProjectManagerSection({
                   </View>
 
                   <View style={[styles.taskDetailAsideCol, isCompactMobile && styles.taskDetailAsideColMobile]}>
-                    <View style={[styles.projectStatePill, projectStatusTone(selectedProjectTask?.status)]}>
-                      <Text style={styles.projectStateText}>{String(selectedProjectTask?.status || 'Pending').toUpperCase()}</Text>
-                    </View>
+                    {selectedDetailStatusTone ? (
+                      <View style={[styles.projectStatePill, selectedDetailStatusTone.pill]}>
+                        <Text style={[styles.projectStateText, selectedDetailStatusTone.text]}>
+                          {String(selectedProjectTask?.status || 'Pending').toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : null}
                     <View style={styles.taskDetailDueRow}>
-                      <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#94a3b8" />
+                      <MaterialCommunityIcons name="calendar-month-outline" size={18} color={colors.textSecondary} />
                       <Text style={styles.taskDetailDueText}>{formatProjectDueDate(selectedProjectTask?.deadline).replace('Due ', 'DUE ')}</Text>
                     </View>
                   </View>
@@ -718,7 +730,7 @@ export function ProjectManagerSection({
                     <View style={styles.forwardSelectWrap}>
                       <Pressable style={styles.forwardSelectBtn} onPress={() => setForwardTlDropdownOpen((prev) => !prev)}>
                         <Text style={styles.forwardSelectText}>{forwardTlName || 'Select Team Leader'}</Text>
-                        <MaterialCommunityIcons name={forwardTlDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#94a3b8" />
+                        <MaterialCommunityIcons name={forwardTlDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
                       </Pressable>
                       {forwardTlDropdownOpen ? (
                         <Animated.View
@@ -786,7 +798,7 @@ export function ProjectManagerSection({
                   <View style={styles.forwardWrap}>
                     <View style={[styles.formLabelRow, styles.formLabelRowTight]}>
                       <View style={styles.formIconCol}>
-                        <MaterialCommunityIcons name="note-text-outline" size={18} color="#6366f1" />
+                        <MaterialCommunityIcons name="note-text-outline" size={18} color={colors.primaryLight} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.formLabelUpper}>Submit note</Text>
@@ -797,7 +809,7 @@ export function ProjectManagerSection({
                       value={taskSubmitNote}
                       onChangeText={setTaskSubmitNote}
                       placeholder="Enter your submission note…"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor={colors.inputPlaceholder}
                       style={[styles.input, styles.textAreaSm]}
                       multiline
                       textAlignVertical="top"

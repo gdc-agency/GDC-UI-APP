@@ -22,9 +22,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
-import { BrandColors } from '@/constants/brand';
 import { SkeletonGroup, SkeletonProfileForm } from '@/components/ui/skeleton';
+import { ThemeToggleRow } from '@/components/ui/theme-toggle';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
 import { updateProfile } from '@/services/api';
 
 function empty(s) {
@@ -62,6 +63,8 @@ function ProfileInfoRow({
   editable = true,
   keyboardType,
   multiline,
+  styles,
+  colors,
 }) {
   const showCaret = Boolean(fieldKey && focusedField === fieldKey);
 
@@ -94,6 +97,7 @@ function ProfileInfoRow({
 
 export default function ProfileScreen() {
   const { user, token, refreshProfile, mergeFromServerUserRow } = useAuth();
+  const { colors } = useTheme();
 
   const userRef = React.useRef(user);
   userRef.current = user;
@@ -115,6 +119,235 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const sheetTranslate = React.useRef(new Animated.Value(320)).current;
   const sheetBackdrop = React.useRef(new Animated.Value(0)).current;
+
+  const styles = React.useMemo(
+    () =>
+      StyleSheet.create({
+        safe: { flex: 1, backgroundColor: colors.pageBg },
+        scroll: { paddingBottom: 124 },
+        loadingWrap: { paddingHorizontal: 16, paddingTop: 8 },
+        banner: {
+          marginHorizontal: 16,
+          marginTop: 4,
+          borderRadius: 18,
+          padding: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 18,
+          overflow: 'hidden',
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.22,
+          shadowRadius: 16,
+          elevation: 6,
+        },
+        bannerLeft: { flexShrink: 0, marginRight: 4 },
+        avatarWrap: { position: 'relative' },
+        avatarCircle: {
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.surfaceMuted,
+          borderWidth: 3,
+          borderColor: colors.card,
+          overflow: 'hidden',
+        },
+        avatarImg: { width: '100%', height: '100%' },
+        avatarText: { color: colors.textMuted, fontSize: 28, fontWeight: '800' },
+        avatarCameraBtn: {
+          position: 'absolute',
+          right: -2,
+          bottom: -2,
+          width: 26,
+          height: 26,
+          borderRadius: 13,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.card,
+          borderWidth: 2,
+          borderColor: colors.card,
+        },
+        bannerBody: { flex: 1, minWidth: 0, gap: 6, paddingRight: 4 },
+        bannerName: { fontSize: 17, fontWeight: '800', color: '#fff', lineHeight: 20 },
+        gdcBadge: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          alignSelf: 'flex-start',
+          gap: 6,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+          borderRadius: 20,
+          backgroundColor: 'rgba(255,255,255,0.22)',
+          maxWidth: '100%',
+        },
+        gdcBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff', flexShrink: 1 },
+        roleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        roleText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.95)', flex: 1 },
+        infoCard: {
+          marginHorizontal: 16,
+          marginTop: 16,
+          backgroundColor: colors.card,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: colors.borderLight,
+          paddingVertical: 4,
+          shadowColor: colors.text,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.06,
+          shadowRadius: 14,
+          elevation: 3,
+        },
+        infoRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 14,
+          paddingVertical: 14,
+          gap: 12,
+        },
+        infoIconWrap: {
+          width: 42,
+          height: 42,
+          borderRadius: 21,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        },
+        infoTextCol: { flex: 1, minWidth: 0 },
+        infoLabel: { fontSize: 12, color: colors.textSecondary, fontWeight: '600', marginBottom: 2 },
+        infoValue: {
+          fontSize: 15,
+          fontWeight: '700',
+          color: colors.text,
+          padding: 0,
+          margin: 0,
+          minHeight: 22,
+        },
+        infoValueLocked: { color: colors.textMuted },
+        infoValueMultiline: { minHeight: 44, lineHeight: 20 },
+        infoDivider: {
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: colors.border,
+          marginLeft: 68,
+        },
+        themeSection: {
+          marginHorizontal: 16,
+          marginTop: 16,
+        },
+        saveBtn: {
+          marginHorizontal: 16,
+          marginTop: 20,
+          backgroundColor: colors.primaryMid,
+          borderRadius: 14,
+          paddingVertical: 14,
+          paddingHorizontal: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        saveBtnContent: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+        },
+        saveBtnIconWrap: {
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          backgroundColor: 'rgba(255,255,255,0.22)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+        photoSheetRoot: {
+          flex: 1,
+          justifyContent: 'flex-end',
+        },
+        photoSheetBackdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: colors.modalBackdrop,
+        },
+        photoSheetPanel: {
+          backgroundColor: colors.modalSheetBg,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingHorizontal: 22,
+          paddingTop: 8,
+          shadowColor: colors.text,
+          shadowOffset: { width: 0, height: -8 },
+          shadowOpacity: 0.12,
+          shadowRadius: 24,
+          elevation: 16,
+        },
+        photoSheetHandleWrap: {
+          alignItems: 'center',
+          paddingVertical: 10,
+        },
+        photoSheetHandle: {
+          width: 40,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.borderStrong,
+        },
+        photoSheetTitle: {
+          fontSize: 20,
+          fontWeight: '800',
+          color: colors.text,
+          letterSpacing: -0.3,
+        },
+        photoSheetSubtitle: {
+          marginTop: 6,
+          marginBottom: 8,
+          fontSize: 14,
+          color: colors.textMuted,
+          fontWeight: '500',
+        },
+        photoSheetOptions: {
+          marginTop: 12,
+          gap: 4,
+        },
+        photoSheetRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 16,
+          paddingHorizontal: 4,
+          borderRadius: 14,
+          gap: 16,
+        },
+        photoSheetRowLast: {
+          marginTop: 4,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.borderStrong,
+          paddingTop: 18,
+          marginBottom: 2,
+        },
+        photoSheetRowPressed: {
+          backgroundColor: colors.surfaceMuted,
+        },
+        photoSheetIconCircle: {
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          backgroundColor: colors.infoBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        photoSheetIconCircleDanger: {
+          backgroundColor: colors.dangerBg,
+        },
+        photoSheetRowLabel: {
+          fontSize: 16,
+          fontWeight: '700',
+          color: colors.text,
+        },
+        photoSheetRowLabelDanger: {
+          fontSize: 16,
+          fontWeight: '700',
+          color: colors.dangerText,
+        },
+      }),
+    [colors],
+  );
 
   const closePhotoSheet = React.useCallback(
     (afterClose) => {
@@ -336,7 +569,7 @@ export default function ProfileScreen() {
         ) : (
           <>
             <LinearGradient
-              colors={[BrandColors.primaryMid, BrandColors.primaryLight, '#5eb8ff']}
+              colors={[colors.primaryMid, colors.primaryLight, '#5eb8ff']}
               locations={[0, 0.55, 1]}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
@@ -357,7 +590,7 @@ export default function ProfileScreen() {
                     )}
                   </View>
                   <Pressable style={styles.avatarCameraBtn} onPress={onChangePhoto} disabled={saving || !token}>
-                    <MaterialCommunityIcons name="camera" size={14} color={BrandColors.primaryMid} />
+                    <MaterialCommunityIcons name="camera" size={14} color={colors.primaryMid} />
                   </Pressable>
                 </View>
               </View>
@@ -403,6 +636,8 @@ export default function ProfileScreen() {
                 inputRef={nameInputRef}
                 value={name}
                 onChangeText={setName}
+                styles={styles}
+                colors={colors}
               />
               <View style={styles.infoDivider} />
               <ProfileInfoRow
@@ -412,6 +647,8 @@ export default function ProfileScreen() {
                 label="Email"
                 value={email}
                 editable={false}
+                styles={styles}
+                colors={colors}
               />
               <View style={styles.infoDivider} />
               <ProfileInfoRow
@@ -426,6 +663,8 @@ export default function ProfileScreen() {
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
+                styles={styles}
+                colors={colors}
               />
               <View style={styles.infoDivider} />
               <ProfileInfoRow
@@ -435,6 +674,8 @@ export default function ProfileScreen() {
                 label="Department"
                 value={departmentLabel || '—'}
                 editable={false}
+                styles={styles}
+                colors={colors}
               />
               <View style={styles.infoDivider} />
               <ProfileInfoRow
@@ -448,6 +689,8 @@ export default function ProfileScreen() {
                 inputRef={cnicInputRef}
                 value={cnic}
                 onChangeText={setCnic}
+                styles={styles}
+                colors={colors}
               />
               <View style={styles.infoDivider} />
               <ProfileInfoRow
@@ -462,7 +705,13 @@ export default function ProfileScreen() {
                 value={address}
                 onChangeText={setAddress}
                 multiline
+                styles={styles}
+                colors={colors}
               />
+            </View>
+
+            <View style={styles.themeSection}>
+              <ThemeToggleRow />
             </View>
 
             <Pressable style={styles.saveBtn} onPress={onSave} disabled={saving || loading} activeOpacity={0.9}>
@@ -511,7 +760,7 @@ export default function ProfileScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Open camera">
                   <View style={styles.photoSheetIconCircle}>
-                    <MaterialCommunityIcons name="camera-outline" size={22} color={BrandColors.primaryMid} />
+                    <MaterialCommunityIcons name="camera-outline" size={22} color={colors.primaryMid} />
                   </View>
                   <Text style={styles.photoSheetRowLabel}>Camera</Text>
                 </Pressable>
@@ -522,7 +771,7 @@ export default function ProfileScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Open photo library">
                 <View style={styles.photoSheetIconCircle}>
-                  <MaterialCommunityIcons name="image-multiple-outline" size={22} color={BrandColors.primaryMid} />
+                  <MaterialCommunityIcons name="image-multiple-outline" size={22} color={colors.primaryMid} />
                 </View>
                 <Text style={styles.photoSheetRowLabel}>Photo Library</Text>
               </Pressable>
@@ -544,223 +793,3 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
-  scroll: { paddingBottom: 124 },
-  loadingWrap: { paddingHorizontal: 16, paddingTop: 8 },
-  banner: {
-    marginHorizontal: 16,
-    marginTop: 4,
-    borderRadius: 18,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-    overflow: 'hidden',
-    shadowColor: BrandColors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bannerLeft: { flexShrink: 0, marginRight: 4 },
-  avatarWrap: { position: 'relative' },
-  avatarCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0b1729',
-    borderWidth: 3,
-    borderColor: '#fff',
-    overflow: 'hidden',
-  },
-  avatarImg: { width: '100%', height: '100%' },
-  avatarText: { color: '#e2e8f0', fontSize: 28, fontWeight: '800' },
-  avatarCameraBtn: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  bannerBody: { flex: 1, minWidth: 0, gap: 6, paddingRight: 4 },
-  bannerName: { fontSize: 17, fontWeight: '800', color: '#fff', lineHeight: 20 },
-  gdcBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    maxWidth: '100%',
-  },
-  gdcBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff', flexShrink: 1 },
-  roleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  roleText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.95)', flex: 1 },
-  infoCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#e8edf5',
-    paddingVertical: 4,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  infoIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  infoTextCol: { flex: 1, minWidth: 0 },
-  infoLabel: { fontSize: 12, color: '#94a3b8', fontWeight: '600', marginBottom: 2 },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: BrandColors.text,
-    padding: 0,
-    margin: 0,
-    minHeight: 22,
-  },
-  infoValueLocked: { color: '#64748b' },
-  infoValueMultiline: { minHeight: 44, lineHeight: 20 },
-  infoDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#eef2f7',
-    marginLeft: 68,
-  },
-  saveBtn: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: BrandColors.primaryMid,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  saveBtnIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  photoSheetRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  photoSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.52)',
-  },
-  photoSheetPanel: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 22,
-    paddingTop: 8,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 16,
-  },
-  photoSheetHandleWrap: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  photoSheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
-  },
-  photoSheetTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: BrandColors.text,
-    letterSpacing: -0.3,
-  },
-  photoSheetSubtitle: {
-    marginTop: 6,
-    marginBottom: 8,
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  photoSheetOptions: {
-    marginTop: 12,
-    gap: 4,
-  },
-  photoSheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-    borderRadius: 14,
-    gap: 16,
-  },
-  photoSheetRowLast: {
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 18,
-    marginBottom: 2,
-  },
-  photoSheetRowPressed: {
-    backgroundColor: '#f1f5f9',
-  },
-  photoSheetIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoSheetIconCircleDanger: {
-    backgroundColor: '#fef2f2',
-  },
-  photoSheetRowLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: BrandColors.text,
-  },
-  photoSheetRowLabelDanger: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#dc2626',
-  },
-});

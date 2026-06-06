@@ -1,9 +1,8 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { BrandColors } from '@/constants/brand';
-import { ChatTheme } from '@/constants/chat-theme';
+import { useTheme } from '@/context/theme-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -24,10 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const WA_BG = '#0B141A';
 const FAB_SIZE = 52;
-/** Same blue as chat composer send button (`ChatTheme.sendBtn`). */
-const FAB_GRADIENT = [BrandColors.primaryLight, ChatTheme.sendBtn, BrandColors.primaryMid];
 const DOUBLE_TAP_SCALE = 2.5;
 const MAX_PINCH_SCALE = 4;
 
@@ -35,8 +31,97 @@ const MAX_PINCH_SCALE = 4;
  * @param {{ visible: boolean; uri: string; onClose: () => void; onSend: (caption?: string) => void; sending?: boolean }} props
  */
 export function ChatImageSendPreview({ visible, uri, onClose, onSend, sending = false }) {
+  const { colors, chatTheme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: screenW, height: screenH } = useWindowDimensions();
+
+  const previewBg = chatTheme.wallpaper;
+  const fabGradient = useMemo(
+    () => [colors.primaryLight, chatTheme.sendBtn, colors.primaryMid],
+    [colors, chatTheme],
+  );
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        gestureRoot: {
+          flex: 1,
+        },
+        modalHost: {
+          flex: 1,
+          backgroundColor: 'transparent',
+        },
+        backdrop: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: previewBg,
+        },
+        sheet: {
+          flex: 1,
+          backgroundColor: previewBg,
+        },
+        headerOverlay: {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          paddingHorizontal: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+        },
+        backHit: {
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        imageStage: {
+          ...StyleSheet.absoluteFillObject,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: previewBg,
+        },
+        placeholder: {
+          ...StyleSheet.absoluteFillObject,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: previewBg,
+        },
+        imageWrap: {
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+        fabAnchor: {
+          position: 'absolute',
+          zIndex: 30,
+        },
+        fabPress: {
+          borderRadius: FAB_SIZE / 2,
+          ...Platform.select({
+            ios: {
+              shadowColor: chatTheme.sendBtn,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 8,
+            },
+            android: { elevation: 8 },
+            default: {},
+          }),
+        },
+        fab: {
+          width: FAB_SIZE,
+          height: FAB_SIZE,
+          borderRadius: FAB_SIZE / 2,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        fabIcon: {
+          marginLeft: 2,
+          marginTop: 1,
+        },
+      }),
+    [chatTheme, previewBg],
+  );
 
   const sheetOpacity = useSharedValue(0);
   const sheetScale = useSharedValue(0.94);
@@ -90,7 +175,7 @@ export function ChatImageSendPreview({ visible, uri, onClose, onSend, sending = 
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={closeAnimated}>
-      <StatusBar barStyle="light-content" backgroundColor={WA_BG} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={previewBg} />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={[styles.modalHost, { width: screenW, height: screenH }]}>
           <Animated.View style={[styles.backdrop, backdropStyle]} />
@@ -101,6 +186,7 @@ export function ChatImageSendPreview({ visible, uri, onClose, onSend, sending = 
               screenH={screenH}
               onDismiss={closeAnimated}
               dismissEnabled={!sending}
+              styles={styles}
             />
 
             <View
@@ -122,6 +208,8 @@ export function ChatImageSendPreview({ visible, uri, onClose, onSend, sending = 
               right={16}
               onPress={handleSend}
               sending={sending}
+              fabGradient={fabGradient}
+              styles={styles}
             />
           </Animated.View>
         </View>
@@ -136,6 +224,7 @@ const ZoomablePreviewImage = memo(function ZoomablePreviewImage({
   screenH,
   onDismiss,
   dismissEnabled,
+  styles,
 }) {
   const [loading, setLoading] = useState(true);
 
@@ -260,7 +349,7 @@ const ZoomablePreviewImage = memo(function ZoomablePreviewImage({
   );
 });
 
-const SendFab = memo(function SendFab({ bottom, right, onPress, sending }) {
+const SendFab = memo(function SendFab({ bottom, right, onPress, sending, fabGradient, styles }) {
   const pressScale = useSharedValue(1);
 
   const fabStyle = useAnimatedStyle(() => ({
@@ -281,7 +370,7 @@ const SendFab = memo(function SendFab({ bottom, right, onPress, sending }) {
         style={styles.fabPress}
         accessibilityRole="button"
         accessibilityLabel="Send photo">
-        <LinearGradient colors={FAB_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fab}>
+        <LinearGradient colors={fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fab}>
           {sending ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
@@ -291,82 +380,4 @@ const SendFab = memo(function SendFab({ bottom, right, onPress, sending }) {
       </Pressable>
     </Animated.View>
   );
-});
-
-const styles = StyleSheet.create({
-  gestureRoot: {
-    flex: 1,
-  },
-  modalHost: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: WA_BG,
-  },
-  sheet: {
-    flex: 1,
-    backgroundColor: WA_BG,
-  },
-  headerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backHit: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageStage: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: WA_BG,
-  },
-  placeholder: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: WA_BG,
-  },
-  imageWrap: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fabAnchor: {
-    position: 'absolute',
-    zIndex: 30,
-  },
-  fabPress: {
-    borderRadius: FAB_SIZE / 2,
-    ...Platform.select({
-      ios: {
-        shadowColor: ChatTheme.sendBtn,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-      default: {},
-    }),
-  },
-  fab: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabIcon: {
-    marginLeft: 2,
-    marginTop: 1,
-  },
 });

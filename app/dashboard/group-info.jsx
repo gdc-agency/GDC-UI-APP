@@ -3,15 +3,16 @@ import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { GroupInfoScreen } from '@/components/chat/group-info-screen';
-import { BrandColors } from '@/constants/brand';
 import { useAuth } from '@/context/auth-context';
 import { useGdcInbox } from '@/context/gdc-inbox-context';
+import { useTheme } from '@/context/theme-context';
 import { ensureGdcSocketConnected } from '@/services/realtime/gdc-socket';
 
 export default function GroupInfoRoute() {
   const { chatId } = useLocalSearchParams();
   const cid = chatId != null ? String(chatId) : '';
   const { token } = useAuth();
+  const { colors } = useTheme();
   const inbox = useGdcInbox();
   const {
     threads,
@@ -32,6 +33,15 @@ export default function GroupInfoRoute() {
   const thread = useMemo(
     () => threads.find((t) => String(t.id) === cid) ?? null,
     [threads, cid],
+  );
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.pageBg },
+        err: { color: colors.textMuted },
+      }),
+    [colors],
   );
 
   /** Stay in chat socket room so group metadata updates arrive without refresh. */
@@ -57,7 +67,7 @@ export default function GroupInfoRoute() {
   if (!thread) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={BrandColors.primaryMid} />
+        <ActivityIndicator color={colors.primaryMid} />
       </View>
     );
   }
@@ -81,8 +91,3 @@ export default function GroupInfoRoute() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f2f8' },
-  err: { color: '#64748b' },
-});

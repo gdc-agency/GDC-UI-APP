@@ -8,7 +8,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "generate:icons": "node scripts/generate-icon-assets.mjs",
+    "build:apk": "eas build -p android --profile preview --non-interactive",
+    "build:dev": "eas build -p android --profile development --non-interactive"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -21,6 +24,7 @@
     "expo-blur": "~15.0.8",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.22",

@@ -1,25 +1,12 @@
 import { Platform, StyleSheet } from 'react-native';
 
-export const RqColors = {
-  blue: '#2563EB',
-  green: '#16A34A',
-  greenBg: '#DCFCE7',
-  greenText: '#15803D',
-  red: '#DC2626',
-  redBg: '#FEE2E2',
-  redText: '#B91C1C',
-  amber: '#F59E0B',
-  amberBg: '#FEF3C7',
-  amberText: '#B45309',
-  bg: '#F1F5F9',
-  card: '#FFFFFF',
-  text: '#0F172A',
-  textMuted: '#64748B',
-  white: '#FFFFFF',
-  border: '#E5E7EB',
-};
+import { getRqColors } from '@/constants/themed-palettes';
+import { lightTheme } from '@/constants/themes';
 
-export const requestStyles = StyleSheet.create({
+/** @param {import('@/constants/themes').AppThemeColors} c */
+export function createRequestStyles(c) {
+  const RqColors = getRqColors(c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: RqColors.bg },
   scroll: { paddingHorizontal: 12, paddingBottom: 120, paddingTop: 8 },
   hero: {
@@ -35,7 +22,7 @@ export const requestStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: RqColors.white,
+    backgroundColor: RqColors.heroIconBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -43,7 +30,7 @@ export const requestStyles = StyleSheet.create({
   heroTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: RqColors.white,
+    color: c.heroText,
     letterSpacing: -0.3,
   },
   heroSub: {
@@ -57,14 +44,14 @@ export const requestStyles = StyleSheet.create({
     backgroundColor: RqColors.card,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: RqColors.inputBorder,
     paddingHorizontal: 8,
     paddingVertical: 8,
     marginBottom: 14,
   },
   tabsRow: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: RqColors.pillTrackBg,
     borderRadius: 999,
     padding: 4,
     gap: 6,
@@ -79,9 +66,9 @@ export const requestStyles = StyleSheet.create({
     borderRadius: 999,
   },
   tabBtnActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: RqColors.tabActiveBg,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: RqColors.chipActiveBorder,
   },
   tabText: {
     fontSize: 13,
@@ -97,7 +84,7 @@ export const requestStyles = StyleSheet.create({
     backgroundColor: RqColors.card,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
+    borderColor: RqColors.dividerSoft,
     padding: 16,
     marginBottom: 14,
     ...Platform.select({
@@ -143,10 +130,10 @@ export const requestStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: RqColors.inputBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: RqColors.inputBorder,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
@@ -161,8 +148,8 @@ export const requestStyles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    borderColor: RqColors.inputBorder,
+    backgroundColor: RqColors.inputBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -183,8 +170,8 @@ export const requestStyles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: RqColors.white,
+    borderColor: RqColors.inputBorder,
+    backgroundColor: RqColors.chipBg,
   },
   pillCompact: {
     paddingHorizontal: 10,
@@ -192,8 +179,8 @@ export const requestStyles = StyleSheet.create({
     borderRadius: 18,
   },
   pillActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
+    backgroundColor: RqColors.chipActiveBg,
+    borderColor: RqColors.chipActiveBorder,
   },
   pillText: {
     fontSize: 13,
@@ -204,7 +191,7 @@ export const requestStyles = StyleSheet.create({
     fontSize: 12,
   },
   pillTextActive: {
-    color: RqColors.blue,
+    color: RqColors.chipActiveText,
     fontWeight: '700',
   },
   hint: {
@@ -235,8 +222,8 @@ export const requestStyles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
+    borderColor: RqColors.inputBorder,
+    backgroundColor: RqColors.inputBg,
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -248,7 +235,7 @@ export const requestStyles = StyleSheet.create({
     minWidth: 0,
     fontSize: 12,
     fontWeight: '800',
-    color: '#334155',
+    color: RqColors.text,
   },
   statusDropdownMenu: {
     position: 'absolute',
@@ -256,27 +243,27 @@ export const requestStyles = StyleSheet.create({
     left: 0,
     right: 0,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: RqColors.inputBorder,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: RqColors.dropdownBg,
     overflow: 'hidden',
   },
   statusDropdownOption: {
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: RqColors.divider,
   },
   statusDropdownOptionLast: { borderBottomWidth: 0 },
-  statusDropdownOptionActive: { backgroundColor: '#EFF6FF' },
-  statusDropdownOptionText: { fontSize: 12, fontWeight: '700', color: '#475569' },
-  statusDropdownOptionTextActive: { color: RqColors.blue, fontWeight: '800' },
+  statusDropdownOptionActive: { backgroundColor: RqColors.chipActiveBg },
+  statusDropdownOptionText: { fontSize: 12, fontWeight: '700', color: RqColors.textMuted },
+  statusDropdownOptionTextActive: { color: RqColors.chipActiveText, fontWeight: '800' },
   reqCard: {
     flexDirection: 'row',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8EDF3',
-    backgroundColor: RqColors.white,
+    borderColor: RqColors.dividerSoft,
+    backgroundColor: RqColors.surfaceElevated,
     marginBottom: 12,
     overflow: 'hidden',
   },
@@ -326,7 +313,7 @@ export const requestStyles = StyleSheet.create({
   },
   reqMetaLabel: {
     fontWeight: '700',
-    color: '#475569',
+    color: RqColors.textMuted,
   },
   reqRight: { alignItems: 'flex-end', gap: 8, maxWidth: 150 },
   reqDateBlock: {
@@ -367,7 +354,7 @@ export const requestStyles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: RqColors.divider,
   },
   approveBtn: {
     flex: 1,
@@ -392,9 +379,9 @@ export const requestStyles = StyleSheet.create({
     marginTop: 8,
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#FFF5F5',
+    backgroundColor: RqColors.redBg,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: RqColors.red,
   },
   rejectTitle: {
     fontSize: 11,
@@ -404,7 +391,7 @@ export const requestStyles = StyleSheet.create({
   rejectText: {
     marginTop: 2,
     fontSize: 12,
-    color: '#7F1D1D',
+    color: RqColors.redText,
   },
   emptyBox: {
     paddingVertical: 28,
@@ -416,18 +403,20 @@ export const requestStyles = StyleSheet.create({
   },
 });
 
-export function requestStripeColor(status) {
-  if (status === 'Approved') return RqColors.green;
-  if (status === 'Rejected') return RqColors.red;
-  return RqColors.amber;
 }
 
-export function requestStatusStyle(status) {
+export function requestStripeColor(status, rq = getRqColors(lightTheme)) {
+  if (status === 'Approved') return rq.green;
+  if (status === 'Rejected') return rq.red;
+  return rq.amber;
+}
+
+export function requestStatusStyle(status, rq = getRqColors(lightTheme)) {
   if (status === 'Approved') {
-    return { bg: RqColors.greenBg, color: RqColors.greenText, icon: 'check-circle' };
+    return { bg: rq.greenBg, color: rq.greenText, icon: 'check-circle' };
   }
   if (status === 'Rejected') {
-    return { bg: RqColors.redBg, color: RqColors.redText, icon: 'close-circle' };
+    return { bg: rq.redBg, color: rq.redText, icon: 'close-circle' };
   }
-  return { bg: RqColors.amberBg, color: RqColors.amberText, icon: 'clock-outline' };
+  return { bg: rq.amberBg, color: rq.amberText, icon: 'clock-outline' };
 }

@@ -4,13 +4,17 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimension
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { useTheme } from '@/context/theme-context';
 import { isAdminOrHrRole, isHrRole } from '@/utils/roles';
 
 import { AdminRequestsBoard } from './admin-requests-board';
-import { RqColors, requestStyles as rq } from './request-styles';
 import { PrettyRequestCard } from './pretty-request-card';
 
 export function RequestsSection({ styles, ctx }) {
+  const { moduleStyles } = useTheme();
+  const rq = moduleStyles.request.styles;
+  const RqColors = moduleStyles.request.colors;
+
   const { width } = useWindowDimensions();
   const isSmallMobile = width < 360;
   const isTinyMobile = width < 320;

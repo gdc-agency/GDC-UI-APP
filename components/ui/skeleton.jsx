@@ -2,11 +2,18 @@ import React from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const BASE = '#eef2f7';
-const HILITE = '#ffffff';
-const EDGE = '#f8fafc';
+import { useThemeOptional } from '@/context/theme-context';
 
 const ShimmerCtx = React.createContext(null);
+
+function useSkeletonPalette() {
+  const theme = useThemeOptional();
+  return {
+    base: theme?.colors?.skeletonBase ?? '#eef2f7',
+    highlight: theme?.colors?.skeletonHighlight ?? '#ffffff',
+    edge: theme?.colors?.surfaceMuted ?? '#f8fafc',
+  };
+}
 
 export function SkeletonGroup({ children, speedMs = 1650, delayMs = 180 }) {
   const x = React.useRef(new Animated.Value(-1)).current;
@@ -44,16 +51,17 @@ export function SkeletonGroup({ children, speedMs = 1650, delayMs = 180 }) {
 
 export function SkeletonBox({ width = '100%', height = 14, radius = 10, style }) {
   const ctx = React.useContext(ShimmerCtx);
+  const palette = useSkeletonPalette();
   const x = ctx?.x;
   const ready = ctx?.ready ?? true;
   const translateX = x ? x.interpolate({ inputRange: [-1, 1], outputRange: [-260, 260] }) : 0;
 
   return (
-    <View style={[styles.box, { width, height, borderRadius: radius }, style]}>
+    <View style={[styles.box, { width, height, borderRadius: radius, backgroundColor: palette.base }, style]}>
       {ready ? (
         <Animated.View style={[styles.shimmer, { transform: [{ translateX }] }]}>
           <LinearGradient
-            colors={[EDGE, HILITE, EDGE]}
+            colors={[palette.edge, palette.highlight, palette.edge]}
             locations={[0, 0.5, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
@@ -153,7 +161,6 @@ export function SkeletonProfileForm() {
 
 const styles = StyleSheet.create({
   box: {
-    backgroundColor: BASE,
     overflow: 'hidden',
   },
   shimmer: {

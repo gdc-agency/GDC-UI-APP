@@ -2,15 +2,15 @@ import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, usePathname } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlobalChatNotice } from '@/components/chat/global-chat-notice';
 import { HapticTab } from '@/components/haptic-tab';
 import { FloatingParticles } from '@/components/ui/floating-particles';
-import { BrandColors } from '@/constants/brand';
 import { ChatChromeProvider, useChatChrome } from '@/context/chat-chrome-context';
+import { useTheme } from '@/context/theme-context';
 import { useGdcNotificationRealtime } from '@/hooks/useGdcNotificationRealtime';
 import { formatTabBadgeCount } from '@/utils/compute-total-chat-unread';
 import { subscribeChatUnreadTotal } from '@/utils/chat-unread-bus';
@@ -31,7 +31,7 @@ function skeletonCardCountForPath(pathname) {
   return 3;
 }
 
-function RouteSkeletonOverlay({ shimmerX, overlayStyle, cardCount }) {
+function RouteSkeletonOverlay({ shimmerX, overlayStyle, cardCount, styles }) {
   return (
     <View style={[styles.skeletonOverlay, overlayStyle]} pointerEvents="auto">
       {Array.from({ length: cardCount }, (_, item) => (
@@ -52,6 +52,7 @@ function RouteSkeletonOverlay({ shimmerX, overlayStyle, cardCount }) {
 }
 
 function TabBarBackground() {
+  const { colors } = useTheme();
   const ambientShift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -85,7 +86,7 @@ function TabBarBackground() {
       <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFillObject} />
 
       <LinearGradient
-        colors={[BrandColors.splashTop, BrandColors.primary, '#0d5cbe']}
+        colors={colors.tabBarGradient}
         locations={[0, 0.45, 1]}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
@@ -106,7 +107,7 @@ function TabBarBackground() {
 }
 
 /** Fixed 44×44 anchor so tab badges stay top-right when the tab becomes active. */
-function TabBadge({ value }) {
+function TabBadge({ value, styles }) {
   if (!value) return null;
   return (
     <View style={styles.tabBadge}>
@@ -117,7 +118,7 @@ function TabBadge({ value }) {
   );
 }
 
-function TabPillIcon({ icon, label, color, focused, badge }) {
+function TabPillIcon({ icon, label, color, focused, badge, styles, colors }) {
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -145,7 +146,7 @@ function TabPillIcon({ icon, label, color, focused, badge }) {
         <View style={styles.tabBadgeAnchor}>
           <Animated.View style={[styles.activeOrbLift, { transform: [{ scale: orbScale }] }]}>
             <LinearGradient
-              colors={[BrandColors.primaryLight, BrandColors.primaryMid, BrandColors.primary]}
+              colors={[colors.primaryLight, colors.primaryMid, colors.primary]}
               locations={[0, 0.5, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -153,7 +154,7 @@ function TabPillIcon({ icon, label, color, focused, badge }) {
               <MaterialCommunityIcons name={icon} size={20} color="#ffffff" />
             </LinearGradient>
           </Animated.View>
-          <TabBadge value={badge} />
+          <TabBadge value={badge} styles={styles} />
         </View>
         <Animated.Text style={[styles.activeText, { opacity: textOpacity }]} numberOfLines={1} ellipsizeMode="clip">
           {label}
@@ -167,7 +168,7 @@ function TabPillIcon({ icon, label, color, focused, badge }) {
         <View style={styles.tabIconOuter}>
           <MaterialCommunityIcons name={icon} size={21} color={color} />
         </View>
-        <TabBadge value={badge} />
+        <TabBadge value={badge} styles={styles} />
       </View>
     </View>
   );
@@ -176,12 +177,181 @@ function TabPillIcon({ icon, label, color, focused, badge }) {
 function DashboardTabsLayoutInner() {
   const pathname = usePathname();
   const { inConversation } = useChatChrome();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarTotalHeight = TAB_BAR_BASE_HEIGHT + insets.bottom;
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const { badge: notificationTabBadge } = useGdcNotificationRealtime();
   const [chatTabBadge, setChatTabBadge] = useState(/** @type {string | undefined} */ (undefined));
   const shimmerX = useRef(new Animated.Value(-140)).current;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1 },
+        globalParticles: {
+          zIndex: 999,
+          elevation: 999,
+          opacity: 0.9,
+        },
+        skeletonOverlay: {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          backgroundColor: colors.pageBg,
+          justifyContent: 'flex-start',
+          alignItems: 'stretch',
+        },
+        skeletonCard: {
+          position: 'relative',
+          overflow: 'hidden',
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          backgroundColor: colors.card,
+          padding: 14,
+        },
+        skeletonCardSpacing: {
+          marginBottom: 12,
+        },
+        skeletonRowTop: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        },
+        skeletonLine: {
+          height: 12,
+          borderRadius: 6,
+          backgroundColor: colors.skeletonBase,
+          marginBottom: 11,
+        },
+        skeletonLineWide: {
+          width: '66%',
+          marginBottom: 0,
+        },
+        skeletonLineMid: {
+          width: '60%',
+        },
+        skeletonLineShort: {
+          width: '22%',
+        },
+        skeletonLineFull: {
+          width: '95%',
+          marginBottom: 0,
+        },
+        skeletonChip: {
+          width: 32,
+          height: 18,
+          borderRadius: 6,
+          backgroundColor: colors.skeletonBase,
+        },
+        skeletonShimmer: {
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          width: 180,
+          backgroundColor: colors.skeletonHighlight,
+          opacity: 0.82,
+        },
+        tabBar: {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderWidth: 0,
+          borderTopWidth: 1,
+          borderColor: 'rgba(255,255,255,0.2)',
+          backgroundColor: 'transparent',
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          paddingHorizontal: 8,
+          paddingTop: 10,
+          overflow: 'visible',
+          zIndex: 100,
+          shadowColor: '#020617',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.18,
+          shadowRadius: 12,
+          elevation: 24,
+        },
+        tabBarItem: { flex: 1, paddingVertical: 0, alignItems: 'center', justifyContent: 'center' },
+        tabIconSlot: {
+          width: 76,
+          height: 58,
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        },
+        tabBadgeAnchor: {
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'visible',
+        },
+        tabBadge: {
+          position: 'absolute',
+          top: -4,
+          right: -8,
+          minWidth: 18,
+          height: 18,
+          borderRadius: 9,
+          paddingHorizontal: 4,
+          backgroundColor: '#ef4444',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: colors.primary,
+          zIndex: 20,
+        },
+        tabBadgeText: {
+          color: '#ffffff',
+          fontSize: 11,
+          fontWeight: '700',
+          lineHeight: 13,
+        },
+        tabIconOuter: {
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.14)',
+        },
+        activeOrbLift: {
+          borderRadius: 26,
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.45,
+          shadowRadius: 12,
+          elevation: 14,
+        },
+        activeOrbGradient: {
+          width: 52,
+          height: 52,
+          borderRadius: 26,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: 'rgba(255,255,255,0.95)',
+        },
+        activeText: {
+          marginTop: 6,
+          fontSize: 10,
+          lineHeight: 12,
+          fontWeight: '800',
+          letterSpacing: 0.35,
+          color: 'rgba(255,255,255,0.98)',
+          textAlign: 'center',
+          textTransform: 'uppercase',
+        },
+      }),
+    [colors],
+  );
 
   useEffect(() => {
     return subscribeChatUnreadTotal((total) => {
@@ -220,7 +390,7 @@ function DashboardTabsLayoutInner() {
         initialRouteName="index"
         screenOptions={{
           tabBarActiveTintColor: '#ffffff',
-          tabBarInactiveTintColor: 'rgba(224,242,254,0.92)',
+          tabBarInactiveTintColor: colors.tabBarInactive,
           tabBarHideOnKeyboard: true,
           headerShown: false,
           tabBarButton: HapticTab,
@@ -239,7 +409,9 @@ function DashboardTabsLayoutInner() {
           name="index"
           options={{
             title: 'Home',
-            tabBarIcon: ({ color, focused }) => <TabPillIcon icon="home-variant" label="Home" color={color} focused={focused} />,
+            tabBarIcon: ({ color, focused }) => (
+              <TabPillIcon icon="home-variant" label="Home" color={color} focused={focused} styles={styles} colors={colors} />
+            ),
           }}
         />
         <Tabs.Screen
@@ -253,6 +425,8 @@ function DashboardTabsLayoutInner() {
                 color={color}
                 focused={focused}
                 badge={chatTabBadge}
+                styles={styles}
+                colors={colors}
               />
             ),
           }}
@@ -262,7 +436,15 @@ function DashboardTabsLayoutInner() {
           options={{
             title: 'Alerts',
             tabBarIcon: ({ color, focused }) => (
-              <TabPillIcon icon={focused ? 'bell' : 'bell-outline'} label="Alerts" color={color} focused={focused} badge={notificationTabBadge} />
+              <TabPillIcon
+                icon={focused ? 'bell' : 'bell-outline'}
+                label="Alerts"
+                color={color}
+                focused={focused}
+                badge={notificationTabBadge}
+                styles={styles}
+                colors={colors}
+              />
             ),
           }}
         />
@@ -282,7 +464,9 @@ function DashboardTabsLayoutInner() {
           name="profile"
           options={{
             title: 'Profile',
-            tabBarIcon: ({ color, focused }) => <TabPillIcon icon={focused ? 'account' : 'account-outline'} label="Profile" color={color} focused={focused} />,
+            tabBarIcon: ({ color, focused }) => (
+              <TabPillIcon icon={focused ? 'account' : 'account-outline'} label="Profile" color={color} focused={focused} styles={styles} colors={colors} />
+            ),
           }}
         />
       </Tabs>
@@ -293,6 +477,7 @@ function DashboardTabsLayoutInner() {
         <RouteSkeletonOverlay
           shimmerX={shimmerX}
           cardCount={skeletonCardCount}
+          styles={styles}
           overlayStyle={{
             bottom: tabBarTotalHeight,
             paddingTop: insets.top + TOPBAR_BLOCK + 4,
@@ -313,74 +498,6 @@ export default function DashboardTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  globalParticles: {
-    zIndex: 999,
-    elevation: 999,
-    opacity: 0.9,
-  },
-  skeletonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 50,
-    backgroundColor: BrandColors.pageBg,
-    justifyContent: 'flex-start',
-    alignItems: 'stretch',
-  },
-  skeletonCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 14,
-  },
-  skeletonCardSpacing: {
-    marginBottom: 12,
-  },
-  skeletonRowTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  skeletonLine: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#f1f5f9',
-    marginBottom: 11,
-  },
-  skeletonLineWide: {
-    width: '66%',
-    marginBottom: 0,
-  },
-  skeletonLineMid: {
-    width: '60%',
-  },
-  skeletonLineShort: {
-    width: '22%',
-  },
-  skeletonLineFull: {
-    width: '95%',
-    marginBottom: 0,
-  },
-  skeletonChip: {
-    width: 32,
-    height: 18,
-    borderRadius: 6,
-    backgroundColor: '#f1f5f9',
-  },
-  skeletonShimmer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 180,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    opacity: 0.82,
-  },
   tabBarBgRoot: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 22,
@@ -394,98 +511,5 @@ const styles = StyleSheet.create({
   },
   tabBarGlowWash: {
     ...StyleSheet.absoluteFillObject,
-  },
-  tabBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 0,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'transparent',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 8,
-    paddingTop: 10,
-    overflow: 'visible',
-    zIndex: 100,
-    shadowColor: '#020617',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 24,
-  },
-  tabBarItem: { flex: 1, paddingVertical: 0, alignItems: 'center', justifyContent: 'center' },
-  tabIconSlot: {
-    width: 76,
-    height: 58,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  tabBadgeAnchor: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-  },
-  tabBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -8,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: BrandColors.primary,
-    zIndex: 20,
-  },
-  tabBadgeText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 13,
-  },
-  tabIconOuter: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  activeOrbLift: {
-    borderRadius: 26,
-    shadowColor: BrandColors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 14,
-  },
-  activeOrbGradient: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.95)',
-  },
-  activeText: {
-    marginTop: 6,
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '800',
-    letterSpacing: 0.35,
-    color: 'rgba(255,255,255,0.98)',
-    textAlign: 'center',
-    textTransform: 'uppercase',
   },
 });
