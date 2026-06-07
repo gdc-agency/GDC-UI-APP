@@ -1,0 +1,6 @@
+# Keep EAS upload lean — design/source assets are not needed to build the app.
+assets/images/app-icon-source.png
+assets/images/launcher-icon-source.png
+assets/images/android-icon-monochrome.png
+docs/
+metro.config.js.bak

@@ -383,7 +383,8 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
         {item.type !== 'file' && item.type !== 'image' ? (
           (() => {
             const timeLabel = normalizeTime(item.time);
-            const metaReserve = item.me ? `  ${timeLabel} ✓✓` : `  ${timeLabel}`;
+            // Reserve inline width only — visible time/ticks render once in bubbleMetaTail.
+            const metaReserve = item.me ? `\u00A0${timeLabel}\u00A0\u00A0\u00A0` : `\u00A0${timeLabel}`;
             const textStyles = [
               styles.bubbleText,
               item.me && !isActionTarget && styles.bubbleTextMe,
@@ -754,11 +755,10 @@ export default function MessagesScreen() {
     maxWidth: '100%',
   },
   metaSpacer: {
-    opacity: 0,
+    color: 'transparent',
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '500',
-    paddingLeft: 6,
   },
   bubbleMetaTail: {
     position: 'absolute',

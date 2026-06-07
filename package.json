@@ -10,7 +10,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "generate:icons": "node scripts/generate-icon-assets.mjs",
+    "build:mobile": "eas build -p android --profile preview --non-interactive",
     "build:apk": "eas build -p android --profile preview --non-interactive",
+    "build:release": "eas build -p android --profile production --non-interactive",
     "build:dev": "eas build -p android --profile development --non-interactive"
   },
   "dependencies": {
@@ -22,9 +24,9 @@
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.33",
     "expo-blur": "~15.0.8",
+    "expo-build-properties": "~1.0.10",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
-    "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.22",
@@ -60,7 +62,9 @@
     "@types/react": "~19.1.10",
     "babel-plugin-module-resolver": "^5.0.2",
     "eslint": "^9.25.0",
-    "eslint-config-expo": "~10.0.0"
+    "eslint-config-expo": "~10.0.0",
+    "expo-dev-client": "~6.0.21",
+    "sharp": "^0.34.5"
   },
   "private": true
 }

@@ -156,6 +156,7 @@ function RolePanel({
             icon="account-group-outline"
             tint="#eff6ff"
             iconColor="#2563eb"
+            styles={styles}
           />
           <TlDashboardCard
             label="TEAM TASKS"
@@ -164,6 +165,7 @@ function RolePanel({
             tint="#eef2ff"
             iconColor="#6366f1"
             onPress={() => onOpenProjectStatus?.('pending')}
+            styles={styles}
           />
           <TlDashboardCard
             label="COMPLETED"
@@ -172,6 +174,7 @@ function RolePanel({
             tint="#ecfdf5"
             iconColor="#10b981"
             onPress={() => onOpenProjectStatus?.('completed')}
+            styles={styles}
           />
           <TlDashboardCard
             label="PENDING LEAVE"
@@ -180,6 +183,7 @@ function RolePanel({
             tint="#fff8e8"
             iconColor="#d4a017"
             onPress={onOpenPendingLeave}
+            styles={styles}
           />
         </View>
       </View>
@@ -216,12 +220,12 @@ function RolePanel({
       <Text style={styles.roleTitle}>Employee Dashboard</Text>
       <Text style={styles.roleSub}>Your work summary, activity, and tasks.</Text>
       <View style={styles.tlDashGrid}>
-        <TlDashboardCard label="PENDING" value={p} icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} />
-        <TlDashboardCard label="IN PROGRESS" value={ip} icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} />
-        <TlDashboardCard label="REVIEW" value={rv} icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} />
-        <TlDashboardCard label="SUBMITTED" value={sb} icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} />
-        <TlDashboardCard label="COMPLETED" value={ap} icon="check-circle-outline" tint="#ecfdf5" iconColor="#10b981" onPress={() => onOpenProjectStatus?.('completed')} />
-        <TlDashboardCard label="OVERDUE" value={od} icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} />
+        <TlDashboardCard label="PENDING" value={p} icon="clock-outline" tint="#fff7e6" iconColor="#d97706" onPress={() => onOpenProjectStatus?.('pending')} styles={styles} />
+        <TlDashboardCard label="IN PROGRESS" value={ip} icon="chart-box-outline" tint="#eef2ff" iconColor="#4f46e5" onPress={() => onOpenProjectStatus?.('in progress')} styles={styles} />
+        <TlDashboardCard label="REVIEW" value={rv} icon="timer-outline" tint="#f5f3ff" iconColor="#7c3aed" onPress={() => onOpenProjectStatus?.('review')} styles={styles} />
+        <TlDashboardCard label="SUBMITTED" value={sb} icon="arrow-top-right" tint="#ecfeff" iconColor="#0f766e" onPress={() => onOpenProjectStatus?.('submitted')} styles={styles} />
+        <TlDashboardCard label="COMPLETED" value={ap} icon="check-circle-outline" tint="#ecfdf5" iconColor="#10b981" onPress={() => onOpenProjectStatus?.('completed')} styles={styles} />
+        <TlDashboardCard label="OVERDUE" value={od} icon="alert-circle-outline" tint="#fff1f2" iconColor="#e11d48" onPress={() => onOpenProjectStatus?.('overdue')} styles={styles} />
       </View>
     </View>
   );

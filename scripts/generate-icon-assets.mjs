@@ -24,9 +24,12 @@ const ADAPTIVE_LOGO_SIZE = Math.round(CANVAS * ADAPTIVE_LOGO_RATIO);
 /** Store / legacy launcher tile — padded white square, still fully readable. */
 const LAUNCHER_LOGO_RATIO = 0.56;
 const LAUNCHER_LOGO_SIZE = Math.round(CANVAS * LAUNCHER_LOGO_RATIO);
-const BRAND_LOGO_SIZE = 896;
+const BRAND_LOGO_SIZE = 384;
 const NAV_LOGO_SIZE = 128;
-const SPLASH_LOGO_WIDTH = 220;
+/** Native splash — padded canvas so Android 12+ circular mask does not clip the ring. */
+const SPLASH_CANVAS = 1024;
+const SPLASH_LOGO_RATIO = 0.5;
+const SPLASH_LOGO_SIZE = Math.round(SPLASH_CANVAS * SPLASH_LOGO_RATIO);
 
 const WHITE = { r: 255, g: 255, b: 255, alpha: 1 };
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
@@ -227,7 +230,7 @@ async function main() {
   const adaptiveLogoOpaque = await loadPreparedLogo(ADAPTIVE_LOGO_SIZE, preparedSource);
   const adaptiveLogo = await whiteToTransparent(adaptiveLogoOpaque);
   const launcherLogo = await loadPreparedLogo(LAUNCHER_LOGO_SIZE, preparedSource);
-  const splashLogo = await loadPreparedLogo(SPLASH_LOGO_WIDTH, preparedSource);
+  const splashLogo = await loadPreparedLogo(SPLASH_LOGO_SIZE, preparedSource);
   const faviconLogo = await loadPreparedLogo(448, preparedSource);
 
   await sharp(brandLogo).toFile(path.join(outDir, 'brand-logo.png'));
@@ -240,9 +243,7 @@ async function main() {
     CANVAS,
     path.join(outDir, 'android-icon-foreground.png'),
   );
-  await sharp(splashLogo)
-    .flatten({ background: WHITE })
-    .toFile(path.join(outDir, 'splash-icon.png'));
+  await writeOnCanvas(splashLogo, SPLASH_CANVAS, path.join(outDir, 'splash-icon.png'));
   await writeOnCanvas(faviconLogo, 512, path.join(outDir, 'favicon.png'));
 
   console.log(
