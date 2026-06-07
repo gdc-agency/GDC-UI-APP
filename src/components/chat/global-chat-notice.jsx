@@ -1,0 +1,49 @@
+import { ChatIncomingNotice } from '@/components/chat/chat-incoming-notice';
+import { useGdcInbox } from '@/context/gdc-inbox-context';
+import { publishPendingChatOpen } from '@/utils/chat-open-bus';
+import { threadIdEquals } from '@/utils/chat-thread-inbox';
+import { router } from 'expo-router';
+import React from 'react';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+/**
+ * App-wide banner when a new message arrives (any tab except open conversation).
+ */
+export function GlobalChatNotice() {
+  const insets = useSafeAreaInsets();
+  const { incomingNotice, dismissIncomingNotice, activeChatId, threads } = useGdcInbox();
+
+  if (
+    !incomingNotice ||
+    (activeChatId && threadIdEquals(activeChatId, incomingNotice.chatId))
+  ) {
+    return null;
+  }
+
+  const thread = threads.find((t) => threadIdEquals(t.id, incomingNotice.chatId));
+  const unreadCount = Math.max(Number(thread?.unread) || 0, 1);
+
+  return (
+    <View
+      className="absolute left-0 right-0 z-[200] elevation-[12]"
+      style={{ top: insets.top + 6 }}
+      pointerEvents="box-none">
+      <ChatIncomingNotice
+        title={incomingNotice.title}
+        preview={incomingNotice.preview}
+        senderName={incomingNotice.senderName}
+        unreadCount={unreadCount}
+        avatarUrl={thread?.listAvatarUrl || null}
+        isOnline={!!thread?.isOnline}
+        at={incomingNotice.at}
+        onPress={() => {
+          dismissIncomingNotice();
+          publishPendingChatOpen(incomingNotice.chatId);
+          router.push('/dashboard/(tabs)/messages');
+        }}
+        onDismiss={() => dismissIncomingNotice()}
+      />
+    </View>
+  );
+}

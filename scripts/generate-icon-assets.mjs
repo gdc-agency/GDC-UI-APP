@@ -236,7 +236,6 @@ async function main() {
   await sharp(brandLogo).toFile(path.join(outDir, 'brand-logo.png'));
   await sharp(navLogo).toFile(path.join(outDir, 'nav-logo.png'));
   await writeOnCanvas(launcherLogo, CANVAS, path.join(outDir, 'launcher-icon.png'));
-  await writeOnCanvas(launcherLogo, CANVAS, path.join(outDir, 'icon.png'));
   await writeSolidBackground(path.join(outDir, 'android-icon-background.png'));
   await writeTransparentForeground(
     adaptiveLogo,

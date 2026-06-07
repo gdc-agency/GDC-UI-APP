@@ -1,4 +1,5 @@
 import { Redirect, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { SkeletonCardGrid, SkeletonGroup, SkeletonText } from '@/components/ui/skeleton';
@@ -12,7 +13,7 @@ export default function DashboardRootLayout() {
 
   if (!hydrated) {
     return (
-      <SkeletonGroup speedMs={1700} delayMs={120}>
+      <SkeletonGroup speedMs={1400} delayMs={0}>
         <View style={{ flex: 1, backgroundColor: colors.pageBg, paddingTop: 28, paddingHorizontal: 18 }}>
           <SkeletonText lines={2} widths={['52%', '34%']} lineH={14} />
           <View style={{ height: 14 }} />
@@ -30,6 +31,7 @@ export default function DashboardRootLayout() {
 
   return (
     <GdcInboxProvider>
+      <PrefetchSecondaryScreens />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -40,4 +42,12 @@ export default function DashboardRootLayout() {
       </Stack>
     </GdcInboxProvider>
   );
+}
+
+function PrefetchSecondaryScreens() {
+  useEffect(() => {
+    void import('@/screens/dashboard/route-detail-screen');
+    void import('@/screens/chat/group-info-screen');
+  }, []);
+  return null;
 }

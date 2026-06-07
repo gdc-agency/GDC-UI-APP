@@ -1,3 +1,4 @@
+import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -5,8 +6,8 @@ import 'react-native-reanimated';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AuthProvider } from '@/context/auth-context';
-import { ThemeProvider, useTheme } from '@/context/theme-context';
+import { AuthProvider } from '../src/context/auth-context';
+import { ThemeProvider, useTheme } from '../src/context/theme-context';
 
 function RootShell() {
   const { colors, isDark } = useTheme();
@@ -25,7 +26,7 @@ function RootShell() {
           primary: colors.primaryMid,
         },
       }}>
-      <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
+      <View className="flex-1 bg-page">
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.pageBg } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />

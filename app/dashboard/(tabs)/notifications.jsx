@@ -1,3 +1,3 @@
-import NotificationsScreen from '@/app/dashboard/notifications';
+import NotificationsScreen from '../../../src/screens/notifications/notifications-screen';
 
 export default NotificationsScreen;

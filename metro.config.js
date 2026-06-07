@@ -1,8 +1,10 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withNativeWind } = require('nativewind/metro');
 const fs = require('fs');
 const path = require('path');
 
 const projectRoot = __dirname;
+const srcRoot = path.join(projectRoot, 'src');
 
 /** @param {string} p */
 function isExistingFile(p) {
@@ -14,11 +16,59 @@ function isExistingFile(p) {
 }
 
 /**
- * engine.io-client ships `build/cjs/package.json` "browser" aliases (websocket.node → websocket, etc.).
- * Metro does not always apply those for nested relative requires, which pulls in Node's `ws` and breaks RN.
- * @param {*} context Metro resolution context
+ * Resolve @/ imports from src, with legacy folder name remapping.
+ * @param {string} relative
+ * @param {string | undefined} platform
+ */
+function remapAliasRelative(relative) {
+  if (relative.startsWith('constants/')) {
+    return `data/constants/${relative.slice('constants/'.length)}`;
+  }
+  if (relative.startsWith('services/')) {
+    return `data/${relative.slice('services/'.length)}`;
+  }
+  if (relative.startsWith('animations/') || relative === 'animations') {
+    return relative === 'animations' ? 'theme/animations' : `theme/${relative}`;
+  }
+  if (relative.startsWith('features/')) {
+    return relative.replace('features/', 'screens/').replace('/screens/', '/');
+  }
+  return relative;
+}
+
+function resolveAliasPath(relative, platform) {
+  const mapped = remapAliasRelative(relative);
+  const roots = [srcRoot, projectRoot];
+  const suffixes = [
+    platform ? `.${platform}.jsx` : null,
+    platform ? `.${platform}.js` : null,
+    '.native.jsx',
+    '.native.js',
+    '.jsx',
+    '.js',
+    '',
+  ].filter(Boolean);
+
+  for (const root of roots) {
+    const base = path.join(root, mapped);
+    for (const suf of suffixes) {
+      const candidate = base + suf;
+      if (isExistingFile(candidate)) return path.normalize(candidate);
+    }
+    for (const ext of ['.jsx', '.js']) {
+      const indexFile = path.join(base, `index${ext}`);
+      if (isExistingFile(indexFile)) return path.normalize(indexFile);
+    }
+    if (isExistingFile(base)) return path.normalize(base);
+  }
+
+  return null;
+}
+
+/**
+ * engine.io-client browser aliases for React Native socket.io.
+ * @param {*} context
  * @param {string} moduleName
- * @returns {{ type: 'sourceFile', filePath: string } | null}
  */
 function resolveEngineIoBrowserAliases(context, moduleName) {
   const origin = context.originModulePath;
@@ -26,7 +76,6 @@ function resolveEngineIoBrowserAliases(context, moduleName) {
   const originPosix = origin.split(path.sep).join('/');
   if (!originPosix.includes('/engine.io-client/')) return null;
 
-  /** @type {Array<[RegExp, string]>} */
   const pairs = [
     [/^\.\/websocket\.node\.js$/, './websocket.js'],
     [/^\.\/polling-xhr\.node\.js$/, './polling-xhr.js'],
@@ -59,36 +108,31 @@ module.exports = (() => {
 
   config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (moduleName.startsWith('@/')) {
-      const relative = moduleName.slice(2);
-      const base = path.join(projectRoot, relative);
+      const resolved = resolveAliasPath(moduleName.slice(2), platform);
+      if (resolved) return { type: 'sourceFile', filePath: resolved };
+    }
 
-      const suffixes = [
-        '',
-        platform ? `.${platform}.jsx` : null,
-        platform ? `.${platform}.js` : null,
-        '.native.jsx',
-        '.native.js',
-        '.jsx',
-        '.js',
-      ].filter(Boolean);
+    const namedAliases = {
+      '@navigation': 'navigation',
+      '@components': 'components',
+      '@screens': 'screens',
+      '@data': 'data',
+      '@hooks': 'hooks',
+      '@utils': 'utils',
+      '@theme': 'theme',
+      '@context': 'context',
+      '@constants': 'data/constants',
+      '@services': 'data',
+      '@assets': path.join(projectRoot, 'assets'),
+      '@app': path.join(projectRoot, 'app'),
+    };
 
-      for (const suf of suffixes) {
-        const candidate = base + suf;
-        if (isExistingFile(candidate)) {
-          return { type: 'sourceFile', filePath: path.normalize(candidate) };
-        }
-      }
-
-      for (const ext of ['.jsx', '.js']) {
-        const indexFile = path.join(base, `index${ext}`);
-        if (isExistingFile(indexFile)) {
-          return { type: 'sourceFile', filePath: path.normalize(indexFile) };
-        }
-      }
-
-      if (isExistingFile(base)) {
-        return { type: 'sourceFile', filePath: path.normalize(base) };
-      }
+    if (namedAliases[moduleName]) {
+      const target = namedAliases[moduleName];
+      const resolved = target.includes(path.sep) || target.startsWith(projectRoot)
+        ? (isExistingFile(target) ? path.normalize(target) : null)
+        : resolveAliasPath(target, platform);
+      if (resolved) return { type: 'sourceFile', filePath: resolved };
     }
 
     const engineIoAlias = resolveEngineIoBrowserAliases(context, moduleName);
@@ -101,5 +145,5 @@ module.exports = (() => {
     return context.resolveRequest(context, moduleName, platform);
   };
 
-  return config;
+  return withNativeWind(config, { input: './global.css' });
 })();

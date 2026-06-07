@@ -1,6 +1,22 @@
-# Keep EAS upload lean — design/source assets are not needed to build the app.
+# Design/source assets — not needed on EAS build workers
 assets/images/app-icon-source.png
-assets/images/launcher-icon-source.png
-assets/images/android-icon-monochrome.png
-docs/
-metro.config.js.bak
+
+# Editor / local tooling
+.cursor/
+.vscode/
+*.code-workspace
+
+# Docs and changelogs
+*.md
+!README.md
+
+# Git metadata (EAS clones fresh anyway)
+.git/
+
+# Local caches
+.expo/
+node_modules/.cache/
+.metro-health-check*
+
+# Scripts only used for local icon generation
+scripts/

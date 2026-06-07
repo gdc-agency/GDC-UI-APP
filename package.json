@@ -3,7 +3,6 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "postinstall": "node scripts/fix-expo-status-bar-tsconfig.js",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -12,7 +11,10 @@
     "generate:icons": "node scripts/generate-icon-assets.mjs",
     "build:mobile": "eas build -p android --profile preview --non-interactive",
     "build:apk": "eas build -p android --profile preview --non-interactive",
+    "build:apk-universal": "eas build -p android --profile preview-universal --non-interactive",
     "build:release": "eas build -p android --profile production --non-interactive",
+    "build:release-apk": "eas build -p android --profile production-apk --non-interactive",
+    "build:release-apk-universal": "eas build -p android --profile production-apk-universal --non-interactive",
     "build:dev": "eas build -p android --profile development --non-interactive"
   },
   "dependencies": {
@@ -55,12 +57,11 @@
     "react-native-svg": "15.12.1",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1",
-    "socket.io-client": "^4.8.3",
-    "tailwindcss": "^3.4.19"
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@types/react": "~19.1.10",
     "babel-plugin-module-resolver": "^5.0.2",
+    "tailwindcss": "^3.4.19",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "expo-dev-client": "~6.0.21",

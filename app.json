@@ -60,14 +60,12 @@
           "android": {
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "minSdkVersion": 24,
-            "reactNativeArchitectures": ["arm64-v8a", "armeabi-v7a"]
+            "minSdkVersion": 24
           }
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {

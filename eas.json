@@ -14,6 +14,19 @@
     "preview": {
       "developmentClient": false,
       "distribution": "internal",
+      "env": {
+        "APK_ARCH": "arm64"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview-universal": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "env": {
+        "APK_ARCH": "universal"
+      },
       "android": {
         "buildType": "apk"
       }
@@ -21,6 +34,24 @@
     "production": {
       "developmentClient": false,
       "autoIncrement": true,
+      "env": {
+        "APK_ARCH": "arm64"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "production-apk": {
+      "extends": "production",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production-apk-universal": {
+      "extends": "production",
+      "env": {
+        "APK_ARCH": "universal"
+      },
       "android": {
         "buildType": "apk"
       }
