@@ -108,7 +108,7 @@ export function ThemeProvider({ children }) {
 
   return (
     <ThemeContext.Provider value={value}>
-      <View key={mode} style={themeVars} className="flex-1 bg-page">
+      <View style={themeVars} className="flex-1 bg-page">
         {children}
       </View>
     </ThemeContext.Provider>

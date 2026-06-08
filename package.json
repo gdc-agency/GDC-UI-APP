@@ -3,8 +3,10 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
+    "start": "expo start --lan",
+    "start:go": "expo start --go --lan",
+    "start:dev": "expo start --dev-client --lan",
+    "android": "expo start --android --lan",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",

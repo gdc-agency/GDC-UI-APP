@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import { GroupAvatar } from '@/components/ui/group-avatar';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { useTheme } from '@/context/theme-context';
 import { cn } from '@/theme/cn';
-import { Image } from 'expo-image';
+import { resolveProfileImageUri } from '@/utils/chat-directory';
 import * as ImagePicker from 'expo-image-picker';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -27,15 +29,7 @@ const MemberManageRow = memo(function MemberManageRow({ item, isAdmin, isMe, can
   return (
     <View className="h-[58px] flex-row items-center justify-between">
       <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
-        {item.avatarUrl ? (
-          <Image source={{ uri: item.avatarUrl }} className="h-10 w-10 rounded-[20px]" contentFit="cover" />
-        ) : (
-          <View
-            className="h-10 w-10 items-center justify-center rounded-[20px]"
-            style={{ backgroundColor: colors.chipActiveBg }}>
-            <Text className="font-extrabold text-primary-mid">{String(line).slice(0, 1)}</Text>
-          </View>
-        )}
+        <ProfileAvatar uri={item.avatarUrl} name={line} size={40} />
         <View className="min-w-0 flex-1">
           <Text className="text-[15px] font-semibold text-text" numberOfLines={1}>
             {line}
@@ -263,7 +257,10 @@ export function GroupSettingsSheet({
 
   if (!visible || !thread) return null;
 
-  const avatarUrl = server.avatarUrl || thread.listAvatarUrl;
+  const avatarUri = useMemo(() => {
+    const raw = server?.avatarUrl ?? thread?.listAvatarUrl ?? '';
+    return resolveProfileImageUri(raw);
+  }, [server?.avatarUrl, thread?.listAvatarUrl]);
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={closeAnimated}>
@@ -293,13 +290,7 @@ export function GroupSettingsSheet({
           {busy ? <ActivityIndicator className="my-2" color={colors.primaryMid} /> : null}
 
           <Pressable className="relative mb-3 self-center" onPress={pickAvatar} disabled={!isAdmin || busy}>
-            {avatarUrl ? (
-              <Image source={{ uri: String(avatarUrl) }} className="h-[88px] w-[88px] rounded-[44px]" contentFit="cover" />
-            ) : (
-              <View className="h-[88px] w-[88px] items-center justify-center rounded-[44px] bg-info-bg">
-                <MaterialCommunityIcons name="account-group" size={36} color={colors.primaryMid} />
-              </View>
-            )}
+            <GroupAvatar uri={avatarUri} name={name || 'Group'} size={88} showInitialsFallback />
             {isAdmin ? (
               <View className="absolute bottom-0 right-0 rounded-[14px] bg-primary-mid p-1.5">
                 <MaterialCommunityIcons name="camera" size={14} color="#fff" />
@@ -348,7 +339,7 @@ export function GroupSettingsSheet({
                   const on = addPick.has(id);
                   return (
                     <Pressable
-                      className="flex-row justify-between border-b border-border-strong py-2"
+                      className="flex-row items-center justify-between border-b border-border-strong py-2"
                       onPress={() =>
                         setAddPick((prev) => {
                           const n = new Set(prev);
@@ -357,7 +348,12 @@ export function GroupSettingsSheet({
                           return n;
                         })
                       }>
-                      <Text className="text-[15px] text-text">{item.displayName || item.name}</Text>
+                      <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+                        <ProfileAvatar uri={item.avatarUrl} name={item.displayName || item.name} size={36} />
+                        <Text className="flex-1 text-[15px] text-text" numberOfLines={1}>
+                          {item.displayName || item.name}
+                        </Text>
+                      </View>
                       {on ? <MaterialCommunityIcons name="check-circle" size={18} color={colors.primaryMid} /> : null}
                     </Pressable>
                   );

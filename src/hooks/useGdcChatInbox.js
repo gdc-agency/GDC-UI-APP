@@ -77,7 +77,7 @@ function mergeDirectoryContactRow(existing, incoming) {
     roleLabel: incoming.roleLabel || existing.roleLabel,
     name: incoming.name || existing.name,
     status: incoming.status || existing.status,
-    avatarUrl: incoming.avatarUrl || existing.avatarUrl,
+    avatarUrl: incoming.avatarUrl ? incoming.avatarUrl : existing.avatarUrl || null,
     online: incoming.online ?? existing.online,
   };
 }
@@ -161,11 +161,25 @@ function mergeMessagesWithLocal(serverMessages, localMessages) {
   return sortChatMessages(merged);
 }
 
+function preserveOutgoingAttachmentUri(confirmedUi, tempMsg) {
+  if (!tempMsg) return confirmedUi;
+  let ui = finalizeOutgoingMessage(confirmedUi);
+  const isImg = ui.type === 'image' || tempMsg.type === 'image';
+  if (isImg && !ui.uri && tempMsg.uri) {
+    ui = { ...ui, type: 'image', uri: tempMsg.uri, text: ui.text || 'Photo' };
+  }
+  if (ui.type === 'file' && !ui.uri && tempMsg.uri) {
+    ui = { ...ui, uri: tempMsg.uri };
+  }
+  return ui;
+}
+
 function reconcileOutgoingMessage(messages, tempId, confirmedUi) {
   const tid = String(tempId);
   const cid = String(confirmedUi.id);
+  const temp = messages.find((m) => String(m.id) === tid);
   const filtered = messages.filter((m) => String(m.id) !== tid && String(m.id) !== cid);
-  return mergeMessageList(filtered, finalizeOutgoingMessage(confirmedUi));
+  return mergeMessageList(filtered, preserveOutgoingAttachmentUri(confirmedUi, temp));
 }
 
 function normalizeRoleKey(role) {
@@ -258,7 +272,11 @@ function mapApiMessageToUi(m, myUserId) {
   const myMessageStatus = othersRead ? 'seen' : 'delivered'; // loaded history: delivered until read
   const attachment = m.attachment && typeof m.attachment === 'object' ? m.attachment : null;
   const mime = attachment && typeof attachment.mimeType === 'string' ? attachment.mimeType : '';
-  const isImage = mime.startsWith('image/') && attachment && typeof attachment.dataUrl === 'string';
+  const dataUrl = attachment && typeof attachment.dataUrl === 'string' ? attachment.dataUrl.trim() : '';
+  const isImage =
+    !!dataUrl &&
+    dataUrl.length > 48 &&
+    (mime.startsWith('image/') || /^data:image\//i.test(dataUrl));
   const fileName = attachment && typeof attachment.fileName === 'string' ? attachment.fileName : '';
   const sizeBytes =
     attachment && typeof attachment.sizeBytes === 'number'
@@ -277,7 +295,7 @@ function mapApiMessageToUi(m, myUserId) {
       me: authorId === String(myUserId),
       type: 'image',
       text: 'Photo',
-      uri: String(attachment.dataUrl),
+      uri: dataUrl,
       time: formatMsgTime(m.createdAt),
       createdAtIso,
       createdAtMs,
@@ -608,8 +626,10 @@ export function useGdcChatInbox({ token, user }) {
         rows = mapRows(members).filter((row) => canStartPersonalChat(user.role, row.roleLabel));
       }
       const mergedList = mergeDirectoryLists(allDirectoryRows, rows);
+      const contactIds = new Set(rows.map((r) => String(r.id)));
+      const mergedContacts = mergedList.filter((r) => contactIds.has(String(r.id)));
       setDirectoryRows(mergedList);
-      setContacts(rows);
+      setContacts(mergedContacts);
       setDirectoryHydrated(true);
       if (myId) {
         void AsyncStorage.setItem(storageKey(DIRECTORY_CACHE_PREFIX, myId), JSON.stringify(mergedList)).catch(
@@ -649,9 +669,13 @@ export function useGdcChatInbox({ token, user }) {
     async (userIds) => {
       if (!token || !myId) return;
       const dir = userDirectoryByIdRef.current;
-      const need = [...new Set((userIds || []).map(String).filter((id) => id && id !== myId))].filter(
-        (id) => !dir[id]?.avatarUrl,
-      );
+      const need = [...new Set((userIds || []).map(String).filter((id) => id && id !== myId))].filter((id) => {
+        const row = dir[id];
+        if (!row) return true;
+        if (!row.avatarUrl) return true;
+        const resolved = resolveProfileImageUri(row.avatarUrl);
+        return !resolved;
+      });
       if (!need.length) return;
       try {
         const res = await fetchChatParticipantSnapshots(token, need.slice(0, 120));
@@ -1294,20 +1318,19 @@ export function useGdcChatInbox({ token, user }) {
 
       return runGroupCreateOnce(guardKey, async () => {
         let resolvedAvatar = avatarUrl;
-        if (resolvedAvatar && !String(resolvedAvatar).startsWith('http')) {
-          try {
-            const { dataUrl, byteLength } = await readLocalUriAsDataUrl(
-              String(resolvedAvatar),
-              'image/jpeg',
-              'group.jpg',
-            );
-            if (byteLength > 900_000) {
+        if (resolvedAvatar) {
+          const av = String(resolvedAvatar);
+          if (!av.startsWith('http') && !av.startsWith('data:')) {
+            try {
+              const { dataUrl, byteLength } = await readLocalUriAsDataUrl(av, 'image/jpeg', 'group.jpg');
+              if (byteLength > 900_000) {
+                resolvedAvatar = undefined;
+              } else {
+                resolvedAvatar = dataUrl;
+              }
+            } catch {
               resolvedAvatar = undefined;
-            } else {
-              resolvedAvatar = dataUrl;
             }
-          } catch {
-            resolvedAvatar = undefined;
           }
         }
         const thread = await createGroupChat(token, {
@@ -1344,12 +1367,15 @@ export function useGdcChatInbox({ token, user }) {
     async (chatId, patches) => {
       if (!token || !chatId) throw new Error('Missing chat');
       const body = { ...patches };
-      if (body.avatarUrl && !String(body.avatarUrl).startsWith('http')) {
-        try {
-          const { dataUrl } = await readLocalUriAsDataUrl(String(body.avatarUrl), 'image/jpeg', 'group.jpg');
-          body.avatarUrl = dataUrl;
-        } catch {
-          delete body.avatarUrl;
+      if (body.avatarUrl) {
+        const av = String(body.avatarUrl);
+        if (!av.startsWith('http') && !av.startsWith('data:')) {
+          try {
+            const { dataUrl } = await readLocalUriAsDataUrl(av, 'image/jpeg', 'group.jpg');
+            body.avatarUrl = dataUrl;
+          } catch {
+            delete body.avatarUrl;
+          }
         }
       }
       const thread = await updateGroupChat(token, chatId, body);
@@ -1638,13 +1664,18 @@ export function useGdcChatInbox({ token, user }) {
         }
 
         reportUpload(1);
-        const ui = finalizeOutgoingMessage(mapApiMessageToUi(msg, myId));
+        const mapped = mapApiMessageToUi(msg, myId);
         setThreads((prev) =>
           prev.map((t) => {
             if (!threadIdEquals(t.id, chatId)) return t;
             const msgs = Array.isArray(t.messages) ? t.messages : [];
+            const temp = msgs.find((m) => String(m.id) === String(tempId));
+            const ui = preserveOutgoingAttachmentUri(mapped, temp);
             const next = reconcileOutgoingMessage(msgs, tempId, ui);
-            return { ...t, messages: next, threadPreview: ui };
+            const preview = preserveOutgoingAttachmentUri(ui, temp);
+            const confirmedId = msg?.id != null ? String(msg.id) : '';
+            if (confirmedId) processedInboundMessageIdsRef.current.add(confirmedId);
+            return { ...t, messages: next, threadPreview: preview };
           }),
         );
         outboundAttachmentUploadRef.current.delete(String(chatId));
@@ -1671,14 +1702,16 @@ export function useGdcChatInbox({ token, user }) {
 
   const emitChatTyping = useCallback((chatId, typing) => {
     const id = chatId != null ? String(chatId).trim() : '';
-    if (!id) return;
+    if (!id || !token || !myId) return;
     const next = { chatId: id, typing: !!typing };
     const prev = lastTypingEmitRef.current;
     if (prev && prev.chatId === next.chatId && prev.typing === next.typing) return;
 
     lastTypingEmitRef.current = next;
-    getGdcSocket()?.emit('chatTyping', next);
-  }, []);
+    const sock = ensureGdcSocketConnected(token, myId);
+    sock?.emit('joinRoom', id);
+    sock?.emit('chatTyping', next);
+  }, [token, myId]);
 
   const upgradeOwnMessageDelivery = useCallback((thread, messageId) => {
     const mid = String(messageId);
@@ -1757,14 +1790,6 @@ export function useGdcChatInbox({ token, user }) {
       const authorId = String(serverMsg.authorId ?? '');
       if (!isChatParticipant(chatId, authorId)) return;
       const inboundMessageId = serverMsg.id != null ? String(serverMsg.id) : '';
-      if (inboundMessageId) {
-        if (processedInboundMessageIdsRef.current.has(inboundMessageId)) return;
-        processedInboundMessageIdsRef.current.add(inboundMessageId);
-        if (processedInboundMessageIdsRef.current.size > 500) {
-          const kept = [...processedInboundMessageIdsRef.current].slice(-250);
-          processedInboundMessageIdsRef.current = new Set(kept);
-        }
-      }
       let ui = mapApiMessageToUi(serverMsg, myId);
       const isDeletedEvent = !!(serverMsg.deleted || ui.deleted);
       if (isDeletedEvent) {
@@ -1780,10 +1805,23 @@ export function useGdcChatInbox({ token, user }) {
       const att = serverMsg.attachment && typeof serverMsg.attachment === 'object' ? serverMsg.attachment : null;
       const serverDataUrl =
         att && typeof att.dataUrl === 'string' && att.dataUrl.length > 48 ? att.dataUrl : '';
+      if (!ui.uri && serverDataUrl && isAttachmentMsg) {
+        ui = { ...ui, uri: serverDataUrl };
+      }
       const attachmentReady =
         !isAttachmentMsg ||
         !!(typeof ui.uri === 'string' && ui.uri.length > 48) ||
         !!serverDataUrl;
+      const deferInboundDedup =
+        authorId === String(myId) && isAttachmentMsg && (uploadStillActive || !attachmentReady);
+      if (inboundMessageId && !deferInboundDedup) {
+        if (processedInboundMessageIdsRef.current.has(inboundMessageId)) return;
+        processedInboundMessageIdsRef.current.add(inboundMessageId);
+        if (processedInboundMessageIdsRef.current.size > 500) {
+          const kept = [...processedInboundMessageIdsRef.current].slice(-250);
+          processedInboundMessageIdsRef.current = new Set(kept);
+        }
+      }
       const isOpen = threadIdEquals(selectedChatIdRef.current, chatId);
 
       if (hiddenChatIdsRef.current.has(chatId)) {
@@ -1804,21 +1842,27 @@ export function useGdcChatInbox({ token, user }) {
             if (isOpen) needsMessageReload = true;
             return t;
           }
+          let rowUi = ui;
+          if (authorId === String(myId) && isAttachmentMsg) {
+            const tempLocal = msgs.find((m) => m.me && isTempMessageId(m.id));
+            const existing = msgs.find((m) => String(m.id) === String(ui.id));
+            rowUi = preserveOutgoingAttachmentUri(ui, tempLocal || existing);
+          }
           let nextMsgs = msgs;
           if (isDeletedEvent) {
-            const has = msgs.some((m) => String(m.id) === String(ui.id));
+            const has = msgs.some((m) => String(m.id) === String(rowUi.id));
             nextMsgs = has
-              ? patchMessagesWithTombstone(msgs, String(ui.id))
-              : mergeMessageList(msgs, ui).slice(-80);
+              ? patchMessagesWithTombstone(msgs, String(rowUi.id))
+              : mergeMessageList(msgs, rowUi).slice(-80);
           } else if (isOpen) {
             if (authorId === String(myId)) {
               const base = msgs.filter((m) => !(m.me && isTempMessageId(m.id)));
-              nextMsgs = mergeMessageList(base, ui);
+              nextMsgs = mergeMessageList(base, rowUi);
             } else {
-              nextMsgs = mergeMessageList(msgs, ui);
+              nextMsgs = mergeMessageList(msgs, rowUi);
             }
           } else {
-            nextMsgs = mergeMessageList(msgs, ui).slice(-80);
+            nextMsgs = mergeMessageList(msgs, rowUi).slice(-80);
           }
           const isNewInbound =
             !!inboundMessageId && !msgs.some((m) => String(m.id) === inboundMessageId);
@@ -1826,8 +1870,8 @@ export function useGdcChatInbox({ token, user }) {
           if (!isOpen && authorId && authorId !== String(myId) && isNewInbound) unread += 1;
           if (isOpen) unread = 0;
 
-          let row = { ...t, messages: nextMsgs, unread, threadPreview: ui };
-          if (authorId === String(myId)) row = upgradeOwnMessageDelivery(row, ui.id);
+          let row = { ...t, messages: nextMsgs, unread, threadPreview: rowUi };
+          if (authorId === String(myId)) row = upgradeOwnMessageDelivery(row, rowUi.id);
           return row;
         };
 
@@ -2174,12 +2218,13 @@ export function useGdcChatInbox({ token, user }) {
     dismissIncomingNotice,
     setThreads,
     contacts,
-    groupContacts: directoryRows.length > 0 ? directoryRows : contacts,
+    groupContacts: mergeDirectoryLists(directoryRows, contacts),
     inboxLoading,
     directoryHydrated,
     inboxError,
     refreshThreads,
     reloadContacts: loadContacts,
+    hydrateChatParticipants,
     loadMessagesForChat,
     loadOlderMessages,
     openChat,

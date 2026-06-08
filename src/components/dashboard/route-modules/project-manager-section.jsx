@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { isAdminRole } from '@/utils/roles';
@@ -177,6 +178,7 @@ export function ProjectManagerSection({
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="clipboard-list-outline" size={20} color="#fff" />
@@ -185,7 +187,9 @@ export function ProjectManagerSection({
             <Text style={styles.heroTitle}>Project Manager</Text>
           </View>
         </View>
+        </AnimatedBlock>
 
+        <AnimatedBlock delay={80}>
         <View style={[styles.panel, { marginTop: 8 }]}>
           <Text style={styles.panelTitle}>Filters</Text>
           <Text style={styles.panelSub}>Search by task, filter by status and deadline range.</Text>
@@ -357,6 +361,7 @@ export function ProjectManagerSection({
             })
           )}
         </View>
+        </AnimatedBlock>
       </ScrollView>
 
       <Modal visible={createTaskOpen} transparent animationType="slide" onRequestClose={closeProjectTaskModal}>

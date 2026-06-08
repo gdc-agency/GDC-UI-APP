@@ -6,8 +6,9 @@ import { Animated, Easing, Modal, Platform, Pressable, ScrollView, StatusBar, St
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandTitle } from '@/components/ui/brand-title';
 import { ThemeToggleButton } from '@/components/ui/theme-toggle';
-import { BRAND_COMPANY_NAME, BRAND_NAV_LOGO_SOURCE } from '@/data/constants/brand';
+import { BRAND_NAV_LOGO_SOURCE } from '@/data/constants/brand';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
 import { isAdminRole, isHrRole } from '@/utils/roles';
@@ -130,9 +131,14 @@ export function DashboardTopbar() {
           shadowRadius: 12,
         }}>
         <View className="flex-row items-center gap-2.5">
-          <Image source={BRAND_NAV_LOGO_SOURCE} className="h-[38px] w-[38px] bg-transparent" contentFit="contain" />
-          <View>
-            <Text className="text-base font-extrabold" style={{ color: colors.text }}>{BRAND_COMPANY_NAME}</Text>
+          <Image
+            source={BRAND_NAV_LOGO_SOURCE}
+            style={{ width: 38, height: 38 }}
+            contentFit="contain"
+            accessibilityLabel="Company logo"
+          />
+          <View className="shrink">
+            <BrandTitle size="md" />
           </View>
         </View>
 
@@ -188,9 +194,14 @@ export function DashboardTopbar() {
               className="mb-2.5 flex-row items-center justify-between border-b pb-2.5"
               style={{ borderBottomColor: colors.infoBorder }}>
               <View className="mr-2 flex-1 flex-row items-center gap-2">
-                <Image source={BRAND_NAV_LOGO_SOURCE} className="h-[34px] w-[34px] bg-transparent" contentFit="contain" />
-                <View className="flex-1">
-                  <Text className="text-[17px] font-extrabold" style={{ color: colors.text }}>{BRAND_COMPANY_NAME}</Text>
+                <Image
+                  source={BRAND_NAV_LOGO_SOURCE}
+                  style={{ width: 34, height: 34 }}
+                  contentFit="contain"
+                  accessibilityLabel="Company logo"
+                />
+                <View className="flex-1 min-w-0">
+                  <BrandTitle size="lg" />
                   <Text className="mt-0.5 text-[11px] font-semibold" style={{ color: colors.textMuted }} numberOfLines={1}>
                     {user?.name ? user.name : 'Signed in'}
                     {user?.role ? ` • ${user.role}` : ''}

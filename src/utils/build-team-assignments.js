@@ -120,3 +120,138 @@ export function groupTeamAssignmentsByLeader(rows) {
   }
   return [...byTl.values()].sort((a, b) => a.tl.localeCompare(b.tl, undefined, { sensitivity: 'base' }));
 }
+
+function userNumericId(u) {
+  return num(u?.id ?? u?.user_id);
+}
+
+function userTeamId(u) {
+  return num(u?.team_id ?? u?.teamId);
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} userRows
+ */
+export function getUnassignedEmployees(userRows) {
+  const users = Array.isArray(userRows) ? userRows : [];
+  return users
+    .filter((u) => {
+      const role = displayRoleFromDb(u.role);
+      return role === 'Employee' && userTeamId(u) == null;
+    })
+    .map((u) => {
+      const uid = userNumericId(u);
+      return {
+        id: uid,
+        name: u.name != null ? String(u.name) : '—',
+        email: u.email != null ? String(u.email) : '',
+        department: u.department != null ? String(u.department) : '',
+        gdcId: u.gdc_id != null ? String(u.gdc_id) : '',
+        avatarUrl: resolveProfileImageUri(u.profile_image ?? u.profileImage ?? u.avatar),
+      };
+    })
+    .filter((u) => u.id != null)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} userRows
+ */
+export function getUnassignedTeamLeaders(userRows) {
+  const users = Array.isArray(userRows) ? userRows : [];
+  return users
+    .filter((u) => displayRoleFromDb(u.role) === 'Team Leader' && userTeamId(u) == null)
+    .map((u) => {
+      const uid = userNumericId(u);
+      return {
+        id: uid,
+        name: u.name != null ? String(u.name) : '—',
+        email: u.email != null ? String(u.email) : '',
+        avatarUrl: resolveProfileImageUri(u.profile_image ?? u.profileImage ?? u.avatar),
+      };
+    })
+    .filter((u) => u.id != null)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+/**
+ * Team-centric cards for list + detail UI.
+ *
+ * @param {Array<Record<string, unknown>>} teams
+ * @param {Array<Record<string, unknown>>} userRows
+ */
+export function buildTeamCards(teams, userRows) {
+  const teamList = Array.isArray(teams) ? teams : [];
+  const users = Array.isArray(userRows) ? userRows : [];
+  const userById = new Map();
+  for (const u of users) {
+    const id = userNumericId(u);
+    if (id != null) userById.set(id, u);
+  }
+
+  const cards = [];
+  for (const team of teamList) {
+    const teamId = num(team.id);
+    if (teamId == null) continue;
+
+    const teamName = team.name != null ? String(team.name).trim() : 'Team';
+    const teamDeptRaw = team.department != null ? String(team.department).trim() : '';
+    const department = teamDeptRaw !== '' ? teamDeptRaw : null;
+    const leaderId = num(team.leader_id ?? team.leaderId);
+    const leaderUser = leaderId != null ? userById.get(leaderId) : null;
+    const leaderName =
+      leaderUser?.name != null && String(leaderUser.name).trim()
+        ? String(leaderUser.name).trim()
+        : leaderId != null
+          ? `User #${leaderId}`
+          : '—';
+
+    const roster = users.filter((u) => userTeamId(u) === teamId);
+    const memberIds = new Set(roster.map((u) => userNumericId(u)).filter((x) => x != null));
+
+    const mapMember = (u, uid, isLeader = false) => {
+      const deptUser = u.department != null && String(u.department).trim() !== '' ? String(u.department).trim() : null;
+      return {
+        id: uid,
+        name: u.name != null ? String(u.name) : '—',
+        email: u.email != null ? String(u.email) : '',
+        role: displayRoleFromDb(u.role),
+        department: department ?? deptUser ?? '—',
+        gdcId: u.gdc_id != null ? String(u.gdc_id) : `ID-${uid}`,
+        avatarUrl: resolveProfileImageUri(u.profile_image ?? u.profileImage ?? u.avatar),
+        isLeader,
+      };
+    };
+
+    const members = [];
+    for (const u of roster) {
+      const uid = userNumericId(u);
+      if (uid == null) continue;
+      members.push(mapMember(u, uid, uid === leaderId));
+    }
+    if (leaderUser && leaderId != null && !memberIds.has(leaderId)) {
+      members.unshift(mapMember(leaderUser, leaderId, true));
+    }
+
+    members.sort((a, b) => {
+      if (a.isLeader !== b.isLeader) return a.isLeader ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    cards.push({
+      id: teamId,
+      name: teamName,
+      department,
+      leaderId,
+      leaderName,
+      leaderEmail: leaderUser?.email != null ? String(leaderUser.email) : '',
+      leaderAvatarUrl: leaderUser
+        ? resolveProfileImageUri(leaderUser.profile_image ?? leaderUser.profileImage ?? leaderUser.avatar)
+        : null,
+      members,
+      memberCount: members.length,
+    });
+  }
+
+  return cards.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}

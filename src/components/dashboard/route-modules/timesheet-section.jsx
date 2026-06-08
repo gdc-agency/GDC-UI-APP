@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { isAdminOrHrRole } from '@/utils/roles';
@@ -78,6 +79,7 @@ export function TimesheetSection({ styles, ctx }) {
       <SafeAreaView style={ts.safe} edges={['top']}>
         <DashboardTopbar />
         <ScrollView contentContainerStyle={ts.scroll} showsVerticalScrollIndicator={false}>
+          <AnimatedBlock delay={0}>
           <TimesheetOverviewScreen
             slug={slug}
             user={user}
@@ -114,6 +116,7 @@ export function TimesheetSection({ styles, ctx }) {
             showRoleFilter={isAdminOrHrRole(user?.role)}
             roleFilterOptions={roleFilterOptions}
           />
+          </AnimatedBlock>
         </ScrollView>
       </SafeAreaView>
     );
@@ -123,6 +126,7 @@ export function TimesheetSection({ styles, ctx }) {
     <SafeAreaView style={ts.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={ts.scroll} showsVerticalScrollIndicator={false}>
+        <AnimatedBlock delay={0}>
         {user?.role === 'Team Leader' ? (
           <TimesheetRoleNav
             user={user}
@@ -175,6 +179,7 @@ export function TimesheetSection({ styles, ctx }) {
             ) : null}
           </>
         ) : null}
+        </AnimatedBlock>
       </ScrollView>
     </SafeAreaView>
   );

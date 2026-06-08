@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -8,43 +7,58 @@ import {
   Alert,
   Dimensions,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
+import { AuthBrandBlock } from '@/components/auth/auth-brand-block';
+import { AuthPrimaryButton } from '@/components/auth/auth-primary-button';
+import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { WaveDivider } from '@/components/wave-divider';
-import {
-  BRAND_COMPANY_NAME,
-  BRAND_LOGO_FRAME,
-  BRAND_LOGO_SOURCE,
-} from '@/data/constants/brand';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
-import { cn } from '@/theme/cn';
 
-const HEADER_RATIO = 0.39;
+const HEADER_RATIO = 0.36;
 
-const logoFrameStyle = {
-  width: BRAND_LOGO_FRAME.width,
-  height: BRAND_LOGO_FRAME.height,
-  borderRadius: BRAND_LOGO_FRAME.borderRadius,
-  backgroundColor: BRAND_LOGO_FRAME.backgroundColor,
-  padding: BRAND_LOGO_FRAME.padding,
-};
+function AuthInput({ label, icon, value, onChangeText, placeholder, secureTextEntry, keyboardType, autoComplete, trailing }) {
+  const { colors } = useTheme();
 
-const logoImgStyle = {
-  width: BRAND_LOGO_FRAME.width - BRAND_LOGO_FRAME.padding * 2,
-  height: BRAND_LOGO_FRAME.height - BRAND_LOGO_FRAME.padding * 2,
-};
+  return (
+    <View className="mb-5">
+      <Text className="mb-2.5 text-sm font-semibold" style={{ color: colors.textMuted }}>
+        {label}
+      </Text>
+      <View
+        className="flex-row items-center rounded-2xl border px-4 py-3"
+        style={{ borderColor: colors.inputBorder, backgroundColor: colors.inputBg }}>
+        <MaterialCommunityIcons name={icon} size={20} color={colors.textMuted} />
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.inputPlaceholder}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize="none"
+          autoComplete={autoComplete}
+          className="ml-3 flex-1 text-base"
+          style={{ color: colors.text, paddingVertical: Platform.OS === 'android' ? 2 : 4 }}
+        />
+        {trailing}
+      </View>
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const { user, signIn, hydrated } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const headerHeight = Math.round(Dimensions.get('window').height * HEADER_RATIO);
@@ -82,32 +96,23 @@ export default function LoginScreen() {
     }
   }
 
+  const headerColors = isDark
+    ? [colors.splashTop, '#0F172A', '#1E293B']
+    : [colors.splashTop, colors.splashMid, colors.splashBottom];
+
   return (
     <View className="flex-1 bg-card">
-      <StatusBar style={colors.statusBarStyle === 'light' ? 'light' : 'dark'} />
+      <StatusBar style="light" />
       <View className="w-full overflow-hidden" style={{ height: headerHeight }}>
         <LinearGradient
-          colors={[colors.splashTop, colors.splashMid, colors.splashBottom]}
+          colors={headerColors}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           className="flex-1">
           <View
             className="flex-1 items-center justify-center px-6 pb-2"
-            style={{ paddingTop: insets.top + 24 }}>
-            <View className="mb-2.5 items-center justify-center overflow-hidden" style={logoFrameStyle}>
-              <Image
-                source={BRAND_LOGO_SOURCE}
-                style={logoImgStyle}
-                contentFit="contain"
-                contentPosition="center"
-              />
-            </View>
-            <Text className="mt-0.5 text-center text-[23px] font-extrabold text-white">
-              {BRAND_COMPANY_NAME}
-            </Text>
-            <Text className="mt-1 text-center text-[13px] font-semibold text-white/90">
-              Turning Clicks into Clients
-            </Text>
+            style={{ paddingTop: insets.top + 20 }}>
+            <AuthBrandBlock compact lightOnDark slogan="Turning Clicks into Clients" />
           </View>
           <WaveDivider fill={colors.card} />
         </LinearGradient>
@@ -116,10 +121,9 @@ export default function LoginScreen() {
       <KeyboardAwareScrollView
         contentContainerStyle={{
           flexGrow: 1,
-          justifyContent: 'flex-start',
           paddingHorizontal: 28,
-          paddingTop: 8,
-          paddingBottom: Math.max(insets.bottom, 20),
+          paddingTop: 12,
+          paddingBottom: Math.max(insets.bottom, 24),
         }}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
@@ -127,88 +131,72 @@ export default function LoginScreen() {
         extraHeight={Platform.OS === 'ios' ? 24 : 60}
         showsVerticalScrollIndicator={false}
         className="flex-1 bg-card">
-        <View className="w-full max-w-[420px] min-h-full justify-start gap-3.5 self-center">
-          <View className="mt-0.5 w-full">
-            <Text className="mb-2 text-center text-[22px] font-bold tracking-[0.2px] text-text">
-              Sign In
-            </Text>
+        <View className="w-full max-w-[420px] self-center">
+          <AnimatedBlock delay={0}>
+          <Text className="mb-5 text-center text-[24px] font-bold tracking-[0.2px]" style={{ color: colors.text }}>
+            Sign In
+          </Text>
+          </AnimatedBlock>
 
-            {error ? (
-              <View className="mb-4 max-h-40 rounded-card border border-danger-border bg-danger-bg p-3">
-                <ScrollView className="max-h-[140px]" nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  <Text className="text-[13px] font-semibold leading-[18px] text-danger-text">{error}</Text>
-                </ScrollView>
-              </View>
-            ) : null}
-
-            <View className="mb-[26px]">
-              <Text className="mb-3 text-sm font-medium text-text-muted">E-mail Address</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your mail"
-                placeholderTextColor={colors.inputPlaceholder}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                className="border-b-2 border-input-underline bg-input-bg py-3 pr-14 text-base text-text"
-              />
+          {error ? (
+            <AnimatedBlock delay={40}>
+            <View className="mb-4 rounded-2xl border border-danger-border bg-danger-bg p-3">
+              <ScrollView className="max-h-[120px]" nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                <Text className="text-[13px] font-semibold leading-[18px] text-danger-text">{error}</Text>
+              </ScrollView>
             </View>
+            </AnimatedBlock>
+          ) : null}
 
-            <View className="mb-[26px]">
-              <Text className="mb-3 text-sm font-medium text-text-muted">Password</Text>
-              <View>
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter your password"
-                  placeholderTextColor={colors.inputPlaceholder}
-                  secureTextEntry={!showPw}
-                  autoComplete="password"
-                  className="border-b-2 border-input-underline bg-input-bg py-3 pr-14 text-base text-text"
+          <AnimatedBlock delay={70}>
+          <AuthInput
+            label="E-mail Address"
+            icon="email-outline"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Enter your mail"
+            keyboardType="email-address"
+            autoComplete="email"
+          />
+
+          <AuthInput
+            label="Password"
+            icon="lock-outline"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            secureTextEntry={!showPw}
+            autoComplete="password"
+            trailing={
+              <Pressable
+                onPress={() => setShowPw((v) => !v)}
+                hitSlop={12}
+                accessibilityLabel={showPw ? 'Hide password' : 'Show password'}
+                className="ml-1 p-1">
+                <MaterialCommunityIcons
+                  name={showPw ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color={colors.textMuted}
                 />
-                <TouchableOpacity
-                  className="absolute bottom-2.5 right-0 px-1 py-1"
-                  onPress={() => setShowPw((v) => !v)}
-                  hitSlop={12}
-                  accessibilityLabel={showPw ? 'Hide password' : 'Show password'}>
-                  <Text className="text-sm font-semibold text-primary-mid">{showPw ? 'Hide' : 'Show'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              </Pressable>
+            }
+          />
+          </AnimatedBlock>
 
-            <TouchableOpacity
-              className="mb-2.5 self-end"
-              onPress={() =>
-                Alert.alert('Forgot password?', 'Use the GDC web app forgot-password page until mobile reset is wired.')
-              }>
-              <Text className="text-sm font-semibold text-primary-mid">Forgot password?</Text>
-            </TouchableOpacity>
-          </View>
+          <AnimatedBlock delay={120}>
+          <Pressable
+            className="mb-6 self-end"
+            onPress={() =>
+              Alert.alert('Forgot password?', 'Use the GDC web app forgot-password page until mobile reset is wired.')
+            }>
+            <Text className="text-sm font-semibold text-primary-mid">Forgot password?</Text>
+          </Pressable>
 
-          <View className="w-full flex-col items-center gap-3.5">
-            <TouchableOpacity
-              className={cn(
-                'min-h-[52px] w-full items-center justify-center rounded-full bg-primary-mid py-4',
-                loading && 'opacity-75',
-              )}
-              onPress={onSubmit}
-              disabled={loading}
-              activeOpacity={0.9}>
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-base font-bold text-white">Login</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="min-h-[52px] w-full items-center justify-center rounded-full border border-border-strong bg-card py-4"
-              onPress={() => router.back()}
-              disabled={loading}
-              activeOpacity={0.88}>
-              <Text className="text-base font-bold text-text-secondary">Back</Text>
-            </TouchableOpacity>
+          <View className="items-center gap-3.5">
+            <AuthPrimaryButton label="Login" onPress={onSubmit} loading={loading} disabled={loading} />
+            <AuthPrimaryButton label="Back" onPress={() => router.back()} variant="outline" disabled={loading} />
           </View>
+          </AnimatedBlock>
         </View>
       </KeyboardAwareScrollView>
     </View>

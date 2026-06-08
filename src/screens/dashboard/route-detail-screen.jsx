@@ -83,7 +83,6 @@ import {
     enrichTimesheetUserAvatars,
     filterAttendanceOverviewUsers,
     filterUsersForAttendanceViewer,
-    getDefaultAvailabilityDateRange,
     isExcludedAttendanceOverviewRole,
     mapClockHistoryToAvailabilityLog,
     mapTodayStatusToAvailabilityStatus,
@@ -96,11 +95,6 @@ import {
     mapThirtyDayUserRow,
     mapTodaySummaryUserRow
 } from '@/utils/attendance-ui-map';
-import {
-  buildTeamAssignmentRows,
-  filterTeamAssignmentRows,
-  groupTeamAssignmentsByLeader,
-} from '@/utils/build-team-assignments';
 import { resolveProfileImageUri } from '@/utils/chat-directory';
 import { isAdminOrHrRole, isAdminRole, isEmployeeRole } from '@/utils/roles';
 import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
@@ -184,7 +178,6 @@ export default function RouteDetailScreen() {
   const [forwardTlId, setForwardTlId] = useState(null);
   const [forwardTlDropdownOpen, setForwardTlDropdownOpen] = useState(false);
   const [projectStatusMenuOpen, setProjectStatusMenuOpen] = useState(false);
-  const [teamAssignSearch, setTeamAssignSearch] = useState('');
   const [teamTlRosterLoading, setTeamTlRosterLoading] = useState(false);
   const [teamTlRosterError, setTeamTlRosterError] = useState(null);
   const [teamRosterTeams, setTeamRosterTeams] = useState([]);
@@ -228,12 +221,8 @@ export default function RouteDetailScreen() {
   const [availabilityQuickFilter, setAvailabilityQuickFilter] = useState('all');
   const [availabilitySearch, setAvailabilitySearch] = useState('');
   const [hoveredAvailabilityStatus, setHoveredAvailabilityStatus] = useState(null);
-  const [availabilityFromDate, setAvailabilityFromDate] = useState(
-    () => getDefaultAvailabilityDateRange().start,
-  );
-  const [availabilityToDate, setAvailabilityToDate] = useState(
-    () => getDefaultAvailabilityDateRange().end,
-  );
+  const [availabilityFromDate, setAvailabilityFromDate] = useState('');
+  const [availabilityToDate, setAvailabilityToDate] = useState('');
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [manualRequests, setManualRequests] = useState([]);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -726,18 +715,6 @@ export default function RouteDetailScreen() {
     () => Object.fromEntries(timesheetUsers.map((entry) => [entry.gdcId, entry.name])),
     [timesheetUsers],
   );
-  const teamAssignmentRows = useMemo(
-    () => buildTeamAssignmentRows(teamRosterTeams, teamRosterUsers),
-    [teamRosterTeams, teamRosterUsers],
-  );
-  const filteredTeamAssignments = useMemo(
-    () => filterTeamAssignmentRows(teamAssignmentRows, teamAssignSearch),
-    [teamAssignmentRows, teamAssignSearch],
-  );
-  const groupedTeamAssignments = useMemo(
-    () => groupTeamAssignmentsByLeader(filteredTeamAssignments),
-    [filteredTeamAssignments],
-  );
 
   const timesheetDays = useMemo(() => {
     const days = [];
@@ -762,8 +739,8 @@ export default function RouteDetailScreen() {
         slug === 'clock-records' || slug === 'manual-records'
           ? recordSearch.trim()
           : timesheetSearch.trim();
-      const rangeFrom = recordFromDate || timesheetDays[0] || '';
-      const rangeTo = recordToDate || timesheetDays[timesheetDays.length - 1] || '';
+      const rangeFrom = recordFromDate || '';
+      const rangeTo = recordToDate || '';
 
       if (slug === 'request-management' || slug === 'my-requests') {
         const [leaves, manuals] = await Promise.all([listLeaveRequests(token), listManualTimeRequests(token)]);
@@ -871,8 +848,8 @@ export default function RouteDetailScreen() {
         const recordRole =
           recordProviderFilter !== 'all' ? apiRoleFromDisplayFilter(recordProviderFilter) : roleQ;
         const query = {
-          from: rangeFrom,
-          to: rangeTo,
+          ...(rangeFrom ? { from: rangeFrom } : {}),
+          ...(rangeTo ? { to: rangeTo } : {}),
           ...(recordRole !== 'ALL' ? { role: recordRole } : {}),
           ...(searchQ ? { gdc_id: searchQ } : {}),
           ...(recordDepartmentFilter !== 'all' ? { department: recordDepartmentFilter } : {}),
@@ -1033,11 +1010,11 @@ export default function RouteDetailScreen() {
             }));
           }
           let teamClockLogs = [];
-          if (rangeFrom && rangeTo) {
+          if (rangeFrom || rangeTo) {
             const teamLabel = String(user?.team_name || user?.department || '').trim();
             const rows = await getClockRecords(token, {
-              from: rangeFrom,
-              to: rangeTo,
+              ...(rangeFrom ? { from: rangeFrom } : {}),
+              ...(rangeTo ? { to: rangeTo } : {}),
               role: 'employee',
               ...(teamLabel ? { department: teamLabel } : {}),
             });
@@ -1085,13 +1062,6 @@ export default function RouteDetailScreen() {
     user?.avatar,
     user?.gdc_id,
   ]);
-
-  useEffect(() => {
-    if (user?.role !== 'Team Leader' || slug !== 'timesheet') return;
-    if (!timesheetDays.length) return;
-    setRecordFromDate(timesheetDays[0]);
-    setRecordToDate(timesheetDays[timesheetDays.length - 1]);
-  }, [user?.role, slug, timesheetDays]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1366,8 +1336,8 @@ export default function RouteDetailScreen() {
   const tlFilteredTeamRecords = useMemo(() => {
     const usersById = new Map(tlTeamMembers.map((u) => [u.gdcId, u]));
     const rosterGdc = new Set(tlTeamMembers.map((m) => m.gdcId));
-    const from = recordFromDate || timesheetDays[0] || '';
-    const to = recordToDate || timesheetDays[timesheetDays.length - 1] || '';
+    const from = recordFromDate || '';
+    const to = recordToDate || '';
     const q = recordSearch.trim().toLowerCase();
     return timesheetLogs
       .filter((rec) => rec.source === 'clock' && rosterGdc.has(rec.gdcId))
@@ -1397,7 +1367,6 @@ export default function RouteDetailScreen() {
     recordProviderFilter,
     recordSearch,
     recordToDate,
-    timesheetDays,
     timesheetLogs,
     tlTeamMembers,
   ]);
@@ -1408,10 +1377,8 @@ export default function RouteDetailScreen() {
     const teamDept = String(tlRosterTeamName || tlProfile?.team || '').trim();
     const q = recordSearch.trim();
     return {
-      ...(recordFromDate || timesheetDays[0] ? { from: recordFromDate || timesheetDays[0] } : {}),
-      ...(recordToDate || timesheetDays[timesheetDays.length - 1]
-        ? { to: recordToDate || timesheetDays[timesheetDays.length - 1] }
-        : {}),
+      ...(recordFromDate ? { from: recordFromDate } : {}),
+      ...(recordToDate ? { to: recordToDate } : {}),
       ...(recordRole && recordRole !== 'ALL' ? { role: recordRole } : { role: 'employee' }),
       ...(recordDepartmentFilter !== 'all'
         ? { department: recordDepartmentFilter }
@@ -1426,7 +1393,6 @@ export default function RouteDetailScreen() {
     recordProviderFilter,
     recordSearch,
     recordToDate,
-    timesheetDays,
     tlProfile?.team,
     tlRosterTeamName,
   ]);
@@ -1458,7 +1424,12 @@ export default function RouteDetailScreen() {
   }, [filteredAvailabilityUsers]);
 
   const filteredMyAvailabilityLog = useMemo(
-    () => myAvailabilityLog.filter((r) => r.date >= availabilityFromDate && r.date <= availabilityToDate),
+    () =>
+      myAvailabilityLog.filter((r) => {
+        if (availabilityFromDate && r.date < availabilityFromDate) return false;
+        if (availabilityToDate && r.date > availabilityToDate) return false;
+        return true;
+      }),
     [availabilityFromDate, availabilityToDate, myAvailabilityLog],
   );
 
@@ -2581,11 +2552,8 @@ export default function RouteDetailScreen() {
     return (
       <TeamTlSection
         styles={styles}
-        teamAssignSearch={teamAssignSearch}
-        setTeamAssignSearch={setTeamAssignSearch}
-        groupedTeamAssignments={groupedTeamAssignments}
-        filteredTeamAssignments={filteredTeamAssignments}
-        teamRosterTotal={teamAssignmentRows.length}
+        teamRosterTeams={teamRosterTeams}
+        teamRosterUsers={teamRosterUsers}
         canViewTeamRoster={isAdminOrHrRole(user?.role)}
         rosterLoading={teamTlRosterLoading}
         rosterError={teamTlRosterError}

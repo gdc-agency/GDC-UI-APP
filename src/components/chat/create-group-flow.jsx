@@ -3,6 +3,7 @@ import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { useTheme } from '@/context/theme-context';
 import { createGroupIdempotencyKey } from '@/utils/group-create-guard';
 import { cn } from '@/theme/cn';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -40,30 +41,12 @@ function roleBadgeLabel(role) {
 const MemberRow = memo(
   function MemberRow({ item, selected, onToggle, colors }) {
     const line = item.displayName || item.name;
-    const ringColor = colors.modalSheetBg || colors.card;
+    const statusText = item.online ? 'Online' : 'Offline';
+    const statusColor = item.online ? colors.primaryMid : colors.textMuted;
     return (
       <Pressable className="h-16 flex-row items-center justify-between px-1 py-2" onPress={() => onToggle(String(item.id))}>
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          <View className="relative h-11 w-11 shrink-0">
-            {item.avatarUrl ? (
-              <Image source={{ uri: item.avatarUrl }} className="h-11 w-11 rounded-full" contentFit="cover" />
-            ) : (
-              <View
-                className="h-11 w-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.chipActiveBg }}>
-                <Text className="text-base font-extrabold" style={{ color: colors.primaryMid }}>
-                  {String(line).slice(0, 1)}
-                </Text>
-              </View>
-            )}
-            <View
-              className="absolute -bottom-px -right-px h-[13px] w-[13px] rounded-[7px] border-2"
-              style={{
-                borderColor: ringColor,
-                backgroundColor: item.online ? '#22c55e' : colors.textSecondary,
-              }}
-            />
-          </View>
+          <ProfileAvatar uri={item.avatarUrl} name={line} size={44} />
           <View className="min-w-0 flex-1">
             <View className="flex-row items-center gap-1.5">
               <Text className="shrink text-[15px] font-bold" style={{ color: colors.text }} numberOfLines={1}>
@@ -77,8 +60,8 @@ const MemberRow = memo(
                 </Text>
               ) : null}
             </View>
-            <Text className="mt-0.5 text-xs" style={{ color: colors.textMuted }}>
-              {item.online ? 'Online' : 'Offline'}
+            <Text className="mt-0.5 text-xs font-semibold" style={{ color: statusColor }}>
+              {statusText}
             </Text>
           </View>
         </View>
@@ -93,7 +76,12 @@ const MemberRow = memo(
       </Pressable>
     );
   },
-  (a, b) => a.selected === b.selected && String(a.item.id) === String(b.item.id),
+  (a, b) =>
+    a.selected === b.selected &&
+    String(a.item.id) === String(b.item.id) &&
+    a.item.avatarUrl === b.item.avatarUrl &&
+    (a.item.displayName || a.item.name) === (b.item.displayName || b.item.name) &&
+    a.item.online === b.item.online,
 );
 
 const Chip = memo(function Chip({ label, onRemove, colors }) {
@@ -533,7 +521,7 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     onPress={pickAvatar}
                     disabled={submitting}>
                     {avatarUri ? (
-                      <Image source={{ uri: avatarUri }} className="h-full w-full" contentFit="cover" />
+                      <Image source={{ uri: avatarUri }} style={{ width: 96, height: 96 }} contentFit="cover" />
                     ) : (
                       <>
                         <MaterialCommunityIcons name="camera-plus-outline" size={32} color={colors.primaryMid} />

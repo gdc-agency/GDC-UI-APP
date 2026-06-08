@@ -224,9 +224,11 @@ async function writeSolidBackground(outPath) {
 
 async function main() {
   const preparedSource = await prepareSourceBuffer();
-  const brandLogo = await loadPreparedLogo(BRAND_LOGO_SIZE, preparedSource);
+  const brandLogoOpaque = await loadPreparedLogo(BRAND_LOGO_SIZE, preparedSource);
+  /** Auth splash / welcome / login — transparent outside + inside white for dark UI. */
+  const brandLogo = await whiteToTransparent(brandLogoOpaque);
   const navLogoOpaque = await loadPreparedLogo(NAV_LOGO_SIZE, preparedSource);
-  const navLogo = await outerWhiteToTransparent(navLogoOpaque);
+  const navLogo = await whiteToTransparent(navLogoOpaque);
   const adaptiveLogoOpaque = await loadPreparedLogo(ADAPTIVE_LOGO_SIZE, preparedSource);
   const adaptiveLogo = await whiteToTransparent(adaptiveLogoOpaque);
   const launcherLogo = await loadPreparedLogo(LAUNCHER_LOGO_SIZE, preparedSource);

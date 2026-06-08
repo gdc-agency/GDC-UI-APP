@@ -18,14 +18,47 @@ export function formatDisplayRole(roleRaw) {
  * @param {string | null | undefined} raw
  * @returns {string | null}
  */
+function isStaleDevImageHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '10.0.2.2' ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
+function isAuthServedImagePath(pathname) {
+  const p = String(pathname || '');
+  return (
+    p.startsWith('/uploads') ||
+    p.startsWith('/api/') ||
+    p.includes('/profile') ||
+    p.includes('/avatar')
+  );
+}
+
 export function resolveProfileImageUri(raw) {
   const s = String(raw || '').trim();
   if (!s) return null;
-  if (/^https?:\/\//i.test(s)) return s;
   /** Group avatars / uploads may be stored as data URLs in Chat DB — must not prefix API host. */
   if (/^data:image\//i.test(s)) return s;
   if (/^(blob:|file:)/i.test(s)) return s;
+
   const base = getApiBaseUrl().replace(/\/+$/, '');
+
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      if (isStaleDevImageHost(u.hostname) && isAuthServedImagePath(u.pathname)) {
+        return `${base}${u.pathname}${u.search}`;
+      }
+      return s;
+    } catch {
+      return s;
+    }
+  }
+
   if (s.startsWith('/')) return `${base}${s}`;
   return `${base}/${s.replace(/^\//, '')}`;
 }

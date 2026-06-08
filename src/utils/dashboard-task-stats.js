@@ -116,11 +116,14 @@ export function buildHrDashboardSnapshot({ user, tasks = [], users = [], leaveRe
   const pendingLeave = leaveRequests.filter(
     (l) => String(l.status || '').toLowerCase() === 'pending',
   ).length;
+  const buckets = countDashboardTaskBuckets(teamTasks);
 
   return {
     teamMembers: teamMembers.length,
     teamTasks: teamTasks.length,
     completed: teamTasks.filter((t) => String(t.status || '') === 'Approved').length,
     pendingLeave,
+    pendingTasks: buckets.pending,
+    submitted: buckets.submitted,
   };
 }

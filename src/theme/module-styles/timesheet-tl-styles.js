@@ -12,7 +12,7 @@ export function createTlStyles(c) {
     backgroundColor: TlColors.card,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.9)',
+    borderColor: TlColors.border,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -38,10 +38,10 @@ export function createTlStyles(c) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', letterSpacing: -0.3 },
+  heroTitle: { fontSize: 18, fontWeight: '800', color: c.text, letterSpacing: -0.3 },
   periodWrap: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: TsColors.pillTrackBg,
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
@@ -67,7 +67,7 @@ export function createTlStyles(c) {
     }),
   },
   periodText: { fontSize: 12, fontWeight: '700', color: TlColors.slate },
-  periodTextActive: { color: '#0F172A', fontWeight: '800' },
+  periodTextActive: { color: c.text, fontWeight: '800' },
   subTabsCard: {
     marginBottom: 14,
     backgroundColor: TlColors.card,
@@ -87,7 +87,7 @@ export function createTlStyles(c) {
   },
   subTabsTrack: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: TsColors.pillTrackBg,
     borderRadius: 12,
     padding: 4,
     gap: 4,
@@ -140,11 +140,11 @@ export function createTlStyles(c) {
   dateLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: TlColors.slate,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  dateValue: { marginTop: 2, fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  dateValue: { marginTop: 2, fontSize: 13, fontWeight: '700', color: c.text },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statTile: {
     flexGrow: 1,
@@ -161,12 +161,12 @@ export function createTlStyles(c) {
   statTileLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: TlColors.slate,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  statTileValue: { marginTop: 6, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  statTileUnit: { marginTop: 2, fontSize: 12, fontWeight: '600', color: '#94A3B8' },
+  statTileValue: { marginTop: 6, fontSize: 28, fontWeight: '800', letterSpacing: -0.5, color: c.text },
+  statTileUnit: { marginTop: 2, fontSize: 12, fontWeight: '600', color: TlColors.slate },
   statDeco: { position: 'absolute', right: -8, bottom: -8, opacity: 0.35 },
   panelCard: {
     backgroundColor: TlColors.card,
@@ -200,7 +200,7 @@ export function createTlStyles(c) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  panelTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  panelTitle: { fontSize: 16, fontWeight: '800', color: c.text },
   panelSub: { marginTop: 2, fontSize: 12, color: TlColors.slate, fontWeight: '600' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   searchField: {
@@ -208,7 +208,7 @@ export function createTlStyles(c) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TsColors.inputBg,
     borderWidth: 1,
     borderColor: TlColors.border,
     borderRadius: 12,

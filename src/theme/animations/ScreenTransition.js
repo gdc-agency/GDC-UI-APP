@@ -1,8 +1,9 @@
-import { FadeIn, FadeOut } from './FadeIn';
+import { FadeOut } from './FadeIn';
+import { enterDown } from './motion';
 
-/** Default screen mount transition — keep subtle. */
+/** Default screen mount transition — match dashboard section motion. */
 export const ScreenTransition = {
-  entering: FadeIn,
+  entering: enterDown(0),
   exiting: FadeOut,
 };
 

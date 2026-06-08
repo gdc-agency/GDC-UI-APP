@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { displayRoleOptionsForPromotion } from '@/utils/admin-directory';
@@ -129,6 +130,7 @@ export function AdminSection({ styles, ctx }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="shield-check-outline" size={20} color="#fff" />
@@ -137,6 +139,7 @@ export function AdminSection({ styles, ctx }) {
             <Text style={styles.heroTitle}>Admin Control</Text>
           </View>
         </View>
+        </AnimatedBlock>
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Admin Panels</Text>

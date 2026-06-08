@@ -1,5 +1,4 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
@@ -21,7 +20,10 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
+import { PressableScale } from '@/theme/animations/PressableScale';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { SkeletonGroup, SkeletonProfileForm } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
@@ -38,6 +40,7 @@ function ProfileInfoRow({
   iconBg,
   label,
   value,
+  placeholder,
   fieldKey,
   focusedField = null,
   onFieldFocus,
@@ -47,7 +50,9 @@ function ProfileInfoRow({
   keyboardType,
   multiline,
 }) {
+  const { colors } = useTheme();
   const showCaret = Boolean(fieldKey && focusedField === fieldKey);
+  const displayValue = String(value ?? '').trim();
 
   return (
     <View className="flex-row items-center gap-3 px-3.5 py-3.5">
@@ -58,18 +63,18 @@ function ProfileInfoRow({
         <Text className="mb-0.5 text-xs font-semibold text-text-secondary">{label}</Text>
         <TextInput
           ref={inputRef}
-          value={value}
+          value={displayValue}
           onChangeText={onChangeText}
           editable={editable}
           caretHidden={!showCaret}
           onFocus={fieldKey && onFieldFocus ? () => onFieldFocus(fieldKey) : undefined}
           className={cn(
             'm-0 min-h-[22px] p-0 text-[15px] font-bold text-text',
-            !editable && 'text-text-muted',
+            !editable && displayValue && 'text-text-muted',
             multiline && 'min-h-[44px] leading-5',
           )}
-          placeholder="—"
-          placeholderTextColor="#94a3b8"
+          placeholder={placeholder}
+          placeholderTextColor={colors.inputPlaceholder}
           keyboardType={keyboardType}
           autoCapitalize={label === 'Email' ? 'none' : 'sentences'}
           multiline={multiline}
@@ -324,6 +329,7 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <>
+            <AnimatedBlock delay={0}>
             <LinearGradient
               colors={[colors.primaryMid, colors.primaryLight, '#5eb8ff']}
               locations={[0, 0.55, 1]}
@@ -339,17 +345,12 @@ export default function ProfileScreen() {
               <View className="mr-1 shrink-0">
                 <View className="relative">
                   <View className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-[36px] border-[3px] border-card bg-surface-muted">
-                    {user?.avatar ? (
-                      <Image
-                        key={user.avatar}
-                        source={{ uri: user.avatar }}
-                        className="h-full w-full"
-                        contentFit="cover"
-                        cachePolicy="none"
-                      />
-                    ) : (
-                      <Text className="text-[28px] font-extrabold text-text-muted">{firstName.slice(0, 1).toUpperCase()}</Text>
-                    )}
+                    <ProfileAvatar
+                      uri={user?.avatar}
+                      name={user?.name || firstName}
+                      size={72}
+                      textStyle={{ fontSize: 28, fontWeight: '800', color: colors.textMuted }}
+                    />
                   </View>
                   <Pressable
                     className="absolute -bottom-0.5 -right-0.5 h-[26px] w-[26px] items-center justify-center rounded-[13px] border-2 border-card bg-card"
@@ -393,7 +394,9 @@ export default function ProfileScreen() {
                 ) : null}
               </View>
             </LinearGradient>
+            </AnimatedBlock>
 
+            <AnimatedBlock delay={80}>
             <View
               className="mx-4 mt-4 rounded-[18px] border border-border-light bg-card py-1 elevation-[3]"
               style={{
@@ -407,6 +410,7 @@ export default function ProfileScreen() {
                 iconColor="#2563eb"
                 iconBg="#dbeafe"
                 label="Full Name"
+                placeholder="Enter your full name"
                 fieldKey="name"
                 focusedField={focusedField}
                 onFieldFocus={setFocusedField}
@@ -421,6 +425,7 @@ export default function ProfileScreen() {
                 iconBg="#dbeafe"
                 label="Email"
                 value={email}
+                placeholder="No email on file"
                 editable={false}
               />
               <View className="ml-[68px] h-px bg-border" />
@@ -429,6 +434,7 @@ export default function ProfileScreen() {
                 iconColor="#16a34a"
                 iconBg="#dcfce7"
                 label="Phone"
+                placeholder="Enter your phone number"
                 fieldKey="phone"
                 focusedField={focusedField}
                 onFieldFocus={setFocusedField}
@@ -443,7 +449,8 @@ export default function ProfileScreen() {
                 iconColor="#ea580c"
                 iconBg="#ffedd5"
                 label="Department"
-                value={departmentLabel || '—'}
+                value={departmentLabel}
+                placeholder="No department added"
                 editable={false}
               />
               <View className="ml-[68px] h-px bg-border" />
@@ -452,6 +459,7 @@ export default function ProfileScreen() {
                 iconColor="#7c3aed"
                 iconBg="#ede9fe"
                 label="CNIC"
+                placeholder="Enter your CNIC"
                 fieldKey="cnic"
                 focusedField={focusedField}
                 onFieldFocus={setFocusedField}
@@ -465,6 +473,7 @@ export default function ProfileScreen() {
                 iconColor="#db2777"
                 iconBg="#fce7f3"
                 label="Address"
+                placeholder="Enter your address"
                 fieldKey="address"
                 focusedField={focusedField}
                 onFieldFocus={setFocusedField}
@@ -474,8 +483,10 @@ export default function ProfileScreen() {
                 multiline
               />
             </View>
+            </AnimatedBlock>
 
-            <Pressable
+            <AnimatedBlock delay={140}>
+            <PressableScale
               className="mx-4 mt-5 items-center justify-center rounded-[14px] bg-primary-mid px-[18px] py-3.5"
               onPress={onSave}
               disabled={saving || loading}>
@@ -489,7 +500,8 @@ export default function ProfileScreen() {
                   <Text className="text-base font-extrabold text-white">Save changes</Text>
                 </View>
               )}
-            </Pressable>
+            </PressableScale>
+            </AnimatedBlock>
           </>
         )}
       </ScrollView>

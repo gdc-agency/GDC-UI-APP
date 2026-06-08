@@ -10,7 +10,6 @@ const SEGMENTS = [
   { id: 'manual-records', label: 'Manual Record', icon: 'clipboard-text-outline' },
 ];
 
-
 function SegmentTab({ seg, active, onPress }) {
   const { moduleStyles } = useTheme();
   const ts = moduleStyles.timesheet.styles;
@@ -22,7 +21,7 @@ function SegmentTab({ seg, active, onPress }) {
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       accessibilityLabel={seg.label}
-      android_ripple={{ color: 'rgba(37, 99, 235, 0.12)' }}
+      android_ripple={{ color: 'rgba(37, 99, 235, 0.12)', borderless: false }}
       style={({ pressed }) => [
         ts.segmentBtn,
         active && ts.segmentBtnActive,
@@ -31,16 +30,22 @@ function SegmentTab({ seg, active, onPress }) {
       onPress={onPress}
     >
       <View style={ts.segmentBtnContent}>
-        <MaterialCommunityIcons
-          name={seg.icon}
-          size={22}
-          color={active ? TsColors.blue : inactiveColor}
-        />
-        <Text style={[ts.segmentText, active && ts.segmentTextActive]} numberOfLines={2}>
+        <View style={ts.segmentIconSlot}>
+          <MaterialCommunityIcons
+            name={seg.icon}
+            size={22}
+            color={active ? TsColors.blue : inactiveColor}
+          />
+        </View>
+        <Text
+          style={[ts.segmentText, active && ts.segmentTextActive]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
           {seg.label}
         </Text>
       </View>
-      {active ? <View style={ts.segmentIndicator} /> : <View style={ts.segmentIndicatorSpacer} />}
     </Pressable>
   );
 }

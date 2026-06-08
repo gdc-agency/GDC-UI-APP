@@ -32,6 +32,8 @@ import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banne
 import { MessageActionMenu } from '@/components/chat/message-action-menu';
 import { NewChatPicker } from '@/components/chat/new-chat-picker';
 import { TypingDots } from '@/components/chat/typing-dots';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 import { useTheme } from '@/context/theme-context';
 import { cn } from '@/theme/cn';
@@ -46,6 +48,9 @@ import {
   resolveChatPeerDisplayName
 } from '@/utils/chat-directory';
 import { isMessageUploading, statusIconColor, statusIconName } from '@/utils/chat-message-status';
+
+const CHAT_IMAGE_BUBBLE_W = 260;
+const CHAT_IMAGE_BUBBLE_H = 220;
 import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
 import { threadIdEquals } from '@/utils/chat-thread-inbox';
 import { canComposeInChat } from '@/utils/group-compose-permissions';
@@ -140,13 +145,13 @@ function initials(name) {
 }
 
 const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, resolvePeerProfile }) {
+  const { colors } = useTheme();
   const msgs = Array.isArray(item.messages) ? item.messages : [];
   const last = msgs.length ? msgs[msgs.length - 1] : item.threadPreview;
   const peer = item.peerId && resolvePeerProfile ? resolvePeerProfile(item.peerId) : null;
   // NEW CODE ADDED FOR CHAT LIST NAME LOADING — show real name, not grey skeleton bar
   const displayName = resolveChatPeerDisplayName(item, peer);
   const nameLoading = isChatDisplayNamePending(displayName, item.peerId);
-  const avatarLetter = (displayName || peer?.displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
   const unreadCount = Number(item.unread) || 0;
   const hasUnread = unreadCount > 0;
   const previewText =
@@ -170,18 +175,17 @@ const ChatThreadRow = React.memo(function ChatThreadRow({ item, onOpen, onHide, 
       onLongPress={() => onHide(item.id)}>
       <View className={tw.chatCardInner}>
         <View>
-          {peer?.avatarUrl || item.listAvatarUrl ? (
-            <Image
-              source={{ uri: peer?.avatarUrl || item.listAvatarUrl }}
-              className={tw.avatarImg}
-              contentFit="cover"
+          <ProfileAvatar
+            uri={peer?.avatarUrl || item.listAvatarUrl}
+            name={displayName || peer?.displayName}
+            size={52}
+          />
+          {item.peerId ? (
+            <View
+              className={cn(tw.presenceDot, item.isOnline && tw.presenceDotOnline)}
+              style={{ borderColor: item.isOnline ? colors.primaryMid : undefined }}
             />
-          ) : (
-            <View className={tw.avatar}>
-              <Text className={tw.avatarText}>{avatarLetter}</Text>
-            </View>
-          )}
-          {item.peerId ? <View className={cn(tw.presenceDot, item.isOnline && tw.presenceDotOnline)} /> : null}
+          ) : null}
         </View>
         <View className={tw.chatBody}>
           <View className={tw.chatMainCol}>
@@ -329,12 +333,14 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
               item.me ? tw.imageBubbleWrapMe : tw.imageBubbleWrapOther,
               isGroupIncoming && showSenderHeader && tw.imageBubbleWrapGroupFirst,
               isGroupIncoming && !showSenderHeader && tw.imageBubbleWrapGroupStack,
-              isActionTarget && tw.imageFrameSelected,)}>
+              isActionTarget && tw.imageFrameSelected,)}
+            style={{ width: CHAT_IMAGE_BUBBLE_W, maxWidth: CHAT_IMAGE_BUBBLE_W }}>
             <Image
-              source={{ uri: item.uri }}
-              className={tw.attachmentImage}
+              source={{ uri: String(item.uri) }}
+              style={{ width: CHAT_IMAGE_BUBBLE_W, height: CHAT_IMAGE_BUBBLE_H }}
               contentFit="cover"
               transition={200}
+              recyclingKey={String(item.id)}
               placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
             />
             {imageUploading ? (
@@ -456,13 +462,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
           isActionTarget && tw.msgRowActionTarget,)}>
         <View className={tw.groupAvatarCol}>
           {showSenderHeader ? (
-            senderAvatarUrl ? (
-              <Image source={{ uri: senderAvatarUrl }} className={tw.groupSideAvatar} contentFit="cover" />
-            ) : (
-              <View className={tw.groupSideAvatarFb}>
-                <Text className={tw.groupSideAvatarLetter}>{String(senderName || '?').slice(0, 1)}</Text>
-              </View>
-            )
+            <ProfileAvatar uri={senderAvatarUrl} name={senderName || 'Member'} size={36} />
           ) : (
             <View className={tw.groupSideAvatarGhost} />
           )}
@@ -528,6 +528,7 @@ export default function MessagesScreen() {
     startDm,
     ensureDmChat,
     reloadContacts,
+    hydrateChatParticipants,
     createGroup: submitGroupToApi,
     patchGroupFromServer,
     addGroupMembersToChat,
@@ -582,7 +583,12 @@ export default function MessagesScreen() {
 
   // NEW CODE ADDED FOR AUTO SCROLL ISSUE — wait for layout after new messages / keyboard
   const scrollToLatest = useCallback((animated = true, immediate = false) => {
-    const run = () => msgListRef.current?.scrollToEnd({ animated });
+    const run = () => {
+      msgListRef.current?.scrollToEnd({ animated });
+      if (Platform.OS === 'android') {
+        setTimeout(() => msgListRef.current?.scrollToEnd({ animated: false }), 64);
+      }
+    };
     if (immediate) {
       requestAnimationFrame(run);
       return;
@@ -675,6 +681,20 @@ export default function MessagesScreen() {
 
   const isGroupChat = selected?.server?.kind === 'group';
 
+  /** Load profile photos for everyone who has sent messages in this group. */
+  useEffect(() => {
+    if (!isGroupChat) return;
+    const msgs = Array.isArray(selected?.messages) ? selected.messages : [];
+    const authorIds = [
+      ...new Set(
+        msgs
+          .map((m) => (m?.authorId != null ? String(m.authorId) : ''))
+          .filter((id) => id && id !== String(myUserId)),
+      ),
+    ];
+    if (authorIds.length) void hydrateChatParticipants(authorIds);
+  }, [isGroupChat, selected?.messages, myUserId, hydrateChatParticipants]);
+
   const canComposeInSelectedChat = useMemo(
     () => canComposeInChat(selected?.server, myUserId),
     [selected?.server, myUserId],
@@ -699,10 +719,13 @@ export default function MessagesScreen() {
     return height;
   }, [canComposeInSelectedChat, replyTarget]);
 
+  const TYPING_FOOTER_HEIGHT = 44;
+
   const listBottomReserve = useMemo(() => {
     const safeBottom = keyboardOffset > 0 ? keyboardOffset + 6 : Math.max(insets.bottom, 10);
-    return composerStackHeight + safeBottom;
-  }, [composerStackHeight, keyboardOffset, insets.bottom]);
+    const typingPad = isPeerTyping && selected?.peerId ? TYPING_FOOTER_HEIGHT : 0;
+    return composerStackHeight + safeBottom + typingPad;
+  }, [composerStackHeight, keyboardOffset, insets.bottom, isPeerTyping, selected?.peerId]);
 
   const composerBottomStyle = useMemo(
     () => ({
@@ -717,11 +740,26 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     if (keyboardOffset > 0) {
-      const timer = setTimeout(() => scrollToLatest(true), 80);
+      scrollToLatest(true, true);
+      const timer = setTimeout(() => scrollToLatest(true), 120);
       return () => clearTimeout(timer);
     }
     return undefined;
   }, [keyboardOffset, scrollToLatest]);
+
+  useEffect(() => {
+    if (!isPeerTyping || !selectedId) return undefined;
+    isNearBottomRef.current = true;
+    scrollToLatest(true, true);
+    const timer = setTimeout(() => scrollToLatest(true), 80);
+    return () => clearTimeout(timer);
+  }, [isPeerTyping, selectedId, scrollToLatest]);
+
+  const handleMessageListSizeChange = useCallback(() => {
+    if (isNearBottomRef.current || isPeerTyping || keyboardOffset > 0) {
+      scrollToLatest(!(keyboardOffset > 0 || isPeerTyping), true);
+    }
+  }, [isPeerTyping, keyboardOffset, scrollToLatest]);
 
   const messageRows = useMemo(() => {
     const rows = [];
@@ -758,8 +796,8 @@ export default function MessagesScreen() {
 
   const messageListExtra = useMemo(() => {
     const last = messageRows[messageRows.length - 1];
-    return `${selectedId || ''}:${messageRows.length}:${last?.id || ''}`;
-  }, [messageRows, selectedId]);
+    return `${selectedId || ''}:${messageRows.length}:${last?.id || ''}:${isPeerTyping ? 1 : 0}:${keyboardOffset}`;
+  }, [messageRows, selectedId, isPeerTyping, keyboardOffset]);
 
   const totalUnread = Number(totalUnreadMessages) || 0;
 
@@ -906,7 +944,12 @@ export default function MessagesScreen() {
   const handleDraftChange = (text) => {
     setDraft(text);
     if (!selectedId) return;
-    emitChatTyping(selectedId, !!text.trim());
+    const typing = !!text.trim();
+    emitChatTyping(selectedId, typing);
+    if (typing) {
+      isNearBottomRef.current = true;
+      scrollToLatest(true, true);
+    }
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     typingStopTimerRef.current = setTimeout(() => {
       typingStopTimerRef.current = null;
@@ -1068,8 +1111,10 @@ export default function MessagesScreen() {
   );
 
   const renderThreadItem = useCallback(
-    ({ item }) => (
-      <ChatThreadRow item={item} onOpen={openThread} onHide={confirmHideChat} resolvePeerProfile={resolvePeerProfile} />
+    ({ item, index }) => (
+      <AnimatedBlock index={index} baseDelay={120}>
+        <ChatThreadRow item={item} onOpen={openThread} onHide={confirmHideChat} resolvePeerProfile={resolvePeerProfile} />
+      </AnimatedBlock>
     ),
     [confirmHideChat, openThread, resolvePeerProfile],
   );
@@ -1229,13 +1274,11 @@ export default function MessagesScreen() {
               }}>
               <MaterialCommunityIcons name="arrow-left" size={22} color={colors.text} />
             </Pressable>
-            {headerProfile.avatarUrl ? (
-              <Image source={{ uri: headerProfile.avatarUrl }} className={tw.headerAvatarImg} contentFit="cover" />
-            ) : (
-              <View className={tw.avatarSm}>
-                <Text className={tw.avatarText}>{String(headerProfile.name || '?').slice(0, 1)}</Text>
-              </View>
-            )}
+            <ProfileAvatar
+              uri={headerProfile.avatarUrl}
+              name={headerProfile.name}
+              size={36}
+            />
             <View className={tw.headerMeta}>
               <View className={tw.headerTitleRow}>
                 <Text
@@ -1250,7 +1293,7 @@ export default function MessagesScreen() {
               <Animated.View style={{ opacity: headerStatusFade }}>
                 {isPeerTyping ? (
                   <View className={tw.headerStatusRow}>
-                    <TypingDots color="#22c55e" size={4} />
+                    <TypingDots color={colors.primaryMid} size={4} />
                     <Text className={tw.typingHint} numberOfLines={1}>
                       typing…
                     </Text>
@@ -1291,6 +1334,7 @@ export default function MessagesScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             onScroll={handleChatScroll}
+            onContentSizeChange={handleMessageListSizeChange}
             scrollEventThrottle={16}
             removeClippedSubviews={Platform.OS === 'android'}
             initialNumToRender={18}
@@ -1309,6 +1353,15 @@ export default function MessagesScreen() {
                   Start a conversation with {selected.headerName || selected.name || 'this contact'}
                 </Text>
               </View>
+            }
+            ListFooterComponent={
+              isPeerTyping && selected?.peerId ? (
+                <View className={tw.typingFooterRow}>
+                  <View className={tw.typingBubble}>
+                    <TypingDots color={colors.textMuted} size={5} />
+                  </View>
+                </View>
+              ) : null
             }
             renderItem={renderMessageRow}
           />
@@ -1355,7 +1408,10 @@ export default function MessagesScreen() {
                 </Pressable>
               </View>
               <Pressable
-                className={cn(tw.sendBtn, !!draft.trim() && tw.sendBtnActive)}
+                className={tw.sendBtn}
+                style={{
+                  backgroundColor: draft.trim() ? chatTheme.sendBtn : chatTheme.sendBtnDisabled,
+                }}
                 onPress={sendMessage}
                 disabled={!draft.trim()}>
                 <MaterialCommunityIcons name="send" size={22} color="#fff" />
@@ -1368,15 +1424,15 @@ export default function MessagesScreen() {
           </View>
         </View>
       ) : (
-        <View className={cn(tw.listScreen, tw.listScreenRelative)} style={{ paddingBottom: tabBarHeight + 14 }}>
-          <View className={tw.listHeader}>
+        <View className={cn(tw.listScreen, tw.listScreenRelative, 'flex-1')} style={{ paddingBottom: tabBarHeight + 14 }}>
+          <AnimatedBlock delay={0} className={tw.listHeader}>
             <View>
               <Text className={tw.listTitle}>Chats</Text>
               <Text className={tw.listSubTitle}>{roleTitle} conversation inbox</Text>
             </View>
-          </View>
+          </AnimatedBlock>
 
-          <View className={tw.searchWrap}>
+          <AnimatedBlock delay={60} className={tw.searchWrap}>
             <MaterialCommunityIcons name="magnify" size={20} color="#94a3b8" />
             <TextInput
               value={listSearch}
@@ -1386,9 +1442,9 @@ export default function MessagesScreen() {
               className={tw.searchInput}
             />
             <MaterialCommunityIcons name="tune-variant" size={20} color={colors.primaryMid} />
-          </View>
+          </AnimatedBlock>
 
-          <View className={tw.filterRow}>
+          <AnimatedBlock delay={90} className={tw.filterRow}>
             {FILTER_TABS.map(({ id, label, icon }) => {
               const active = listFilter === id;
               const showUnreadCount = id === 'unread' && totalUnread > 0;
@@ -1413,45 +1469,50 @@ export default function MessagesScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </AnimatedBlock>
 
           {inboxError ? (
             <Text className={cn(tw.emptyText)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>{inboxError}</Text>
           ) : null}
-          {(inboxLoading && threads.length === 0) || (!directoryHydrated && threads.length === 0) ? (
+          {((inboxLoading && threads.length === 0) || (!directoryHydrated && threads.length === 0)) ? (
             <SkeletonGroup>
-              <View style={{ paddingHorizontal: 4, gap: 4 }}>
+              <View style={{ paddingHorizontal: 4, gap: 4, flex: 1 }}>
                 {[0, 1, 2, 3, 4, 5].map((k) => (
                   <SkeletonListRow key={k} />
                 ))}
               </View>
             </SkeletonGroup>
-          ) : null}
-
-          <FlatList
-            data={filteredThreads}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: tabBarHeight + 88 }}
-            refreshControl={
-              <RefreshControl refreshing={listRefreshing} onRefresh={() => void onPullRefreshInbox()} />
-            }
-            initialNumToRender={10}
-            maxToRenderPerBatch={8}
-            updateCellsBatchingPeriod={80}
-            windowSize={7}
-            removeClippedSubviews={Platform.OS !== 'web'}
-            ListEmptyComponent={
-              <View className={tw.emptyListState}>
-                <View className={tw.emptyChatIcon}>
-                  <MaterialCommunityIcons name="message-reply-text-outline" size={34} color={colors.primaryMid} />
+          ) : (
+            <FlatList
+              data={filteredThreads}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={
+                filteredThreads.length === 0
+                  ? { flexGrow: 1, paddingBottom: tabBarHeight + 88 }
+                  : { paddingBottom: tabBarHeight + 88 }
+              }
+              refreshControl={
+                <RefreshControl refreshing={listRefreshing} onRefresh={() => void onPullRefreshInbox()} />
+              }
+              initialNumToRender={10}
+              maxToRenderPerBatch={8}
+              updateCellsBatchingPeriod={80}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS !== 'web'}
+              ListEmptyComponent={
+                <View className={tw.emptyListState}>
+                  <View className={tw.emptyChatIcon}>
+                    <MaterialCommunityIcons name="message-reply-text-outline" size={34} color={colors.primaryMid} />
+                  </View>
+                  <Text className={tw.emptyChatTitle}>No chats found</Text>
+                  <Text className={tw.emptyChatSub}>Start a new conversation to see it here.</Text>
                 </View>
-                <Text className={tw.emptyChatTitle}>No chats found</Text>
-                <Text className={tw.emptyChatSub}>Start a new conversation to see it here.</Text>
-              </View>
-            }
-            renderItem={renderThreadItem}
-          />
+              }
+              renderItem={renderThreadItem}
+            />
+          )}
 
           <Pressable
             className={cn(tw.chatFab)} style={{ bottom: tabBarHeight + 18 }}

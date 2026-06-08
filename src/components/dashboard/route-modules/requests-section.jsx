@@ -3,6 +3,7 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { isAdminOrHrRole, isHrRole } from '@/utils/roles';
@@ -95,6 +96,7 @@ export function RequestsSection({ styles, ctx }) {
       <SafeAreaView style={rq.safe} edges={['top']}>
         <DashboardTopbar />
         <ScrollView contentContainerStyle={rq.scroll} showsVerticalScrollIndicator={false}>
+          <AnimatedBlock delay={0}>
           <View style={rq.hero}>
             <View style={rq.heroIconWrap}>
               <MaterialCommunityIcons name="clipboard-check-outline" size={24} color={RqColors.blue} />
@@ -103,7 +105,9 @@ export function RequestsSection({ styles, ctx }) {
               <Text style={rq.heroTitle}>{isOwnMyRequestsBoard ? 'My Requests' : 'Request Management'}</Text>
             </View>
           </View>
+          </AnimatedBlock>
 
+          <AnimatedBlock delay={80}>
           <View style={rq.tabsCard}>
             <View style={rq.tabsRow}>
               <Pressable
@@ -168,6 +172,7 @@ export function RequestsSection({ styles, ctx }) {
                 : undefined
             }
           />
+          </AnimatedBlock>
         </ScrollView>
 
         {!isOwnMyRequestsBoard ? (
@@ -219,6 +224,7 @@ export function RequestsSection({ styles, ctx }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#fff" />
@@ -227,7 +233,9 @@ export function RequestsSection({ styles, ctx }) {
             <Text style={styles.heroTitle}>My Requests</Text>
           </View>
         </View>
+        </AnimatedBlock>
 
+        <AnimatedBlock delay={80}>
         <View style={styles.requestTabsPanel}>
           <View style={styles.requestTabsBar}>
             <Pressable
@@ -307,6 +315,7 @@ export function RequestsSection({ styles, ctx }) {
               )}
             </View>
           </>
+        </AnimatedBlock>
       </ScrollView>
 
       <Modal visible={leaveModalOpen} transparent animationType="slide" onRequestClose={() => setLeaveModalOpen(false)}>

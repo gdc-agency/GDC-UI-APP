@@ -22,7 +22,7 @@ export function ensureGdcSocketConnected(token, userId) {
   if (!socket) {
     socket = io(url, {
       path: '/socket.io',
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       auth: token ? { token } : {},
     });
     socket.on('connect', () => {

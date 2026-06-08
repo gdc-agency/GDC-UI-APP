@@ -40,7 +40,16 @@ export function mergeOutgoingDeliveryState(server, local) {
   const serverRank = messageDeliveryRank(String(server.status || ''));
   const localRank = messageDeliveryRank(String(local.status || ''));
   const status = localRank > serverRank ? String(local.status || 'delivered') : String(server.status || 'delivered');
-  return { ...server, status, readByUserIds, uploadProgress: undefined };
+  const merged = { ...server, status, readByUserIds, uploadProgress: undefined };
+  if ((merged.type === 'image' || local.type === 'image') && !merged.uri && local.uri) {
+    merged.type = 'image';
+    merged.uri = local.uri;
+    if (!merged.text) merged.text = 'Photo';
+  }
+  if (merged.type === 'file' && !merged.uri && local.uri) {
+    merged.uri = local.uri;
+  }
+  return merged;
 }
 
 /**

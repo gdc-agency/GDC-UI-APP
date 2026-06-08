@@ -50,8 +50,10 @@ export const tw = {
   headerTitleRow: 'flex-row items-center flex-nowrap shrink',
   chatRoleInline: 'text-[15px] font-semibold text-chat-muted',
   headerStatusRow: 'mt-0.5 flex-row items-center gap-1.5',
-  typingHint: 'text-xs text-[#22c55e] font-semibold',
-  onlineStatus: 'mt-0.5 text-xs text-[#22c55e] font-semibold lowercase',
+  typingHint: 'text-xs text-primary-mid font-semibold',
+  onlineStatus: 'mt-0.5 text-xs text-primary-mid font-semibold lowercase',
+  headerPresenceDot:
+    'absolute -right-px -bottom-px w-3 h-3 rounded-full border-2 border-card bg-primary-mid',
   headerNameSkeleton: 'w-[120px] h-3.5 rounded-[7px] bg-[#e2e8f0]',
   headerAvatarSkeleton: 'w-[34px] h-[34px] rounded-[17px] bg-[#e2e8f0]',
   roleBadge:
@@ -93,6 +95,7 @@ export const tw = {
   bubbleTextBody: 'shrink max-w-full',
   bubbleMetaInline: 'flex-row items-center gap-[3px] ml-auto pb-px',
   groupNameInline: 'text-sm font-extrabold leading-5',
+  typingFooterRow: 'w-full flex-row justify-start px-1 pb-1 pt-0.5',
   typingBubble:
     'flex-row items-center gap-[5px] bg-chat-bubble-in rounded-lg rounded-bl-[2px] px-3.5 py-2.5 shadow-sm elevation-[1]',
   typingDot: 'w-[7px] h-[7px] rounded-[4px] bg-chat-muted',
@@ -176,9 +179,7 @@ export const tw = {
     'flex-1 flex-row items-center min-h-12 max-h-[120px] pl-4 pr-1.5 rounded-3xl bg-chat-input border border-border-strong',
   inputIconBtn: 'w-[38px] h-[38px] items-center justify-center',
   paperclipIcon: '',
-  sendBtn:
-    'w-12 h-12 rounded-3xl items-center justify-center bg-chat-send-disabled shrink-0',
-  sendBtnActive: 'bg-chat-send',
+  sendBtn: 'h-12 w-12 shrink-0 items-center justify-center rounded-3xl',
   pendingFileCardWrap: 'my-2',
   pendingDocRow: 'items-center py-3 gap-2',
   pendingFileTitle: 'text-[15px] font-bold text-text text-center px-2',
@@ -275,9 +276,9 @@ export const tw = {
   contactName: 'shrink text-sm font-bold text-text',
   contactStatus: 'mt-0.5 text-xs text-[#64748b]',
   presenceDot:
-    'absolute right-0 bottom-px w-[13px] h-[13px] rounded-[7px] border-2 border-white bg-[#94a3b8]',
+    'absolute right-0 bottom-px w-[13px] h-[13px] rounded-[7px] border-2 border-card bg-[#94a3b8]',
   contactPresenceDot:
-    'absolute -right-px -bottom-px w-2.5 h-2.5 rounded-[5px] border-2 border-white bg-[#94a3b8]',
-  presenceDotOnline: 'bg-[#22c55e]',
+    'absolute -right-px -bottom-px w-2.5 h-2.5 rounded-[5px] border-2 border-card bg-[#94a3b8]',
+  presenceDotOnline: 'bg-primary-mid',
   emptyText: 'text-[#64748b] text-center py-3',
 };

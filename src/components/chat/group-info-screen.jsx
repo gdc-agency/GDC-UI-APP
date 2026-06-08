@@ -1,9 +1,11 @@
 import { GroupMemberActionSheet } from '@/components/chat/group-member-action-sheet';
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
+import { GroupAvatar } from '@/components/ui/group-avatar';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { useTheme } from '@/context/theme-context';
 import { cn } from '@/theme/cn';
+import { resolveProfileImageUri } from '@/utils/chat-directory';
 import { groupMemberRole, resolveGroupMember } from '@/utils/resolve-group-member';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -15,6 +17,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,9 +32,10 @@ function matchesAddSearch(contact, query) {
 }
 
 const RoleBadge = memo(function RoleBadge({ role }) {
+  const wrap = { alignSelf: 'center', flexShrink: 0 };
   if (role === 'creator') {
     return (
-      <View className="mr-1 flex-row items-center gap-1 rounded-lg bg-[#fef9c3] px-2 py-1">
+      <View style={wrap} className="flex-row items-center gap-1 rounded-lg bg-[#fef9c3] px-2 py-1">
         <MaterialCommunityIcons name="crown" size={11} color="#92400e" />
         <Text className="text-[10px] font-extrabold tracking-wide text-[#92400e]">ADMIN</Text>
       </View>
@@ -39,13 +43,13 @@ const RoleBadge = memo(function RoleBadge({ role }) {
   }
   if (role === 'admin') {
     return (
-      <View className="mr-1 flex-row items-center gap-1 rounded-lg bg-info-bg px-2 py-1">
+      <View style={wrap} className="flex-row items-center gap-1 rounded-lg bg-info-bg px-2 py-1">
         <Text className="text-[10px] font-extrabold tracking-wide text-primary-mid">ADMIN</Text>
       </View>
     );
   }
   return (
-    <View className="mr-1 flex-row items-center gap-1 rounded-lg bg-surface-muted px-2 py-1">
+    <View style={wrap} className="flex-row items-center gap-1 rounded-lg bg-surface-muted px-2 py-1">
       <Text className="text-[10px] font-extrabold tracking-wide text-text-muted">MEMBER</Text>
     </View>
   );
@@ -58,15 +62,7 @@ const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage,
   return (
     <View className="min-h-[72px] flex-row items-center border-b border-border-light py-2.5">
       <View className="relative mr-3">
-        {item.avatarUrl ? (
-          <Image source={{ uri: item.avatarUrl }} className="h-12 w-12 rounded-full" contentFit="cover" />
-        ) : (
-          <View
-            className="h-12 w-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: colors.chipActiveBg }}>
-            <Text className="text-lg font-extrabold text-primary-mid">{String(line).slice(0, 1)}</Text>
-          </View>
-        )}
+        <ProfileAvatar uri={item.avatarUrl} name={line} size={48} />
         <View
           className={cn(
             'absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-text-secondary',
@@ -74,7 +70,7 @@ const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage,
           )}
         />
       </View>
-      <View className="min-w-0 flex-1">
+      <View className="min-w-0 flex-1 pr-2">
         <Text className="text-base font-bold text-text" numberOfLines={1}>
           {line}
           {isMe ? ' (You)' : ''}
@@ -83,7 +79,7 @@ const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage,
       </View>
       <RoleBadge role={role} />
       {showMenu ? (
-        <Pressable className="ml-0.5 p-1.5" onPress={() => onMenu(item, role)} disabled={item.busy} hitSlop={10}>
+        <Pressable className="ml-1 p-1.5" onPress={() => onMenu(item, role)} disabled={item.busy} hitSlop={10}>
           <MaterialCommunityIcons name="dots-horizontal" size={22} color="#64748b" />
         </Pressable>
       ) : (
@@ -113,6 +109,7 @@ export function GroupInfoScreen({
   onRefreshDirectory,
 }) {
   const { colors } = useTheme();
+  const { height: windowH } = useWindowDimensions();
 
   const server = thread?.server && typeof thread.server === 'object' ? thread.server : {};
   const chatId = thread?.id != null ? String(thread.id) : '';
@@ -285,7 +282,12 @@ export function GroupInfoScreen({
     [chatId, onDemote],
   );
 
-  const avatarUrl = server.avatarUrl || thread?.listAvatarUrl;
+  const avatarUri = useMemo(() => {
+    const raw = server?.avatarUrl ?? thread?.listAvatarUrl ?? '';
+    return resolveProfileImageUri(raw);
+  }, [server?.avatarUrl, thread?.listAvatarUrl]);
+
+  const membersCardMinH = Math.max(320, Math.round(windowH * 0.38));
 
   const renderMember = useCallback(
     ({ item }) => (
@@ -313,18 +315,31 @@ export function GroupInfoScreen({
         <View className="w-10" />
       </View>
 
-      <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-        <View className="mb-2.5 items-center bg-card px-4 py-6">
-          <Pressable className="relative mb-4" onPress={pickAvatar} disabled={!isAdmin || savingAvatar}>
-            {avatarUrl ? (
-              <Image source={{ uri: String(avatarUrl) }} className="h-[108px] w-[108px] rounded-[54px]" contentFit="cover" />
-            ) : (
-              <View className="h-[108px] w-[108px] items-center justify-center rounded-[54px] bg-info-bg">
-                <MaterialCommunityIcons name="account-group" size={40} color={colors.primaryMid} />
-              </View>
-            )}
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 28 }}>
+        <View className="items-center border-b border-border-light bg-card px-5 pb-6 pt-7">
+          <Pressable
+            className="relative mb-5"
+            onPress={pickAvatar}
+            disabled={!isAdmin || savingAvatar}
+            accessibilityRole="button"
+            accessibilityLabel="Group photo">
+            <GroupAvatar uri={avatarUri} name={name || 'Group'} size={112} showInitialsFallback />
             {savingAvatar ? (
-              <View className="absolute inset-0 items-center justify-center rounded-[54px] bg-black/35">
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  borderRadius: 56,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(0,0,0,0.35)',
+                }}>
                 <ActivityIndicator color="#fff" size="small" />
               </View>
             ) : isAdmin ? (
@@ -365,11 +380,13 @@ export function GroupInfoScreen({
           )}
 
           {createdById ? (
-            <View className="mt-2.5 flex-row flex-wrap items-center justify-center gap-2">
+            <View className="mt-3 flex-row flex-wrap items-center justify-center gap-2">
               <Text className="text-sm text-text-muted">
                 Created by <Text className="font-bold text-text">{creatorName}</Text>
               </Text>
-              <View className="flex-row items-center gap-1 rounded-lg bg-[#fef9c3] px-2 py-1">
+              <View
+                style={{ alignSelf: 'center' }}
+                className="flex-row items-center gap-1 rounded-lg bg-[#fef9c3] px-2 py-1">
                 <MaterialCommunityIcons name="crown" size={11} color="#92400e" />
                 <Text className="text-[10px] font-extrabold tracking-wide text-[#92400e]">ADMIN</Text>
               </View>
@@ -377,7 +394,9 @@ export function GroupInfoScreen({
           ) : null}
         </View>
 
-        <View className="mx-3 mb-3 rounded-2xl bg-card p-3.5">
+        <View
+          className="mx-3 mb-3 mt-3 rounded-2xl bg-card p-3.5"
+          style={{ minHeight: membersCardMinH, flexGrow: 1 }}>
           <View className="mb-2.5 flex-row items-center justify-between">
             <Text className="text-sm font-extrabold text-text-muted">{memberIds.length} members</Text>
             {isAdmin ? (
@@ -417,7 +436,12 @@ export function GroupInfoScreen({
                         return n;
                       })
                     }>
-                    <Text className="flex-1 text-[15px] text-text">{c.displayName || c.name}</Text>
+                    <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+                      <ProfileAvatar uri={c.avatarUrl} name={c.displayName || c.name} size={40} />
+                      <Text className="flex-1 text-[15px] text-text" numberOfLines={1}>
+                        {c.displayName || c.name}
+                      </Text>
+                    </View>
                     {on ? (
                       <MaterialCommunityIcons name="check-circle" size={18} color={colors.primaryMid} />
                     ) : null}
@@ -445,7 +469,7 @@ export function GroupInfoScreen({
           />
         </View>
 
-        <View className="mx-3 mb-6 overflow-hidden rounded-2xl bg-card">
+        <View className="mx-3 mb-2 overflow-hidden rounded-2xl bg-card">
           <Pressable
             className="flex-row items-center gap-3 border-b border-border-light px-4 py-4"
             onPress={() => {

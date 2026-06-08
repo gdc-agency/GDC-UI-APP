@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { initialsFromName } from '@/components/dashboard/route-modules/timesheet-user-avatar';
 import { useTheme } from '@/context/theme-context';
@@ -351,6 +352,7 @@ export function AvailabilitySection({ styles, ctx }) {
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <AttendanceStatusBanner message={attendanceError} onRetry={onRetryAttendance} />
+        <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="calendar-clock-outline" size={20} color="#fff" />
@@ -359,7 +361,9 @@ export function AvailabilitySection({ styles, ctx }) {
             <Text style={styles.heroTitle}>My Availability</Text>
           </View>
         </View>
+        </AnimatedBlock>
 
+        <AnimatedBlock delay={80}>
         <View style={[styles.panel, { marginBottom: 12 }]}>
           <View style={styles.currentStatusTitleRow}>
             <MaterialCommunityIcons name="pulse" size={24} color="#10b981" />
@@ -509,6 +513,7 @@ export function AvailabilitySection({ styles, ctx }) {
             ))}
           </View>
         </View>
+        </AnimatedBlock>
       </ScrollView>
     </SafeAreaView>
   );

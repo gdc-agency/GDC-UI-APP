@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { useTheme } from '@/context/theme-context';
 import { mergeStyle } from '@/utils/merge-style';
-import { Image } from 'expo-image';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,7 +23,8 @@ const SHEET_SLIDE = 480;
 
 const ContactRow = memo(function ContactRow({ item, loading, onPress, colors }) {
   const line = item.displayName || item.name;
-  const ringColor = colors.modalSheetBg || colors.card;
+  const statusText = item.online ? 'Online' : 'Offline';
+  const statusColor = item.online ? colors.primaryMid : colors.textMuted;
   return (
     <Pressable
       className="flex-row items-center gap-3 px-2 py-[11px]"
@@ -32,35 +33,21 @@ const ContactRow = memo(function ContactRow({ item, loading, onPress, colors }) 
       }
       onPress={() => onPress(item)}
       disabled={loading}>
-      <View className="relative h-12 w-12 shrink-0">
-        {item.avatarUrl ? (
-          <Image source={{ uri: item.avatarUrl }} className="h-12 w-12 rounded-full" contentFit="cover" />
-        ) : (
-          <View
-            className="h-12 w-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: colors.chipActiveBg }}>
-            <Text className="text-lg font-extrabold" style={{ color: colors.primaryMid }}>
-              {String(line).slice(0, 1)}
-            </Text>
-          </View>
-        )}
-        <View
-          className="absolute -bottom-px -right-px h-[13px] w-[13px] rounded-[7px] border-2"
-          style={{
-            borderColor: ringColor,
-            backgroundColor: item.online ? '#22c55e' : colors.textSecondary,
-          }}
-        />
-      </View>
+      <ProfileAvatar uri={item.avatarUrl} name={line} size={48} />
       <View className="min-w-0 flex-1">
         <Text className="shrink text-base font-bold" style={{ color: colors.text }} numberOfLines={1}>
           {line}
         </Text>
-        {item.roleLabel ? (
-          <Text className="mt-0.5 text-xs" style={{ color: colors.textMuted }} numberOfLines={1}>
-            {item.roleLabel}
+        <View className="mt-0.5 flex-row items-center gap-2">
+          {item.roleLabel ? (
+            <Text className="text-xs font-semibold" style={{ color: colors.textMuted }} numberOfLines={1}>
+              {item.roleLabel}
+            </Text>
+          ) : null}
+          <Text className="text-xs font-semibold" style={{ color: statusColor }}>
+            {statusText}
           </Text>
-        ) : null}
+        </View>
       </View>
       {loading ? (
         <ActivityIndicator size="small" color={colors.primaryMid} />

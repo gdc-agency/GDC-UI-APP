@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { isAdminRole } from '@/utils/roles';
 
@@ -41,6 +42,7 @@ export function DailyUpdatesSection({
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#fff" />
@@ -52,7 +54,9 @@ export function DailyUpdatesSection({
             </Text>
           </View>
         </View>
+        </AnimatedBlock>
 
+        <AnimatedBlock delay={80}>
         <View style={styles.dateRow}>
           <Pressable style={[styles.dateChip, dateMode === 'today' && styles.dateChipActive]} onPress={() => setDateMode('today')}>
             <Text style={[styles.dateChipText, dateMode === 'today' && styles.dateChipTextActive]}>Today</Text>
@@ -249,6 +253,7 @@ export function DailyUpdatesSection({
             </View>
           </View>
         ) : null}
+        </AnimatedBlock>
       </ScrollView>
 
       <Modal

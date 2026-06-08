@@ -39,6 +39,8 @@ function normalizeUser(raw) {
     department: u.department ?? null,
     phone: u.phone ?? null,
     gdc_id: u.gdc_id ?? null,
+    // Store the raw avatar value from server; resolve to a full URL at render time
+    // so APK builds can safely migrate between dev LAN and deployed hosts.
     avatar: u.avatar ?? u.profile_image ?? null,
     team_name: u.team_name ?? null,
     work_site: u.work_site ?? null,
@@ -62,7 +64,7 @@ export function AuthProvider({ children }) {
         if (t && json) {
           setToken(t);
           try {
-            setUser(JSON.parse(json));
+            setUser(normalizeUser(JSON.parse(json)));
           } catch {
             setUser(null);
             setToken(null);

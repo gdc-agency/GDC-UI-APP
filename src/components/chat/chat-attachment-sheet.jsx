@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { useTheme } from '@/context/theme-context';
 import { mergeStyle } from '@/utils/merge-style';
-import React, { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
   Modal,

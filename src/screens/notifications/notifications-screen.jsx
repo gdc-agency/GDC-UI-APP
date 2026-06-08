@@ -12,7 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedBlock } from '@/components/ui/animated-block';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
+import { enterDown, staggerDelay } from '@/theme/animations/motion';
+import Animated from 'react-native-reanimated';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
 import {
@@ -204,7 +207,7 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-page" edges={['top', 'bottom']}>
-      <View className="h-14 flex-row items-center justify-between border-b border-border-strong px-2.5">
+      <AnimatedBlock delay={0} className="h-14 flex-row items-center justify-between border-b border-border-strong px-2.5">
         {router.canGoBack() ? (
           <Pressable className="h-[34px] w-[34px] items-center justify-center rounded-[10px]" onPress={() => router.back()}>
             <MaterialCommunityIcons name="arrow-left" size={22} color={colors.text} />
@@ -214,9 +217,9 @@ export default function NotificationsScreen() {
         )}
         <Text className="text-[22px] font-extrabold text-text">Notifications</Text>
         <View className="h-[34px] w-[34px]" />
-      </View>
+      </AnimatedBlock>
 
-      <View className="flex-row items-center justify-between border-b border-border px-4 py-2.5">
+      <AnimatedBlock delay={60} className="flex-row items-center justify-between border-b border-border px-4 py-2.5">
         <Text className="mr-2 flex-1 text-[13px] text-text-muted">
           {items.length} item(s)
           {unreadCount > 0 ? ` · ${unreadCount} unread` : ''}
@@ -238,7 +241,7 @@ export default function NotificationsScreen() {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </AnimatedBlock>
 
       {loading ? (
         <SkeletonGroup speedMs={1650} delayMs={160}>
@@ -261,7 +264,8 @@ export default function NotificationsScreen() {
                 : 'No alerts yet. Task assignments, leave updates, and system messages appear here when your team sends them. Chat unread counts are on the Chat tab.'}
             </Text>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
+            <Animated.View entering={enterDown(staggerDelay(100, index))}>
             <View
               className={cn(
                 'flex-row items-stretch overflow-hidden rounded-[14px] border border-border-strong bg-card',
@@ -304,6 +308,7 @@ export default function NotificationsScreen() {
                 </Pressable>
               </View>
             </View>
+            </Animated.View>
           )}
         />
       )}
