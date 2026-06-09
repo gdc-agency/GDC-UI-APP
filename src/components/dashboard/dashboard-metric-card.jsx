@@ -41,6 +41,7 @@ export function DashboardMetricCard({
   tint,
   iconColor,
   onPress,
+  width,
   height = 118,
   animSeed = 0,
 }) {
@@ -52,7 +53,7 @@ export function DashboardMetricCard({
     <Wrapper
       className="rounded-[14px] border border-border-strong bg-card p-3"
       style={{
-        width: '100%',
+        width: width ?? '100%',
         height,
         shadowColor: colors.text,
         shadowOffset: { width: 0, height: 1 },

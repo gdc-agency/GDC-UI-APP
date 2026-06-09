@@ -1,7 +1,7 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
@@ -31,8 +31,15 @@ import { isAdminRole, isHrRole } from '@/utils/roles';
 import { mapApprovedUserRow } from '@/utils/admin-directory';
 
 const GRID_GAP = 10;
+const SCREEN_H_PAD = 18;
 const TITLE_TOP_GAP = 22;
 const METRIC_CARD_HEIGHT = 128;
+
+/** Two cards per row on every screen width — px width avoids broken % layout on some Android devices. */
+function metricCardWidth(screenWidth) {
+  const inner = Math.max(0, screenWidth - SCREEN_H_PAD * 2);
+  return Math.floor((inner - GRID_GAP) / 2);
+}
 
 function roleCode(role) {
   if (isAdminRole(role)) return 'AD';
@@ -152,6 +159,8 @@ function buildRoleDashboard(role, ctx) {
 
 function RolePanel({ role, ...ctx }) {
   const { colors } = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
+  const cardWidth = metricCardWidth(screenWidth);
   const dashboard = buildRoleDashboard(role, ctx);
 
   return (
@@ -165,10 +174,19 @@ function RolePanel({ role, ...ctx }) {
         </Text>
       </View>
 
-      <View className="mt-3 flex-row flex-wrap" style={{ gap: GRID_GAP }}>
+      <View className="mt-3 flex-row flex-wrap justify-between" style={{ width: '100%' }}>
         {dashboard.cards.map((card, i) => (
-          <AnimatedBlock key={card.label} index={i} baseDelay={120} style={{ width: '48.5%' }}>
-            <DashboardMetricCard {...card} height={METRIC_CARD_HEIGHT} animSeed={i + 1} />
+          <AnimatedBlock
+            key={card.label}
+            index={i}
+            baseDelay={120}
+            style={{
+              width: cardWidth,
+              marginBottom: GRID_GAP,
+              flexGrow: 0,
+              flexShrink: 0,
+            }}>
+            <DashboardMetricCard {...card} width={cardWidth} height={METRIC_CARD_HEIGHT} animSeed={i + 1} />
           </AnimatedBlock>
         ))}
       </View>
