@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoidingView } from '@/components/ui/keyboard-aware-scroll-view';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
 
 const SHEET_SLIDE = 480;
@@ -144,7 +145,7 @@ export function NewChatPicker({
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={closeAnimated}>
-      <View className="flex-1 justify-end">
+      <KeyboardAvoidingView behavior="padding" className="flex-1 justify-end">
         <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close">
           <Animated.View
             pointerEvents="none"
@@ -246,7 +247,7 @@ export function NewChatPicker({
             />
           )}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

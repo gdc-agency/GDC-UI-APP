@@ -12,11 +12,9 @@ import {
   Animated,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -25,6 +23,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from '@/components/ui/keyboard-aware-scroll-view';
 
 const SHEET_SLIDE = 560;
 const MEMBER_ROW_H = 64;
@@ -441,9 +441,8 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
 
           <KeyboardAvoidingView
             className="min-h-0 flex-1"
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            enabled={Platform.OS === 'ios' || step !== 2}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom + 8 : 0}>
+            behavior="padding"
+            keyboardVerticalOffset={insets.bottom + 8}>
             <View className="min-h-0 flex-1">
               {step === 1 ? (
                 <>
@@ -570,12 +569,10 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
               ) : null}
 
               {step === 3 ? (
-                <ScrollView
+                <KeyboardAwareScrollView
                   className="flex-1"
                   contentContainerClassName="flex-grow pb-5 pt-1"
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                  showsVerticalScrollIndicator={false}>
+                  keyboardDismissMode="on-drag">
                   <Text className="mb-3 text-center text-[13px]" style={{ color: colors.textMuted }}>
                     {selectedSet.size} members · {name.trim()}
                   </Text>
@@ -648,7 +645,7 @@ export function CreateGroupFlow({ visible, onClose, contacts, contactsLoading = 
                     disabled={submitting}
                     colors={colors}
                   />
-                </ScrollView>
+                </KeyboardAwareScrollView>
               ) : null}
             </View>
 

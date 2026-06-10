@@ -13,10 +13,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { AuthBrandBlock } from '@/components/auth/auth-brand-block';
 import { AuthPrimaryButton } from '@/components/auth/auth-primary-button';
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
@@ -125,11 +125,8 @@ export default function LoginScreen() {
           paddingTop: 12,
           paddingBottom: Math.max(insets.bottom, 24),
         }}
-        keyboardShouldPersistTaps="handled"
-        enableOnAndroid
-        extraScrollHeight={24}
-        extraHeight={Platform.OS === 'ios' ? 24 : 60}
-        showsVerticalScrollIndicator={false}
+        bottomOffset={24}
+        extraKeyboardSpace={Platform.OS === 'ios' ? 24 : 48}
         className="flex-1 bg-card">
         <View className="w-full max-w-[420px] self-center">
           <AnimatedBlock delay={0}>

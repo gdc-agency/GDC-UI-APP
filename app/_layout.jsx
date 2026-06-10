@@ -1,9 +1,13 @@
 import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import 'react-native-reanimated';
 import { View } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '../src/context/auth-context';
@@ -41,11 +45,13 @@ function RootShell() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <RootShell />
-        </AuthProvider>
-      </ThemeProvider>
+      <KeyboardProvider preload={false} preserveEdgeToEdge>
+        <ThemeProvider>
+          <AuthProvider>
+            <RootShell />
+          </AuthProvider>
+        </ThemeProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

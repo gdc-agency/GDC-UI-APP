@@ -13,13 +13,14 @@ import {
   Alert,
   FlatList,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 
 function matchesAddSearch(contact, query) {
   if (!query) return true;
@@ -315,9 +316,8 @@ export function GroupInfoScreen({
         <View className="w-10" />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
-        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 28 }}>
         <View className="items-center border-b border-border-light bg-card px-5 pb-6 pt-7">
           <Pressable
@@ -517,7 +517,7 @@ export function GroupInfoScreen({
             </Pressable>
           ) : null}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <GroupMemberActionSheet
         visible={!!menuTarget}

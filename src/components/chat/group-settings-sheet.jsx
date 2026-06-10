@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveGroupMember } from '@/utils/resolve-group-member';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 
 const SHEET_SLIDE = 520;
 const ROW_H = 58;
@@ -279,6 +280,10 @@ export function GroupSettingsSheet({
             paddingBottom: Math.max(insets.bottom, 12),
             transform: [{ translateY: sheetY }],
           }}>
+          <KeyboardAwareScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 8 }}>
           <View className="my-2.5 h-1 w-10 self-center rounded-pill bg-border-strong" />
           <View className="mb-2 flex-row items-center justify-between">
             <Text className="text-lg font-extrabold text-text">Group info</Text>
@@ -402,6 +407,7 @@ export function GroupSettingsSheet({
               <Text className="text-[15px] font-bold text-[#ef4444]">Delete group</Text>
             </Pressable>
           ) : null}
+          </KeyboardAwareScrollView>
         </Animated.View>
       </View>
     </Modal>

@@ -1,6 +1,8 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
+
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
@@ -95,7 +97,7 @@ export function RequestsSection({ styles, ctx }) {
     return (
       <SafeAreaView style={rq.safe} edges={['top']}>
         <DashboardTopbar />
-        <ScrollView contentContainerStyle={rq.scroll} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView contentContainerStyle={rq.scroll} showsVerticalScrollIndicator={false}>
           <AnimatedBlock delay={0}>
           <View style={rq.hero}>
             <View style={rq.heroIconWrap}>
@@ -173,7 +175,7 @@ export function RequestsSection({ styles, ctx }) {
             }
           />
           </AnimatedBlock>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {!isOwnMyRequestsBoard ? (
           <RejectModal
@@ -223,7 +225,7 @@ export function RequestsSection({ styles, ctx }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
@@ -316,12 +318,12 @@ export function RequestsSection({ styles, ctx }) {
             </View>
           </>
         </AnimatedBlock>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal visible={leaveModalOpen} transparent animationType="slide" onRequestClose={() => setLeaveModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Apply for Leave</Text>
                 <Text style={styles.recordFieldLabel}>Leave Type</Text>
@@ -381,7 +383,7 @@ export function RequestsSection({ styles, ctx }) {
                   </Pressable>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -389,7 +391,7 @@ export function RequestsSection({ styles, ctx }) {
       <Modal visible={manualModalOpen} transparent animationType="slide" onRequestClose={() => setManualModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Request Manual Time</Text>
                 <View style={styles.dateFilterRow}>
@@ -445,7 +447,7 @@ export function RequestsSection({ styles, ctx }) {
                   </Pressable>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -494,7 +496,7 @@ function MyRequestCreateModals({
       <Modal visible={leaveModalOpen} transparent animationType="slide" onRequestClose={() => setLeaveModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Apply for Leave</Text>
                 <Text style={styles.recordFieldLabel}>Leave Type</Text>
@@ -557,7 +559,7 @@ function MyRequestCreateModals({
                   </Pressable>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -565,7 +567,7 @@ function MyRequestCreateModals({
       <Modal visible={manualModalOpen} transparent animationType="slide" onRequestClose={() => setManualModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Request Manual Time</Text>
                 <View style={styles.dateFilterRow}>
@@ -621,7 +623,7 @@ function MyRequestCreateModals({
                   </Pressable>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -642,7 +644,7 @@ function RejectModal({
     <Modal visible={rejectModalOpen} transparent animationType="slide" onRequestClose={() => setRejectModalOpen(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalCardShell}>
-          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+          <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Reject {rejectTargetType === 'manual' ? 'Manual Time Request' : 'Leave Request'}</Text>
               <Text style={styles.panelSub}>Please provide reason for rejection.</Text>
@@ -668,7 +670,7 @@ function RejectModal({
                 </Pressable>
               </View>
             </View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
       </View>
     </Modal>

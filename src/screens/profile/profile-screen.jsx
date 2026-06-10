@@ -21,6 +21,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { PressableScale } from '@/theme/animations/PressableScale';
 import { ProfileAvatar } from '@/components/ui/profile-avatar';
@@ -315,10 +316,8 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-page" edges={['top']}>
       <DashboardTopbar />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerClassName="pb-[124px]"
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={dismissFieldEditing}>
         {loading ? (
@@ -504,7 +503,7 @@ export default function ProfileScreen() {
             </AnimatedBlock>
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={photoSheetOpen}

@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { displayRoleOptionsForPromotion } from '@/utils/admin-directory';
@@ -129,7 +129,7 @@ export function AdminSection({ styles, ctx }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll}>
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
@@ -389,7 +389,7 @@ export function AdminSection({ styles, ctx }) {
             )}
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       <Modal visible={roleModalOpen} transparent animationType="fade" onRequestClose={closeRoleModal}>
         <Pressable style={styles.modalOverlay} onPress={closeRoleModal}>
           <Pressable style={styles.adminRoleModal} onPress={(e) => e.stopPropagation()}>

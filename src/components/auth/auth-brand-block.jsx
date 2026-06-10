@@ -15,10 +15,11 @@ const LOGO_SIZE = 108;
 
 /**
  * Centered GDC logo + split "Global Digital Care" title.
- * @param {{ showDivider?: boolean; slogan?: string | null; compact?: boolean; lightOnDark?: boolean }} props
+ * @param {{ showDivider?: boolean; showAcronym?: boolean; slogan?: string | null; compact?: boolean; lightOnDark?: boolean }} props
  */
 export function AuthBrandBlock({
   showDivider = false,
+  showAcronym = false,
   slogan = BRAND_SLOGAN,
   compact = false,
   lightOnDark = false,
@@ -37,9 +38,22 @@ export function AuthBrandBlock({
         contentFit="contain"
         accessibilityLabel="Global Digital Care logo"
       />
-      <Text className="mt-3 text-center" style={{ fontSize: titleSize, lineHeight: titleSize + 6 }}>
+      {showAcronym ? (
+        <View className="mt-4 w-full max-w-[240px] flex-row items-center">
+          <View className="h-px flex-1" style={{ backgroundColor: onDark ? 'rgba(255,255,255,0.25)' : '#CBD5E1' }} />
+          <Text className="mx-3 text-[22px] font-extrabold tracking-[1px]">
+            <Text style={{ color: onDark ? '#FFFFFF' : BRAND_NAVY }}>GD</Text>
+            <Text style={{ color: BRAND_ORANGE }}>C</Text>
+          </Text>
+          <View className="h-px flex-1" style={{ backgroundColor: onDark ? 'rgba(255,255,255,0.25)' : '#CBD5E1' }} />
+        </View>
+      ) : null}
+      <Text
+        className={showAcronym ? 'mt-3 text-center' : 'mt-3 text-center'}
+        style={{ fontSize: titleSize, lineHeight: titleSize + 6 }}>
         <Text style={{ color: titleColor, fontWeight: '800' }}>Global </Text>
-        <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>Digital Care</Text>
+        <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>Digital </Text>
+        <Text style={{ color: titleColor, fontWeight: '800' }}>Care</Text>
       </Text>
       {showDivider ? <AuthBrandDivider isDark={onDark} /> : null}
       {slogan ? (

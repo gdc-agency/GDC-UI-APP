@@ -1,55 +1,49 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Dimensions, Keyboard, Platform } from 'react-native';
+import { useEffect } from 'react';
+import { useKeyboardState, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
-function keyboardBottomInset(event) {
-  const windowHeight = Dimensions.get('window').height;
-  const keyboardTop = event?.endCoordinates?.screenY ?? windowHeight;
-  return Math.max(0, windowHeight - keyboardTop);
+/** Final keyboard height — for scroll triggers and list extraData. */
+export default function useKeyboardOffset() {
+  return useKeyboardState((state) => state.height);
 }
 
-/** Tracks keyboard height from screen bottom — clears to 0 when keyboard hides. */
-export default function useKeyboardOffset() {
-  const [offset, setOffset] = useState(0);
-  const lastEvent = useRef(null);
-
-  const applyOffset = useCallback((event) => {
-    if (!event) return;
-    lastEvent.current = event;
-    setOffset(keyboardBottomInset(event));
-  }, []);
-
-  const clearOffset = useCallback(() => {
-    lastEvent.current = null;
-    setOffset(0);
-  }, []);
+export function useChatComposerKeyboard({ safeAreaBottom, composerStackHeight, typingFooterHeight }) {
+  const { height } = useReanimatedKeyboardAnimation();
+  const safeBottom = useSharedValue(Math.max(safeAreaBottom, 0));
+  const composerHeight = useSharedValue(composerStackHeight);
+  const typingPad = useSharedValue(typingFooterHeight);
 
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvents = Platform.OS === 'ios' ? ['keyboardWillHide', 'keyboardDidHide'] : ['keyboardDidHide'];
+    safeBottom.value = Math.max(safeAreaBottom, 0);
+  }, [safeAreaBottom, safeBottom]);
 
-    const onShow = (event) => {
-      applyOffset(event);
-      if (Platform.OS === 'android') {
-        requestAnimationFrame(() => applyOffset(event));
-        setTimeout(() => applyOffset(event), 60);
-        setTimeout(() => applyOffset(event), 150);
-      }
+  useEffect(() => {
+    composerHeight.value = composerStackHeight;
+  }, [composerStackHeight, composerHeight]);
+
+  useEffect(() => {
+    typingPad.value = typingFooterHeight;
+  }, [typingFooterHeight, typingPad]);
+
+  const composerAnimatedStyle = useAnimatedStyle(() => {
+    // Reanimated height is negative when keyboard opens (translateY convention).
+    const keyboardH = Math.max(-height.value, 0);
+    const bottomInset = keyboardH > 0 ? keyboardH : safeBottom.value;
+    return {
+      bottom: bottomInset,
+      paddingBottom: keyboardH > 0 ? 0 : 8,
     };
+  });
 
-    const showSub = Keyboard.addListener(showEvent, onShow);
-    const hideSubs = hideEvents.map((name) => Keyboard.addListener(name, clearOffset));
-    const dimensionSub = Dimensions.addEventListener('change', () => {
-      if (lastEvent.current) applyOffset(lastEvent.current);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSubs.forEach((sub) => sub.remove());
-      dimensionSub.remove();
+  const listContentAnimatedStyle = useAnimatedStyle(() => {
+    const keyboardH = Math.max(-height.value, 0);
+    const safeBottomValue = keyboardH > 0 ? keyboardH + 6 : safeBottom.value + 10;
+    return {
+      paddingBottom: composerHeight.value + safeBottomValue + typingPad.value,
     };
-  }, [applyOffset, clearOffset]);
+  });
 
-  return offset;
+  return { composerAnimatedStyle, listContentAnimatedStyle };
 }
 
 export const CHAT_COMPOSER_BAR_HEIGHT = 68;

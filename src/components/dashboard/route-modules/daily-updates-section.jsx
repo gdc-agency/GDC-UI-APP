@@ -1,6 +1,8 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
@@ -41,7 +43,7 @@ export function DailyUpdatesSection({
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll}>
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
@@ -254,7 +256,7 @@ export function DailyUpdatesSection({
           </View>
         ) : null}
         </AnimatedBlock>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={tlEmpDailyModal != null}
@@ -296,12 +298,12 @@ export function DailyUpdatesSection({
                   <MaterialCommunityIcons name="close" size={22} color="#64748b" />
                 </Pressable>
               </View>
-              <ScrollView
+              <KeyboardAwareScrollView
                 style={{ maxHeight: 320 }}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 14 }}
                 showsVerticalScrollIndicator>
                 <Text style={styles.detailBody}>{String(tlEmpDailyModal?.body ?? '').trim() || '—'}</Text>
-              </ScrollView>
+              </KeyboardAwareScrollView>
               <View style={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 }}>
                 <Pressable style={styles.modalPrimaryBtn} onPress={() => setTlEmpDailyModal(null)}>
                   <Text style={styles.actionBtnText}>Close</Text>

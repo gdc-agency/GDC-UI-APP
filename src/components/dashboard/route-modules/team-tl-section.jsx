@@ -13,6 +13,8 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -540,6 +542,10 @@ export function TeamTlSection({
     <Modal visible={createOpen} transparent animationType="slide" onRequestClose={() => !saving && setCreateOpen(false)}>
       <Pressable style={styles.teamModalOverlay} onPress={() => !saving && setCreateOpen(false)}>
         <Pressable style={styles.teamModalSheet} onPress={(e) => e.stopPropagation()}>
+          <KeyboardAwareScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={styles.teamModalTitle}>Create team</Text>
             <Pressable onPress={() => !saving && setCreateOpen(false)} hitSlop={8}>
@@ -629,6 +635,7 @@ export function TeamTlSection({
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.teamModalPrimaryText}>Create team</Text>}
             </Pressable>
           </View>
+          </KeyboardAwareScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -640,12 +647,11 @@ export function TeamTlSection({
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
       <View style={{ flex: 1, position: 'relative' }}>
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={[
             styles.scroll,
             showCreateFab ? { paddingBottom: tabBarHeight + 96 } : { paddingBottom: tabBarHeight + 20 },
-          ]}
-          showsVerticalScrollIndicator={false}>
+          ]}>
           {!selectedTeamId ? (
             <>
               <Animated.View entering={enterDown(0)} style={styles.hero}>
@@ -661,7 +667,7 @@ export function TeamTlSection({
           ) : (
             detailView
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {showCreateFab ? (
           <Animated.View

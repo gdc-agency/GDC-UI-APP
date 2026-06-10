@@ -39,7 +39,12 @@ import { useTheme } from '@/context/theme-context';
 import { cn } from '@/theme/cn';
 import { tw } from '@/theme/messages-tw';
 import { useAuth } from '@/context/auth-context';
-import useKeyboardOffset, { CHAT_COMPOSER_BAR_HEIGHT, CHAT_REPLY_STRIP_HEIGHT } from '@/hooks/use-keyboard-offset';
+import useKeyboardOffset, {
+  CHAT_COMPOSER_BAR_HEIGHT,
+  CHAT_REPLY_STRIP_HEIGHT,
+  useChatComposerKeyboard,
+} from '@/hooks/use-keyboard-offset';
+import Reanimated from 'react-native-reanimated';
 import { useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcInbox } from '@/context/gdc-inbox-context';
 import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
@@ -720,23 +725,13 @@ export default function MessagesScreen() {
   }, [canComposeInSelectedChat, replyTarget]);
 
   const TYPING_FOOTER_HEIGHT = 44;
+  const typingFooterHeight = isPeerTyping && selected?.peerId ? TYPING_FOOTER_HEIGHT : 0;
 
-  const listBottomReserve = useMemo(() => {
-    const safeBottom = keyboardOffset > 0 ? keyboardOffset + 6 : Math.max(insets.bottom, 10);
-    const typingPad = isPeerTyping && selected?.peerId ? TYPING_FOOTER_HEIGHT : 0;
-    return composerStackHeight + safeBottom + typingPad;
-  }, [composerStackHeight, keyboardOffset, insets.bottom, isPeerTyping, selected?.peerId]);
-
-  const composerBottomStyle = useMemo(
-    () => ({
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: keyboardOffset > 0 ? keyboardOffset : 0,
-      paddingBottom: keyboardOffset > 0 ? 0 : Math.max(insets.bottom, 8),
-    }),
-    [keyboardOffset, insets.bottom],
-  );
+  const { composerAnimatedStyle, listContentAnimatedStyle } = useChatComposerKeyboard({
+    safeAreaBottom: insets.bottom,
+    composerStackHeight,
+    typingFooterHeight,
+  });
 
   useEffect(() => {
     if (keyboardOffset > 0) {
@@ -1324,13 +1319,16 @@ export default function MessagesScreen() {
 
           <View className="flex-1">
           <ChatWallpaper className={tw.messagesWallpaper}>
-          <FlatList
+          <Reanimated.FlatList
             ref={msgListRef}
             data={messageRows}
             extraData={messageListExtra}
             keyExtractor={(item) => item.id}
             className={tw.messagesList}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: listBottomReserve, gap: 4 }}
+            contentContainerStyle={[
+              { paddingHorizontal: 12, paddingTop: 12, gap: 4 },
+              listContentAnimatedStyle,
+            ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             onScroll={handleChatScroll}
@@ -1367,7 +1365,11 @@ export default function MessagesScreen() {
           />
           </ChatWallpaper>
 
-          <View style={composerBottomStyle}>
+          <Reanimated.View
+            style={[
+              { position: 'absolute', left: 0, right: 0 },
+              composerAnimatedStyle,
+            ]}>
           {canComposeInSelectedChat && replyTarget ? (
             <View className={tw.replyComposer}>
               <View style={{ flex: 1, minWidth: 0 }}>
@@ -1418,9 +1420,9 @@ export default function MessagesScreen() {
               </Pressable>
             </View>
           ) : (
-            <GroupAdminsOnlyBanner bottomInset={keyboardOffset > 0 ? 8 : 0} />
+            <GroupAdminsOnlyBanner bottomInset={keyboardOffset > 0 ? 8 : Math.max(insets.bottom, 0)} />
           )}
-          </View>
+          </Reanimated.View>
           </View>
         </View>
       ) : (

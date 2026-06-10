@@ -15,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
 import { isAdminRole } from '@/utils/roles';
@@ -177,7 +178,7 @@ export function ProjectManagerSection({
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll}>
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
@@ -362,16 +363,15 @@ export function ProjectManagerSection({
           )}
         </View>
         </AnimatedBlock>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal visible={createTaskOpen} transparent animationType="slide" onRequestClose={closeProjectTaskModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView
+            <KeyboardAwareScrollView
               style={styles.modalScroll}
               contentContainerStyle={styles.modalScrollContent}
               showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
               onScrollBeginDrag={() => setHrAssignMenuOpen(false)}>
               <View style={styles.modalCard}>
@@ -560,7 +560,7 @@ export function ProjectManagerSection({
                   </Pressable>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -647,7 +647,7 @@ export function ProjectManagerSection({
       <Modal visible={Boolean(selectedProjectTask)} transparent animationType="slide" onRequestClose={() => setSelectedProjectTask(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardShell}>
-            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
+            <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator>
               <View style={styles.modalCard}>
                 <View style={styles.taskDetailHeader}>
                   <View style={{ flex: 1 }}>
@@ -876,7 +876,7 @@ export function ProjectManagerSection({
                   </View>
                 ) : null}
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>

@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { Image } from 'expo-image';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
@@ -327,7 +329,7 @@ export function AvailabilitySection({ styles, ctx }) {
     return (
       <SafeAreaView style={av.safe} edges={['top']}>
         <DashboardTopbar />
-        <ScrollView contentContainerStyle={av.scroll} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView contentContainerStyle={av.scroll}>
           <AdminAvailabilityBoard
             availabilityRoleFilter={availabilityRoleFilter}
             setAvailabilityRoleFilter={setAvailabilityRoleFilter}
@@ -342,7 +344,7 @@ export function AvailabilitySection({ styles, ctx }) {
             attendanceError={attendanceError}
             onRetryAttendance={onRetryAttendance}
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </SafeAreaView>
     );
   }
@@ -350,7 +352,7 @@ export function AvailabilitySection({ styles, ctx }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <DashboardTopbar />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scroll}>
         <AttendanceStatusBanner message={attendanceError} onRetry={onRetryAttendance} />
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
@@ -514,7 +516,7 @@ export function AvailabilitySection({ styles, ctx }) {
           </View>
         </View>
         </AnimatedBlock>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
