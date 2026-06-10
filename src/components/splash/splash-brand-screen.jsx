@@ -14,7 +14,7 @@ import { SplashLoadingRing } from './splash-loading-ring';
  */
 export function SplashBrandScreen({ loading = false, statusBarStyle = 'dark' }) {
   return (
-    <AuthSceneBackground className="flex-1">
+    <AuthSceneBackground className="flex-1" fullBleedWaves>
       <StatusBar style={statusBarStyle} />
       <View className="flex-1 items-center justify-center px-8">
         <AuthBrandBlock showAcronym slogan={BRAND_SLOGAN} />

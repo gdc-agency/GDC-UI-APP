@@ -1,7 +1,7 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { Redirect, useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useLayoutEffect } from 'react';
+import { Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedBlock } from '@/components/ui/animated-block';
@@ -12,22 +12,30 @@ import { SplashBrandScreen } from '@/components/splash/splash-brand-screen';
 import { BRAND_TAGLINE } from '@/data/constants/brand';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
-import { useFirstLaunchSplash } from '@/hooks/use-first-launch-splash';
+import { useAppIntroFlow } from '@/hooks/use-app-intro-flow';
 
 export default function WelcomeScreen() {
   const { user, hydrated } = useAuth();
   const { isDark } = useTheme();
   const router = useRouter();
-  const { introDone, showLoader, splashReady } = useFirstLaunchSplash(hydrated);
+  const { phase, flowReady } = useAppIntroFlow(hydrated);
+
+  useLayoutEffect(() => {
+    void SplashScreen.hideAsync();
+  }, []);
 
   useEffect(() => {
-    if (splashReady) {
+    if (flowReady) {
       void SplashScreen.hideAsync();
     }
-  }, [splashReady]);
+  }, [flowReady]);
 
-  if (!introDone) {
-    return <SplashBrandScreen loading={showLoader} statusBarStyle={isDark ? 'light' : 'dark'} />;
+  if (!flowReady || phase === 'splash') {
+    return <SplashBrandScreen statusBarStyle={isDark ? 'light' : 'dark'} />;
+  }
+
+  if (phase === 'loading') {
+    return <SplashBrandScreen loading statusBarStyle={isDark ? 'light' : 'dark'} />;
   }
 
   if (user) {
@@ -43,7 +51,7 @@ export default function WelcomeScreen() {
             style={{ color: isDark ? '#E2E8F0' : '#334155' }}>
             Welcome to
           </Text>
-          <AuthBrandBlock showAcronym slogan={null} />
+          <AuthBrandBlock showAcronym slogan={null} compact />
           <Text
             className="mt-5 max-w-[320px] px-2 text-center text-sm font-medium leading-[22px]"
             style={{ color: isDark ? '#94A3B8' : '#64748B' }}>

@@ -1,15 +1,17 @@
 import React from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { FloatingParticles } from '@/components/ui/floating-particles';
 import { BRAND_ORANGE } from '@/data/constants/brand';
 import { useTheme } from '@/context/theme-context';
 
-function LightCornerWaves() {
+function LightCornerWaves({ scale = 1 }) {
+  const w = Math.round(220 * scale);
+  const h = Math.round(180 * scale);
   return (
     <>
-      <Svg width={220} height={180} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
+      <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
         <Path
           d="M-20,30 C60,120 140,40 220,10"
           stroke="#93C5FD"
@@ -27,7 +29,7 @@ function LightCornerWaves() {
         <Circle cx={28} cy={42} r={3} fill="#BFDBFE" opacity={0.7} />
         <Circle cx={52} cy={68} r={2} fill="#FED7AA" opacity={0.65} />
       </Svg>
-      <Svg width={220} height={180} style={{ position: 'absolute', bottom: 0, right: 0 }} pointerEvents="none">
+      <Svg width={w} height={h} style={{ position: 'absolute', bottom: 0, right: 0 }} pointerEvents="none">
         <Path
           d="M0,150 C80,60 160,130 240,40"
           stroke="#93C5FD"
@@ -89,8 +91,10 @@ function DarkCornerWaves() {
 }
 
 /** Decorative auth backdrop — light waves or dark particles. */
-export function AuthSceneBackground({ children, className }) {
+export function AuthSceneBackground({ children, className, fullBleedWaves = false }) {
   const { isDark } = useTheme();
+  const { width } = useWindowDimensions();
+  const waveScale = fullBleedWaves ? Math.max(1.4, Math.min(width / 280, 2.4)) : 1;
 
   return (
     <View className={className} style={{ flex: 1, backgroundColor: isDark ? '#070D1A' : '#FFFFFF' }}>
@@ -100,7 +104,7 @@ export function AuthSceneBackground({ children, className }) {
           <DarkCornerWaves />
         </>
       ) : (
-        <LightCornerWaves />
+        <LightCornerWaves scale={waveScale} />
       )}
       {children}
     </View>

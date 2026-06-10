@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "generate:icons": "node scripts/generate-icon-assets.mjs",
+    "generate:splash": "node scripts/generate-splash-screen.mjs",
     "build:mobile": "eas build -p android --profile preview --non-interactive",
     "build:apk": "eas build -p android --profile preview --non-interactive",
     "build:apk-universal": "eas build -p android --profile preview-universal --non-interactive",

@@ -1,3 +1,1 @@
-import { createLazyScreen, screens } from '../src/navigation';
-
-export default createLazyScreen(screens.welcome);
+export { default } from '../src/screens/auth/welcome-screen';
