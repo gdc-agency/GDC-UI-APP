@@ -337,6 +337,37 @@ export function mapThirtyDayUserRow(row) {
 }
 
 /**
+ * CRM TeamAvailabilityBoard card status (present / away / leave / offline).
+ * @param {Record<string, unknown>} row
+ * @returns {'present' | 'away' | 'leave' | 'offline'}
+ */
+export function deriveAvailabilityCardStatus(row) {
+  const att = String(row.attendance_status ?? '').trim().toUpperCase();
+  const live = String(row.live_status ?? '').trim().toUpperCase();
+  if (att === 'LEAVE') return 'leave';
+  if (att === 'ABSENT') return 'offline';
+  if (live === 'BREAK') return 'away';
+  if (live === 'WORKING') return 'present';
+  if (att === 'PRESENT') return 'away';
+  return 'offline';
+}
+
+/**
+ * @param {string | null | undefined} checkIn
+ * @param {string | null | undefined} checkOut
+ */
+export function computeAvailabilityTodayHours(checkIn, checkOut) {
+  if (!checkIn) return '—';
+  const start = new Date(checkIn).getTime();
+  const end = checkOut ? new Date(checkOut).getTime() : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '—';
+  const hours = (end - start) / 3_600_000;
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+/**
  * @param {Record<string, unknown>} row
  */
 export function mapSummaryUserToAvailability(row) {
@@ -351,11 +382,21 @@ export function mapSummaryUserToAvailability(row) {
     attendanceLabel = 'Present';
   }
   const live = String(row.live_status ?? '').toUpperCase();
+  const cardStatus = deriveAvailabilityCardStatus(row);
   let activityLabel = 'Away';
-  if (status === 'Leave') activityLabel = 'Leave';
-  else if (live === 'BREAK') activityLabel = 'On break';
-  else if (live === 'WORKING') activityLabel = 'Working';
-  else if (status === 'Available' && row.check_in && !row.check_out) activityLabel = 'Working';
+  if (cardStatus === 'leave') activityLabel = 'Leave';
+  else if (cardStatus === 'present') activityLabel = 'Working';
+  else if (cardStatus === 'away' && live === 'BREAK') activityLabel = 'On break';
+  else if (cardStatus === 'offline') activityLabel = 'Offline';
+
+  const boardLabel =
+    cardStatus === 'present'
+      ? 'Present'
+      : cardStatus === 'away'
+        ? 'Away'
+        : cardStatus === 'leave'
+          ? 'On Leave'
+          : 'Offline';
 
   return {
     id: row.id != null ? String(row.id) : undefined,
@@ -363,11 +404,26 @@ export function mapSummaryUserToAvailability(row) {
     name: String(row.name ?? ''),
     role: displayRoleFromApi(row.role),
     team: String(row.department ?? '—'),
+    jobTitle: String(row.job_title ?? row.designation ?? row.department ?? '—'),
+    email: String(row.email ?? ''),
+    phone: String(row.phone ?? row.mobile ?? ''),
     avatarUrl: avatarUrlFromRow(row),
     status,
-    attendanceLabel,
+    attendanceLabel: boardLabel,
     activityLabel,
-    active: status === 'Available',
+    cardStatus,
+    checkIn: row.check_in ? String(row.check_in) : null,
+    checkOut: row.check_out ? String(row.check_out) : null,
+    checkInLabel: row.check_in ? timeLabelFromTimestamp(row.check_in) : '—',
+    checkOutLabel: row.check_out ? timeLabelFromTimestamp(row.check_out) : '—',
+    todayHours: computeAvailabilityTodayHours(
+      row.check_in ? String(row.check_in) : null,
+      row.check_out ? String(row.check_out) : null,
+    ),
+    liveStatus: live || '—',
+    leaveUntil: row.leave_until ? String(row.leave_until) : row.leave_end ? String(row.leave_end) : undefined,
+    leaveType: row.leave_type ? String(row.leave_type) : undefined,
+    active: cardStatus === 'present' || cardStatus === 'away',
   };
 }
 

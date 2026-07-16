@@ -5,9 +5,9 @@ import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/context/theme-context';
 
 const SEGMENTS = [
-  { id: 'timesheet', label: 'Attendance', icon: 'view-grid-outline' },
-  { id: 'clock-records', label: 'Clock Record', icon: 'clock-outline' },
-  { id: 'manual-records', label: 'Manual Record', icon: 'clipboard-text-outline' },
+  { id: 'timesheet', label: 'Overview', icon: 'view-grid-outline' },
+  { id: 'clock-records', label: 'Attendance Logs', icon: 'clock-outline' },
+  { id: 'manual-records', label: 'Manual TimeSheet', icon: 'clipboard-text-outline' },
 ];
 
 function SegmentTab({ seg, active, onPress }) {

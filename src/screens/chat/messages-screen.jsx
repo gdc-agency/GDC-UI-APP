@@ -7,17 +7,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  FlatList,
-  InteractionManager,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  Text,
-  TextInput,
-  View
+    Alert,
+    Animated,
+    FlatList,
+    InteractionManager,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    Text,
+    TextInput,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,35 +32,36 @@ import { GroupAdminsOnlyBanner } from '@/components/chat/group-admins-only-banne
 import { MessageActionMenu } from '@/components/chat/message-action-menu';
 import { NewChatPicker } from '@/components/chat/new-chat-picker';
 import { TypingDots } from '@/components/chat/typing-dots';
-import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { AnimatedBlock } from '@/components/ui/animated-block';
+import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { SkeletonGroup, SkeletonListRow } from '@/components/ui/skeleton';
-import { useTheme } from '@/context/theme-context';
-import { cn } from '@/theme/cn';
-import { tw } from '@/theme/messages-tw';
 import { useAuth } from '@/context/auth-context';
-import useKeyboardOffset, {
-  CHAT_COMPOSER_BAR_HEIGHT,
-  CHAT_REPLY_STRIP_HEIGHT,
-  useChatComposerKeyboard,
-} from '@/hooks/use-keyboard-offset';
-import Reanimated from 'react-native-reanimated';
 import { useChatChrome } from '@/context/chat-chrome-context';
 import { useGdcInbox } from '@/context/gdc-inbox-context';
+import { useTheme } from '@/context/theme-context';
+import useKeyboardOffset, {
+    CHAT_COMPOSER_BAR_HEIGHT,
+    CHAT_REPLY_STRIP_HEIGHT,
+    useChatComposerKeyboard,
+} from '@/hooks/use-keyboard-offset';
+import { cn } from '@/theme/cn';
+import { tw } from '@/theme/messages-tw';
 import { DELETED_BY_ME_TEXT, DELETED_MESSAGE_TEXT } from '@/utils/chat-deleted-message';
 import {
-  isChatDisplayNamePending,
-  resolveChatPeerDisplayName
+    isChatDisplayNamePending,
+    resolveChatPeerDisplayName
 } from '@/utils/chat-directory';
 import { isMessageUploading, statusIconColor, statusIconName } from '@/utils/chat-message-status';
-
-const CHAT_IMAGE_BUBBLE_W = 260;
-const CHAT_IMAGE_BUBBLE_H = 220;
 import { consumePendingChatOpen, subscribePendingChatOpen } from '@/utils/chat-open-bus';
 import { threadIdEquals } from '@/utils/chat-thread-inbox';
 import { canComposeInChat } from '@/utils/group-compose-permissions';
+import { asPermissionUser, canDmPair, filterEligibleGroupMemberContacts, viewerFromAuth } from '@/utils/chat-permissions';
 import { groupSenderColor } from '@/utils/group-sender-style';
 import { isAdminRole } from '@/utils/roles';
+import Reanimated from 'react-native-reanimated';
+
+const CHAT_IMAGE_BUBBLE_W = 260;
+const CHAT_IMAGE_BUBBLE_H = 220;
 
 const currentTime = () =>
   new Date().toLocaleTimeString([], {
@@ -69,29 +70,78 @@ const currentTime = () =>
     hour12: true,
   });
 
-// NEW CODE ADDED FOR TIMESTAMP FORMATTING FIX — ISO + 24h strings → local 12h display
+// WhatsApp-style time: "10:17 am" (lowercase, no date in bubble)
 const normalizeTime = (timeValue) => {
-  if (!timeValue) return currentTime();
-  if (typeof timeValue !== 'string') return String(timeValue);
-  if (/^\d{4}-\d{2}-\d{2}T/.test(timeValue)) {
+  let label = '';
+  if (!timeValue) {
+    label = currentTime();
+  } else if (typeof timeValue !== 'string') {
+    label = String(timeValue);
+  } else if (/^\d{4}-\d{2}-\d{2}T/.test(timeValue)) {
     try {
       const d = new Date(timeValue);
       if (!Number.isNaN(d.getTime())) {
-        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+        label = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
       }
     } catch {
       /* fall through */
     }
+  } else if (/am|pm/i.test(timeValue)) {
+    label = timeValue;
+  } else {
+    const match = timeValue.match(/^(\d{1,2}):(\d{2})$/);
+    if (match) {
+      const hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      label = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+    } else {
+      label = timeValue;
+    }
   }
-  if (/am|pm/i.test(timeValue)) return timeValue;
-  const match = timeValue.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return timeValue;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const date = new Date();
-  date.setHours(hours, minutes, 0, 0);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  return String(label || currentTime()).replace(/\s?(AM|PM)\b/g, (m) => m.toLowerCase());
 };
+
+/** Consecutive messages from same sender — WhatsApp stack corners. */
+function resolveMessageStackPosition(msgs, index, isGroupChat) {
+  const msg = msgs[index];
+  if (!msg || msg.deleted) return 'single';
+
+  const sameCluster = (a, b) => {
+    if (!a || !b || a.deleted || b.deleted) return false;
+    if (!!a.me !== !!b.me) return false;
+    if (isGroupChat && !a.me) {
+      return String(a.authorId || '') === String(b.authorId || '');
+    }
+    return true;
+  };
+
+  const hasPrev = index > 0 && sameCluster(msgs[index - 1], msg);
+  const hasNext = index < msgs.length - 1 && sameCluster(msg, msgs[index + 1]);
+  if (!hasPrev && !hasNext) return 'single';
+  if (!hasPrev && hasNext) return 'first';
+  if (hasPrev && hasNext) return 'middle';
+  return 'last';
+}
+
+function stackBubbleClass(tw, isMe, stackPosition, isGroupIncoming) {
+  if (isGroupIncoming) {
+    if (stackPosition === 'first') return tw.bubbleGroupFirst;
+    if (stackPosition === 'middle' || stackPosition === 'last') return tw.bubbleGroupStack;
+    return tw.bubbleOtherSingle;
+  }
+  if (isMe) {
+    if (stackPosition === 'first') return tw.bubbleMeFirst;
+    if (stackPosition === 'middle') return tw.bubbleMeMiddle;
+    if (stackPosition === 'last') return tw.bubbleMeLast;
+    return tw.bubbleMeSingle;
+  }
+  if (stackPosition === 'first') return tw.bubbleOtherFirst;
+  if (stackPosition === 'middle') return tw.bubbleOtherMiddle;
+  if (stackPosition === 'last') return tw.bubbleOtherLast;
+  return tw.bubbleOtherSingle;
+}
 
 const startOfLocalDay = (date) => {
   const d = new Date(date);
@@ -234,6 +284,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
   senderName = '',
   senderAvatarUrl = null,
   senderColor = '#1266f1',
+  stackPosition = 'single',
   colors,
   chatTheme,
 }) {
@@ -271,12 +322,12 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
       : statusIconColor(item.status, !!item.me && !isActionTarget);
   const isGroupIncoming = isGroupChat && !item.me;
   const isImageBubble = item.type === 'image' && !!item.uri;
+  const stackClass = stackBubbleClass(tw, !!item.me, stackPosition, isGroupIncoming && !isImageBubble);
   const bubbleClassName = cn(
     tw.bubble,
     tw.bubbleFitContent,
     item.me ? tw.bubbleMe : tw.bubbleOther,
-    isGroupIncoming && !isImageBubble && showSenderHeader && tw.bubbleGroupFirst,
-    isGroupIncoming && !isImageBubble && !showSenderHeader && tw.bubbleGroupStack,
+    !isImageBubble && stackClass,
     isImageBubble && tw.bubbleImageOuter,
     isImageBubble && (item.me ? tw.bubbleImageMe : tw.bubbleImageOther),
     isImageBubble && isGroupIncoming && showSenderHeader && tw.bubbleImageGroupFirst,
@@ -390,21 +441,23 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             const textClassName = cn(
               tw.bubbleText,
               item.me && !isActionTarget && tw.bubbleTextMe,
-              isActionTarget && tw.bubbleTextSelected
+              isActionTarget && tw.bubbleTextSelected,
             );
             const metaRow = (
-              <View className={tw.bubbleMetaInline}>
+              <View className={tw.bubbleMetaRow}>
                 <Text
-                  className={cn(tw.msgTime,
+                  className={cn(
+                    tw.msgTime,
                     item.me && !isActionTarget && tw.msgTimeMe,
                     !item.me && tw.msgTimeOther,
-                    isActionTarget && tw.msgTimeSelected,)}>
+                    isActionTarget && tw.msgTimeSelected,
+                  )}>
                   {timeLabel}
                 </Text>
                 {item.me ? (
                   <MaterialCommunityIcons
                     name={statusIconName(item.status === 'sending' ? 'sent' : item.status)}
-                    size={14}
+                    size={15}
                     color={tickColor}
                   />
                 ) : null}
@@ -413,21 +466,15 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
             return (
               <View className={tw.textBubbleBlock}>
                 {isGroupIncoming && showSenderHeader ? (
-                  <View className={tw.textBubbleRow}>
-                    <Text className={textClassName}>
-                      <Text className={cn(tw.groupNameInline)} style={{ color: senderColor || chatTheme.groupSenderName }}>
-                        {senderName || 'Member'}{' '}
-                      </Text>
-                      {item.text}
-                    </Text>
-                    {metaRow}
-                  </View>
-                ) : (
-                  <View className={tw.textBubbleRow}>
-                    <Text className={cn(textClassName, tw.bubbleTextBody)}>{item.text}</Text>
-                    {metaRow}
-                  </View>
-                )}
+                  <Text
+                    className={cn(tw.groupNameInline)}
+                    style={{ color: senderColor || chatTheme.groupSenderName }}
+                    numberOfLines={1}>
+                    {senderName || 'Member'}
+                  </Text>
+                ) : null}
+                <Text className={textClassName}>{item.text}</Text>
+                {metaRow}
               </View>
             );
           })()
@@ -463,6 +510,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
       <View
         className={cn(tw.msgRow,
           tw.msgRowGroupOther,
+          (stackPosition === 'single' || stackPosition === 'first') && 'mt-1',
           showSenderHeader && tw.msgRowGroupBlockStart,
           isActionTarget && tw.msgRowActionTarget,)}>
         <View className={tw.groupAvatarCol}>
@@ -483,6 +531,7 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
     <View
       className={cn(tw.msgRow,
         item.me ? tw.msgRowMe : tw.msgRowOther,
+        (stackPosition === 'single' || stackPosition === 'first') && 'mt-1',
         isActionTarget && tw.msgRowActionTarget,)}>
       {isFileBubble ? fileBubble : textOrImageBubble}
     </View>
@@ -546,6 +595,7 @@ export default function MessagesScreen() {
     sendAttachment,
     loadOlderMessages,
     groupScopeForRole,
+    canCreateGroup,
     emitChatTyping,
     isPeerTyping,
     resolvePeerProfile,
@@ -701,9 +751,15 @@ export default function MessagesScreen() {
   }, [isGroupChat, selected?.messages, myUserId, hydrateChatParticipants]);
 
   const canComposeInSelectedChat = useMemo(
-    () => canComposeInChat(selected?.server, myUserId),
-    [selected?.server, myUserId],
+    () => canComposeInChat(selected?.server, myUserId, user?.role),
+    [selected?.server, myUserId, user?.role],
   );
+
+  const eligibleGroupContacts = useMemo(() => {
+    const scope = groupScopeForRole();
+    const pool = groupContacts.length ? groupContacts : contacts;
+    return filterEligibleGroupMemberContacts(scope, pool);
+  }, [groupContacts, contacts, groupScopeForRole]);
 
   const prevCanComposeRef = useRef(true);
   useEffect(() => {
@@ -727,7 +783,7 @@ export default function MessagesScreen() {
   const TYPING_FOOTER_HEIGHT = 44;
   const typingFooterHeight = isPeerTyping && selected?.peerId ? TYPING_FOOTER_HEIGHT : 0;
 
-  const { composerAnimatedStyle, listContentAnimatedStyle } = useChatComposerKeyboard({
+  const { composerAnimatedStyle, listFooterSpacerStyle } = useChatComposerKeyboard({
     safeAreaBottom: insets.bottom,
     composerStackHeight,
     typingFooterHeight,
@@ -776,6 +832,7 @@ export default function MessagesScreen() {
         (!prev || prev.me || String(prev.authorId || '') !== authorId);
       const peer = authorId ? resolvePeerProfile(authorId) : null;
       const senderName = peer?.displayName || peer?.name || '';
+      const stackPosition = resolveMessageStackPosition(msgs, i, isGroupChat);
       rows.push({
         kind: 'message',
         id: String(msg.id),
@@ -784,6 +841,7 @@ export default function MessagesScreen() {
         senderName,
         senderAvatarUrl: peer?.avatarUrl || null,
         senderColor: groupSenderColor(authorId),
+        stackPosition,
       });
     }
     return rows;
@@ -1047,7 +1105,7 @@ export default function MessagesScreen() {
         senderName={row.senderName || ''}
         senderAvatarUrl={row.senderAvatarUrl}
         senderColor={row.senderColor || '#1266f1'}
-       
+        stackPosition={row.stackPosition || 'single'}
         colors={colors}
         chatTheme={chatTheme}
       />
@@ -1059,6 +1117,12 @@ export default function MessagesScreen() {
     async (contact) => {
       const uid = contact?.id != null ? String(contact.id) : '';
       if (!uid) return;
+      const viewer = viewerFromAuth(user);
+      const target = asPermissionUser(contact);
+      if (!viewer || !target || !canDmPair(viewer, target)) {
+        Alert.alert('Chat', 'You are not allowed to message this person.');
+        return;
+      }
       setNewChatOpen(false);
       setContactSearch('');
       setInConversation(true);
@@ -1074,7 +1138,7 @@ export default function MessagesScreen() {
         throw e;
       }
     },
-    [ensureDmChat, openChat, setActiveChatId, setInConversation],
+    [ensureDmChat, openChat, setActiveChatId, setInConversation, user],
   );
 
   useEffect(() => {
@@ -1325,10 +1389,7 @@ export default function MessagesScreen() {
             extraData={messageListExtra}
             keyExtractor={(item) => item.id}
             className={tw.messagesList}
-            contentContainerStyle={[
-              { paddingHorizontal: 12, paddingTop: 12, gap: 4 },
-              listContentAnimatedStyle,
-            ]}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, gap: 4 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             onScroll={handleChatScroll}
@@ -1353,13 +1414,16 @@ export default function MessagesScreen() {
               </View>
             }
             ListFooterComponent={
-              isPeerTyping && selected?.peerId ? (
-                <View className={tw.typingFooterRow}>
-                  <View className={tw.typingBubble}>
-                    <TypingDots color={colors.textMuted} size={5} />
+              <>
+                {isPeerTyping && selected?.peerId ? (
+                  <View className={tw.typingFooterRow}>
+                    <View className={tw.typingBubble}>
+                      <TypingDots color={colors.textMuted} size={5} />
+                    </View>
                   </View>
-                </View>
-              ) : null
+                ) : null}
+                <Reanimated.View style={listFooterSpacerStyle} />
+              </>
             }
             renderItem={renderMessageRow}
           />
@@ -1535,16 +1599,18 @@ export default function MessagesScreen() {
         contactsLoading={inboxLoading}
         directoryHydrated={directoryHydrated}
         onSelectContact={startNewChat}
+        canCreateGroup={canCreateGroup}
         onCreateGroup={() => {
+          if (!canCreateGroup) return;
           setNewChatOpen(false);
           setGroupOpen(true);
         }}
       />
 
       <CreateGroupFlow
-        visible={groupOpen}
+        visible={groupOpen && canCreateGroup}
         onClose={() => setGroupOpen(false)}
-        contacts={groupContacts.length ? groupContacts : contacts}
+        contacts={eligibleGroupContacts}
         contactsLoading={inboxLoading && !directoryHydrated}
         onCreate={handleCreateGroupFromFlow}
       />

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { login as apiLogin } from '@/data/api/auth-api';
 import { getProfile as apiGetProfile } from '@/data/api/profile-api';
@@ -31,6 +31,13 @@ function normalizeDisplayRole(role) {
 function normalizeUser(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const u = raw;
+  const orgName =
+    u.organization_name ??
+    u.organizationName ??
+    u.org_name ??
+    u.organization?.name ??
+    null;
+  const orgId = u.organization_id ?? u.organizationId ?? null;
   return {
     id: u.id != null ? String(u.id) : '',
     email: u.email ?? '',
@@ -47,6 +54,8 @@ function normalizeUser(raw) {
     cnic: u.cnic ?? null,
     address: u.address ?? null,
     team_id: u.team_id ?? null,
+    organization_id: orgId != null && orgId !== '' ? String(orgId) : null,
+    organization_name: typeof orgName === 'string' && orgName.trim() ? orgName.trim() : null,
   };
 }
 
@@ -141,6 +150,9 @@ export function AuthProvider({ children }) {
         team_name: row.team_name ?? prev.team_name,
         work_site: row.work_site ?? prev.work_site,
         team_id: row.team_id ?? prev.team_id,
+        organization_id: row.organization_id ?? row.organizationId ?? prev.organization_id,
+        organization_name:
+          row.organization_name ?? row.organizationName ?? prev.organization_name,
       });
       if (merged) {
         void AsyncStorage.setItem(STORAGE_USER, JSON.stringify(merged));
@@ -172,6 +184,9 @@ export function AuthProvider({ children }) {
           team_name: row.team_name ?? prev?.team_name ?? null,
           work_site: row.work_site ?? prev?.work_site ?? null,
           team_id: row.team_id ?? prev?.team_id ?? null,
+          organization_id: row.organization_id ?? row.organizationId ?? prev?.organization_id ?? null,
+          organization_name:
+            row.organization_name ?? row.organizationName ?? prev?.organization_name ?? null,
         });
         if (merged) {
           void AsyncStorage.setItem(STORAGE_USER, JSON.stringify(merged));

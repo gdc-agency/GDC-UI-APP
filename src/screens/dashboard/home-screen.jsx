@@ -214,7 +214,7 @@ const EMPTY_HR_STATS = {
 };
 
 export default function DashboardHomeScreen() {
-  const { user, token } = useAuth();
+  const { user, token, refreshProfile } = useAuth();
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
   const nowText = React.useMemo(() => new Date().toLocaleString(), []);
@@ -331,10 +331,13 @@ export default function DashboardHomeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      if (token && !user?.organization_name) {
+        void refreshProfile?.();
+      }
       void loadAdminStats();
       void loadDashboardTaskBoard();
       void loadHrDashboardStats();
-    }, [loadAdminStats, loadDashboardTaskBoard, loadHrDashboardStats]),
+    }, [token, user?.organization_name, refreshProfile, loadAdminStats, loadDashboardTaskBoard, loadHrDashboardStats]),
   );
 
   React.useEffect(() => {

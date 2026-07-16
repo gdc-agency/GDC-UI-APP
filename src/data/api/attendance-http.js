@@ -1,4 +1,5 @@
 import { getAttendanceApiBaseUrl } from '@/data/constants/api-config';
+import { isLegacyRenderHost } from '@/data/constants/backend-urls';
 import { Platform } from 'react-native';
 
 const REQUEST_TIMEOUT_MS = 45000;
@@ -33,6 +34,11 @@ export class AttendanceApiError extends Error {
 export async function attendanceApiRequest(path, options = {}) {
   const { method = 'GET', token, body, headers = {} } = options;
   const base = getAttendanceApiBaseUrl();
+  if (isLegacyRenderHost(base)) {
+    throw new Error(
+      'This app is pointing at a retired attendance backend. Restart Expo with cache clear (npx expo start --lan -c).',
+    );
+  }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
   /** @type {Record<string, string>} */

@@ -39,7 +39,7 @@ export function DashboardTopbar() {
   const adminRoutes = [
     { id: 'admin', label: 'Admin Control' },
     { id: 'daily-updates', label: 'Daily Updates' },
-    { id: 'project-manager', label: 'Project Manager' },
+    { id: 'project-manager', label: 'Projects' },
     { id: 'timesheet', label: 'Timesheet' },
     { id: 'availability', label: 'Availability' },
     { id: 'request-management', label: 'Request Management' },
@@ -47,7 +47,7 @@ export function DashboardTopbar() {
   ];
   const nonAdminRoutes = [
     { id: 'daily-updates', label: 'Daily Updates' },
-    { id: 'project-manager', label: 'Project Manager' },
+    { id: 'project-manager', label: 'Projects' },
     { id: 'timesheet', label: 'Timesheet' },
     { id: 'availability', label: 'Availability' },
     { id: 'my-requests', label: 'My Requests' },
@@ -204,7 +204,7 @@ export function DashboardTopbar() {
                   <BrandTitle size="lg" />
                   <Text className="mt-0.5 text-[11px] font-semibold" style={{ color: colors.textMuted }} numberOfLines={1}>
                     {user?.name ? user.name : 'Signed in'}
-                    {user?.role ? ` • ${user.role}` : ''}
+                    {user?.organization_name ? ` • ${user.organization_name}` : ''}
                   </Text>
                 </View>
               </View>

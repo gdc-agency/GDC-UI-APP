@@ -2,8 +2,36 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { NativeModules, Platform } from 'react-native';
 
-/** Always read latest `extra` (fixes stale URLs when Metro cache / Expo loads config after first import). */
-export function getExpoExtra() {
+import {
+  GDC_REMOTE_API,
+  LOCAL_API_PORTS,
+  isLegacyRenderHost,
+  sanitizeServiceUrl,
+} from '@/data/constants/backend-urls';
+
+/** `remote` = org Render URLs. `local` = PC LAN (ports 5000–5003). */
+export function getApiMode() {
+  const fromExtra = getExpoExtraRaw()?.apiMode;
+  const mode = String(process.env.EXPO_PUBLIC_API_MODE ?? fromExtra ?? 'remote')
+    .trim()
+    .toLowerCase();
+  return mode === 'local' ? 'local' : 'remote';
+}
+
+export function isOrgRemoteMode() {
+  return getApiMode() === 'remote';
+}
+
+function shouldForceConfiguredUrl() {
+  if (String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1') return true;
+  return isOrgRemoteMode();
+}
+
+function preferLocalDevBackend() {
+  return getApiMode() === 'local' && typeof __DEV__ !== 'undefined' && __DEV__;
+}
+
+function getExpoExtraRaw() {
   return (
     Constants.expoConfig?.extra ??
     (typeof Constants.manifest2 === 'object' && Constants.manifest2?.extra
@@ -12,6 +40,52 @@ export function getExpoExtra() {
     Constants.manifest?.extra ??
     {}
   );
+}
+
+function sanitizeExpoExtra(ex) {
+  const o = { ...(ex || {}) };
+  o.apiBaseUrl = sanitizeServiceUrl(
+    process.env.EXPO_PUBLIC_API_BASE_URL || o.apiBaseUrl || GDC_REMOTE_API.auth,
+    'auth',
+  );
+  o.taskApiBaseUrl = sanitizeServiceUrl(
+    process.env.EXPO_PUBLIC_TASK_API_BASE_URL || o.taskApiBaseUrl || GDC_REMOTE_API.task,
+    'task',
+  );
+  o.chatApiBaseUrl = sanitizeServiceUrl(
+    process.env.EXPO_PUBLIC_CHAT_API_BASE_URL || o.chatApiBaseUrl || GDC_REMOTE_API.chat,
+    'chat',
+  );
+  o.attendanceApiBaseUrl = sanitizeServiceUrl(
+    process.env.EXPO_PUBLIC_ATTENDANCE_API_BASE_URL ||
+      o.attendanceApiBaseUrl ||
+      GDC_REMOTE_API.attendance,
+    'attendance',
+  );
+
+  if (preferLocalDevBackend()) {
+    const lan = String(process.env.EXPO_PUBLIC_DEV_LAN_HOST ?? o.devLanHost ?? '')
+      .replace(/\s+/g, '')
+      .trim();
+    const host = lan || resolveDevLanHost();
+    if (host) {
+      o.apiBaseUrl = `http://${host}:${LOCAL_API_PORTS.auth}`;
+      o.taskApiBaseUrl = `http://${host}:${LOCAL_API_PORTS.task}`;
+      o.chatApiBaseUrl = `http://${host}:${LOCAL_API_PORTS.chat}`;
+      o.attendanceApiBaseUrl = `http://${host}:${LOCAL_API_PORTS.attendance}`;
+      o.apiPort = LOCAL_API_PORTS.auth;
+      o.taskApiPort = LOCAL_API_PORTS.task;
+      o.chatApiPort = LOCAL_API_PORTS.chat;
+      o.attendanceApiPort = LOCAL_API_PORTS.attendance;
+    }
+  }
+
+  return o;
+}
+
+/** Always read latest `extra` (fixes stale URLs when Metro cache / Expo loads config after first import). */
+export function getExpoExtra() {
+  return sanitizeExpoExtra(getExpoExtraRaw());
 }
 
 /** Remove accidental spaces in URLs (e.g. `http://192.168.1 .19:3000` breaks fetch / DNS). */
@@ -168,14 +242,13 @@ function resolveApiBaseUrlFromExtra(ex) {
     return configuredUrl.replace(/\/+$/, '');
   }
   const apiPort = String(
-    ex.apiPort ?? process.env.EXPO_PUBLIC_API_PORT ?? portFromConfiguredUrl(configuredUrl) ?? '5001',
+    ex.apiPort ?? process.env.EXPO_PUBLIC_API_PORT ?? portFromConfiguredUrl(configuredUrl) ?? '5000',
   );
   const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
   const isWeb = Platform.OS === 'web';
   const isDevClient = isNative || isWeb;
-  const forceConfigured =
-    String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1';
+  const forceConfigured = shouldForceConfiguredUrl();
 
   /**
    * On device or Expo web, `expo.extra.apiBaseUrl` may be stale vs the PC running Metro.
@@ -274,7 +347,7 @@ function resolveTaskApiBaseFromExtra(ex, apiBase) {
   }
 
   const rawTaskPort = ex.taskApiPort != null && ex.taskApiPort !== '' ? Number(ex.taskApiPort) : NaN;
-  let taskApiPort = Number.isFinite(rawTaskPort) && rawTaskPort > 0 ? String(rawTaskPort) : '4000';
+  let taskApiPort = Number.isFinite(rawTaskPort) && rawTaskPort > 0 ? String(rawTaskPort) : '5001';
   /**
    * Published builds used `taskApiPort: 5001` when the server defaulted to 5001.
    * If full Task URL is not a non-loopback override, treat 5001 as mistake → 4000.
@@ -325,7 +398,7 @@ function resolveTaskApiBaseFromExtra(ex, apiBase) {
 }
 
 /**
- * Chat service base URL. `expo.extra.chatApiBaseUrl` overrides; else same host as Auth + `chatApiPort` (default 5003).
+ * Chat service base URL. `expo.extra.chatApiBaseUrl` overrides; else same host as Auth + `chatApiPort` (default 5002).
  * @param {Record<string, unknown>} ex
  * @param {string} apiBase
  */
@@ -335,7 +408,7 @@ function resolveChatApiBaseFromExtra(ex, apiBase) {
     return configuredChatUrl.replace(/\/+$/, '');
   }
   const rawChatPort = ex.chatApiPort != null && ex.chatApiPort !== '' ? Number(ex.chatApiPort) : NaN;
-  const chatApiPort = Number.isFinite(rawChatPort) && rawChatPort > 0 ? String(rawChatPort) : '5003';
+  const chatApiPort = Number.isFinite(rawChatPort) && rawChatPort > 0 ? String(rawChatPort) : '5002';
 
   let out;
   if (configuredChatUrl) {
@@ -389,11 +462,9 @@ export function getTaskApiBaseUrl() {
   const ex = getExpoExtra();
   const authBase = getApiBaseUrl();
   const rawPort = ex.taskApiPort != null && ex.taskApiPort !== '' ? Number(ex.taskApiPort) : NaN;
-  let taskApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '4000';
-  if (taskApiPort === '5001') taskApiPort = '4000';
+  let taskApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5001';
 
-  const forceConfigured =
-    String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1';
+  const forceConfigured = shouldForceConfiguredUrl();
   const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
   const isWeb = Platform.OS === 'web';
@@ -401,7 +472,7 @@ export function getTaskApiBaseUrl() {
 
   /**
    * Dev / Expo: use local Task service (Metro LAN or loopback) even when app.json points at Render.
-   * Production APK keeps the deployed Render URL. Opt out: EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.
+   * Organization mode (remote) keeps org Render URL. Opt out of LAN: EXPO_PUBLIC_API_USE_CONFIGURED_URL=1.
    */
   if (isDev && isDevClient && !forceConfigured) {
     /**
@@ -488,7 +559,7 @@ function resolveAttendanceApiBaseFromExtra(ex, apiBase) {
     return configuredUrl.replace(/\/+$/, '');
   }
   const rawPort = ex.attendanceApiPort != null && ex.attendanceApiPort !== '' ? Number(ex.attendanceApiPort) : NaN;
-  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5000';
+  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5003';
 
   let out;
   if (configuredUrl) {
@@ -516,9 +587,8 @@ export function getAttendanceApiBaseUrl() {
   const ex = getExpoExtra();
   const authBase = getApiBaseUrl();
   const rawPort = ex.attendanceApiPort != null && ex.attendanceApiPort !== '' ? Number(ex.attendanceApiPort) : NaN;
-  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5000';
-  const forceConfigured =
-    String(process.env.EXPO_PUBLIC_API_USE_CONFIGURED_URL ?? '').trim() === '1';
+  const attendanceApiPort = Number.isFinite(rawPort) && rawPort > 0 ? String(rawPort) : '5003';
+  const forceConfigured = shouldForceConfiguredUrl();
   const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
   const isWeb = Platform.OS === 'web';

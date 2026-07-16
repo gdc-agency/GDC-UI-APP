@@ -1,4 +1,5 @@
 import { getTaskApiBaseUrl } from '@/data/constants/api-config';
+import { isLegacyRenderHost } from '@/data/constants/backend-urls';
 import { Platform } from 'react-native';
 
 const REQUEST_TIMEOUT_MS = 45000;
@@ -41,6 +42,11 @@ export class TaskApiError extends Error {
 export async function taskApiRequest(path, options = {}) {
   const { method = 'GET', token, body, headers = {}, isFormData = false } = options;
   const base = getTaskApiBaseUrl();
+  if (isLegacyRenderHost(base)) {
+    throw new Error(
+      'This app is pointing at a retired task backend. Restart Expo with cache clear (npx expo start --lan -c).',
+    );
+  }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
   /** @type {Record<string, string>} */

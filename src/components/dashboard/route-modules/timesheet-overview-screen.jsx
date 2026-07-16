@@ -11,8 +11,8 @@ import { TimesheetRecordsView } from './timesheet-records-view';
 
 const DATE_OPTIONS = [
   { key: 'today', label: 'Today' },
-  { key: '7d', label: '7 Days' },
-  { key: '30d', label: '30 Days' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
 ];
 
 export const TIMESHEET_ADMIN_ROLE_OPTIONS = [
@@ -66,7 +66,8 @@ function computeOverviewStats(rows, timesheetWindow) {
       });
     });
   }
-  return { present, absent, late, leave };
+  const totalEmployees = rows.length;
+  return { totalEmployees, present, absent, late, leave };
 }
 
 function DashboardStatTile({ label, value, icon, tint, iconColor }) {
@@ -109,16 +110,50 @@ function TimesheetDashboardHero({ stats, timesheetWindow }) {
       <View style={ts.dashboardHeroTop}>
         <View style={{ flex: 1 }}>
           <Text style={ts.dashboardDate}>{formatDashboardDate(timesheetWindow)}</Text>
+          <Text style={[ts.dashboardDate, { marginTop: 2, opacity: 0.85, fontSize: 12, fontWeight: '600' }]}>
+            Track attendance, lateness and leave records.
+          </Text>
         </View>
         <View style={ts.dashboardCalBtn}>
           <MaterialCommunityIcons name="calendar-month-outline" size={20} color={TsColors.white} />
         </View>
       </View>
       <View style={ts.dashboardGrid}>
-        <DashboardStatTile label="Present" value={String(stats.present)} icon="account-check-outline" tint="#DCFCE7" iconColor={TsColors.green} />
-        <DashboardStatTile label="Absent" value={String(stats.absent)} icon="account-remove-outline" tint="#FEE2E2" iconColor={TsColors.red} />
-        <DashboardStatTile label="Leave" value={String(stats.leave)} icon="airplane" tint="#FFEDD5" iconColor={TsColors.orange} />
-        <DashboardStatTile label="Late" value={String(stats.late)} icon="clock-alert-outline" tint="#EDE9FE" iconColor={TsColors.purple} />
+        <DashboardStatTile
+          label="Total Employees"
+          value={String(stats.totalEmployees ?? 0)}
+          icon="account-group-outline"
+          tint="#E0E7FF"
+          iconColor={TsColors.blue}
+        />
+        <DashboardStatTile
+          label="Present"
+          value={String(stats.present ?? 0)}
+          icon="account-check-outline"
+          tint="#DCFCE7"
+          iconColor={TsColors.green}
+        />
+        <DashboardStatTile
+          label="Late"
+          value={String(stats.late ?? 0)}
+          icon="clock-alert-outline"
+          tint="#EDE9FE"
+          iconColor={TsColors.purple}
+        />
+        <DashboardStatTile
+          label="Absent"
+          value={String(stats.absent ?? 0)}
+          icon="account-remove-outline"
+          tint="#FEE2E2"
+          iconColor={TsColors.red}
+        />
+        <DashboardStatTile
+          label="On Leave"
+          value={String(stats.leave ?? 0)}
+          icon="airplane"
+          tint="#FFEDD5"
+          iconColor={TsColors.orange}
+        />
       </View>
     </View>
   );
@@ -167,6 +202,8 @@ export function TimesheetOverviewScreen({
   setRecordStatusFilter,
   token,
   recordExportQuery,
+  showAdminSegments = true,
+  headerTitle = 'Attendance Overview',
 }) {
   const { moduleStyles } = useTheme();
   const ts = moduleStyles.timesheet.styles;
@@ -186,13 +223,17 @@ export function TimesheetOverviewScreen({
 
   const stats = useMemo(() => computeOverviewStats(attendanceRows, timesheetWindow), [attendanceRows, timesheetWindow]);
 
-  const dateLabel = DATE_OPTIONS.find((o) => o.key === timesheetWindow)?.label || '7 Days';
+  const dateLabel = DATE_OPTIONS.find((o) => o.key === timesheetWindow)?.label || 'Last 7 days';
   const roleOpts = roleFilterOptions?.length ? roleFilterOptions : TIMESHEET_ADMIN_ROLE_OPTIONS;
   const roleLabel = roleOpts.find((o) => o.key === timesheetRoleFilter)?.label || 'All Roles';
 
   return (
     <>
-      <TimesheetPageHeader slug={slug} router={router} />
+      {showAdminSegments ? <TimesheetPageHeader slug={slug} router={router} /> : (
+        <View style={{ marginBottom: 8 }}>
+          <Text style={ts.screenTitle}>{isOverview ? headerTitle : slug === 'manual-records' ? 'Manual TimeSheet' : 'Attendance Logs'}</Text>
+        </View>
+      )}
 
       {attendanceError ? (
         <View style={ts.banner}>
@@ -337,8 +378,16 @@ export function TimesheetOverviewScreen({
   );
 }
 
-/** Admin + HR: same overview UI. TL / Employee keep role-specific panels. */
-export function useShowTimesheetOverviewUi(user, slug) {
+/** Admin always overview. HR Overview / Logs / Manual use overview UI; HR My attendance uses personal panel. */
+export function useShowTimesheetOverviewUi(user, slug, timesheetSubTab = 'overview') {
   const isRecords = slug === 'clock-records' || slug === 'manual-records';
-  return isAdminOrHrRole(user?.role) && (slug === 'timesheet' || isRecords);
+  if (isAdminRole(user?.role)) {
+    return slug === 'timesheet' || isRecords;
+  }
+  if (String(user?.role || '').trim() === 'HR') {
+    if (isRecords) return true;
+    if (slug === 'timesheet') return String(timesheetSubTab || '') === 'overview';
+    return false;
+  }
+  return false;
 }

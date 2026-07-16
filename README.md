@@ -1,21 +1,25 @@
 # GDC Mobile App
 
-Expo Router + React Native (JavaScript) CRM app for Global Digital Care.
+Expo Router + React Native CRM app for Global Digital Care.
 
-## Structure
+## API modes
 
-```
-app/                 Expo Router routes (unchanged URLs)
-assets/images/       Static images
-src/
-  components/        Reusable UI (chat, dashboard, ui)
-  context/           React context providers
-  data/              Constants + API + realtime
-  hooks/             Custom hooks
-  navigation/        Lazy loading + route map
-  screens/           Screen components (auth, chat, dashboard…)
-  theme/             Colors, animations, module styles
-  utils/             Helpers
+| Mode | Env | Backends |
+|------|-----|----------|
+| **remote** (default) | `EXPO_PUBLIC_API_MODE=remote` | Organization Render URLs |
+| **local** | `EXPO_PUBLIC_API_MODE=local` | PC LAN ports 5000–5003 |
+
+Organization URLs (production):
+
+- Auth: `https://org-gdc-backend.onrender.com`
+- Task: `https://org-task-backend.onrender.com`
+- Chat: `https://org-chat-backend-rey1.onrender.com`
+- Attendance: `https://org-attendence-backend.onrender.com`
+
+Copy `.env.example` → `.env` before `expo start`. After URL changes, restart with cache clear:
+
+```bash
+npx expo start --lan -c
 ```
 
 ## Commands

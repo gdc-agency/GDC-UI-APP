@@ -21,6 +21,7 @@ import { useTheme } from '@/context/theme-context';
 import { displayRoleOptionsForPromotion } from '@/utils/admin-directory';
 
 import { TimesheetUserAvatar } from './timesheet-user-avatar';
+import { TimeControlPanel } from './time-control-panel';
 
 export function AdminSection({ styles, ctx }) {
   const { colors, isDark } = useTheme();
@@ -54,6 +55,34 @@ export function AdminSection({ styles, ctx }) {
     deptAddLoading = false,
     departments,
     setDepartments,
+    portalClients = [],
+    portalStats = {},
+    portalSearch = '',
+    setPortalSearch,
+    portalLoading = false,
+    portalAddOpen = false,
+    setPortalAddOpen,
+    portalCompanyName = '',
+    setPortalCompanyName,
+    portalContactName = '',
+    setPortalContactName,
+    portalContactEmail = '',
+    setPortalContactEmail,
+    portalSaving = false,
+    portalActionKey = null,
+    portalShareClientId = null,
+    setPortalShareClientId,
+    portalShareType = 'report',
+    setPortalShareType,
+    portalShareTitle = '',
+    setPortalShareTitle,
+    portalShareSummary = '',
+    setPortalShareSummary,
+    handleCreatePortalClient,
+    handleDeletePortalClient,
+    handleInvitePortalClient,
+    handleCreatePortalShare,
+    refreshPortalClients,
     roleModalOpen,
     setRoleModalOpen,
     setSelectedAdminUserId,
@@ -85,8 +114,8 @@ export function AdminSection({ styles, ctx }) {
   const adminTabs = [
     {
       id: 'employees',
-      label: 'Employees',
-      title: 'Employees management',
+      label: 'Employee',
+      title: 'Employee Management',
       icon: 'account-group-outline',
       color: '#7c3aed',
       tintBg: isDark ? '#1e1b4b' : '#f5f3ff',
@@ -94,8 +123,8 @@ export function AdminSection({ styles, ctx }) {
     },
     {
       id: 'time',
-      label: 'Time Control',
-      title: 'Time control',
+      label: 'Time',
+      title: 'Time Control',
       icon: 'timer-outline',
       color: '#f97316',
       tintBg: isDark ? '#431407' : '#fff7ed',
@@ -103,12 +132,21 @@ export function AdminSection({ styles, ctx }) {
     },
     {
       id: 'departments',
-      label: 'Departments',
-      title: 'Departments control',
+      label: 'Department',
+      title: 'Department',
       icon: 'office-building-outline',
       color: '#0d9488',
       tintBg: isDark ? '#042f2e' : '#f0fdfa',
       tintBgActive: isDark ? '#134e4a' : '#ccfbf1',
+    },
+    {
+      id: 'client-portal',
+      label: 'Clients',
+      title: 'Client Portal',
+      icon: 'briefcase-outline',
+      color: '#2563eb',
+      tintBg: isDark ? '#1e3a8a' : '#eff6ff',
+      tintBgActive: isDark ? '#1e40af' : '#dbeafe',
     },
   ];
   const activeAdminTab = adminTabs.find((tab) => tab.id === adminControlTab) ?? adminTabs[0];
@@ -153,15 +191,20 @@ export function AdminSection({ styles, ctx }) {
                     onPress={() => onSelectAdminTab(tab.id)}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: active }}
-                    accessibilityLabel={tab.label}
+                    accessibilityLabel={tab.title}
                     style={styles.adminPanelTab}>
                     <View
                       style={[
                         styles.adminPanelTabIconWrap,
                         { backgroundColor: active ? tab.tintBgActive : tab.tintBg },
                       ]}>
-                      <MaterialCommunityIcons name={tab.icon} size={28} color={tab.color} />
+                      <MaterialCommunityIcons name={tab.icon} size={22} color={tab.color} />
                     </View>
+                    <Text
+                      style={[styles.adminPanelTabLabel, active && { color: tab.color, fontWeight: '800' }]}
+                      numberOfLines={1}>
+                      {tab.label}
+                    </Text>
                     {active ? (
                       <View style={[styles.adminPanelTabIndicator, { backgroundColor: tab.color }]} />
                     ) : null}
@@ -174,7 +217,7 @@ export function AdminSection({ styles, ctx }) {
 
         {activeAdminTab.id === 'employees' ? (
           <View style={[styles.panel, styles.adminTabContentPanel]}>
-            <Text style={styles.panelTitle}>Employees Management</Text>
+            <Text style={styles.panelTitle}>Employee Management</Text>
             <View style={styles.adminFilterCard}>
               <View style={styles.adminRoleChipRow}>
                 {['All', 'Employee', 'Team Leader', 'HR', 'Pending'].map((filter) => (
@@ -273,72 +316,13 @@ export function AdminSection({ styles, ctx }) {
           </View>
         ) : null}
 
-        {activeAdminTab.id === 'time' ? (
-          <View style={[styles.panel, styles.adminTabContentPanel]}>
-            <Text style={styles.panelTitle}>Time Control</Text>
-            <View style={styles.timeControlStack}>
-              <View style={styles.timeHeroCard}>
-                <MaterialCommunityIcons name="calendar-clock" size={36} color="#f97316" />
-                <View style={styles.timeHeroTextCol}>
-                  <Text style={styles.timeHeroTitle}>Company office shift</Text>
-                  <Text style={styles.timeHeroSub}>Set office working hours for selected date</Text>
-                </View>
-              </View>
-              <View style={styles.timeControlFormBlock}>
-            <View style={styles.timeFormRow}>
-              <View style={styles.timeField}>
-                <Text style={styles.timeFieldLabel}>Date</Text>
-                <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftDate} onChangeText={setShiftDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
-                  <Pressable onPress={openShiftDatePicker}>
-                    <MaterialCommunityIcons name="calendar-blank-outline" size={16} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-            <View style={styles.timeFormRow}>
-              <View style={styles.timeFieldHalf}>
-                <Text style={styles.timeFieldLabel}>Office start</Text>
-                <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftStart} onChangeText={setShiftStart} placeholder="10:00 AM" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
-                  <Pressable onPress={() => openShiftTimePicker('start')}>
-                    <MaterialCommunityIcons name="clock-outline" size={16} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={styles.timeFieldHalf}>
-                <Text style={styles.timeFieldLabel}>Office end</Text>
-                <View style={styles.timeInputWrap}>
-                  <TextInput value={shiftEnd} onChangeText={setShiftEnd} placeholder="07:00 PM" placeholderTextColor={colors.inputPlaceholder} style={styles.timeInput} />
-                  <Pressable onPress={() => openShiftTimePicker('end')}>
-                    <MaterialCommunityIcons name="clock-time-eight-outline" size={16} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-            <View style={styles.timeSaveRow}>
-              <Pressable
-                style={[styles.timeSaveBtn, shiftSaveLoading && styles.adminPrimaryBtnDisabled]}
-                onPress={handleSaveShiftTiming}
-                disabled={shiftSaveLoading}>
-                {shiftSaveLoading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <MaterialCommunityIcons name="calendar-blank-outline" size={20} color="#ffffff" />
-                )}
-                <Text style={styles.timeSaveText}>{shiftSaveLoading ? 'Saving…' : 'Save Shift Timing'}</Text>
-              </Pressable>
-            </View>
-              </View>
-            </View>
-          </View>
-        ) : null}
+        {activeAdminTab.id === 'time' ? <TimeControlPanel ctx={{ ...ctx, styles }} /> : null}
 
         {activeAdminTab.id === 'departments' ? (
           <View style={[styles.panel, styles.adminTabContentPanel]}>
             <View style={styles.deptHeaderRow}>
               <View style={styles.deptHeaderTextCol}>
-                <Text style={styles.deptHeaderTitle}>Departments</Text>
+                <Text style={styles.deptHeaderTitle}>Department</Text>
                 <Text style={styles.deptHeaderSub}>Manage all company departments.</Text>
               </View>
               <View style={styles.deptTotalBadge}>
@@ -387,6 +371,232 @@ export function AdminSection({ styles, ctx }) {
                 </View>
               ))
             )}
+          </View>
+        ) : null}
+
+        {activeAdminTab.id === 'client-portal' ? (
+          <View style={[styles.panel, styles.adminTabContentPanel]}>
+            <View style={styles.deptHeaderRow}>
+              <View style={styles.deptHeaderTextCol}>
+                <Text style={styles.deptHeaderTitle}>Client Portal</Text>
+                <Text style={styles.deptHeaderSub}>Manage clients, invites, and shared content.</Text>
+              </View>
+              <Pressable
+                style={styles.portalRefreshBtn}
+                onPress={() => refreshPortalClients?.()}
+                hitSlop={8}>
+                <MaterialCommunityIcons name="refresh" size={18} color="#2563eb" />
+              </Pressable>
+            </View>
+
+            <View style={styles.portalStatsGrid}>
+              <View style={[styles.portalStatCard, { backgroundColor: isDark ? '#1e3a8a' : '#eff6ff' }]}>
+                <Text style={[styles.portalStatLabel, { color: '#2563eb' }]}>Clients</Text>
+                <Text style={[styles.portalStatValue, { color: '#1d4ed8' }]}>
+                  {portalStats.totalClients ?? portalClients.length ?? 0}
+                </Text>
+              </View>
+              <View style={[styles.portalStatCard, { backgroundColor: isDark ? '#14532d' : '#dcfce7' }]}>
+                <Text style={[styles.portalStatLabel, { color: '#16a34a' }]}>Shares</Text>
+                <Text style={[styles.portalStatValue, { color: '#15803d' }]}>
+                  {portalStats.totalShares ?? 0}
+                </Text>
+              </View>
+              <View style={[styles.portalStatCard, { backgroundColor: isDark ? '#4c1d95' : '#ede9fe' }]}>
+                <Text style={[styles.portalStatLabel, { color: '#7c3aed' }]}>Users</Text>
+                <Text style={[styles.portalStatValue, { color: '#6d28d9' }]}>
+                  {portalStats.portalUsers ?? 0}
+                </Text>
+              </View>
+              <View style={[styles.portalStatCard, { backgroundColor: isDark ? '#7c2d12' : '#ffedd5' }]}>
+                <Text style={[styles.portalStatLabel, { color: '#ea580c' }]}>Engage</Text>
+                <Text style={[styles.portalStatValue, { color: '#c2410c' }]}>
+                  {portalStats.engagementPercent ?? 0}%
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.searchWrap, { marginBottom: 10 }]}>
+              <TextInput
+                value={portalSearch}
+                onChangeText={setPortalSearch}
+                placeholder="Search company or email..."
+                placeholderTextColor={colors.inputPlaceholder}
+                style={styles.searchInput}
+                onSubmitEditing={() => refreshPortalClients?.(portalSearch)}
+                returnKeyType="search"
+              />
+            </View>
+            <Pressable
+              style={[styles.adminPromoteBtn, { backgroundColor: '#2563eb', marginBottom: 10, alignSelf: 'flex-start' }]}
+              onPress={() => refreshPortalClients?.(portalSearch)}>
+              <MaterialCommunityIcons name="magnify" size={14} color="#fff" />
+              <Text style={styles.adminPromoteText}>Search</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.deptAddPrimaryBtn, { backgroundColor: '#2563eb' }]}
+              onPress={() => setPortalAddOpen?.(true)}>
+              <MaterialCommunityIcons name="plus" size={22} color="#ffffff" />
+              <Text style={styles.deptAddPrimaryText}>Add Client</Text>
+            </Pressable>
+
+            {portalAddOpen ? (
+              <View style={styles.portalAddCard}>
+                <Text style={styles.adminSectionTitle}>New client</Text>
+                <TextInput
+                  value={portalCompanyName}
+                  onChangeText={setPortalCompanyName}
+                  placeholder="Company name *"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={styles.portalInput}
+                />
+                <TextInput
+                  value={portalContactName}
+                  onChangeText={setPortalContactName}
+                  placeholder="Contact name"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={styles.portalInput}
+                />
+                <TextInput
+                  value={portalContactEmail}
+                  onChangeText={setPortalContactEmail}
+                  placeholder="Contact email *"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={styles.portalInput}
+                />
+                <View style={styles.adminActionRow}>
+                  <Pressable
+                    style={[styles.adminPromoteBtn, { backgroundColor: '#2563eb', flex: 1 }]}
+                    disabled={portalSaving}
+                    onPress={() => handleCreatePortalClient?.()}>
+                    {portalSaving ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.adminPromoteText}>Save client</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={styles.adminRejectBtn}
+                    onPress={() => setPortalAddOpen?.(false)}
+                    disabled={portalSaving}>
+                    <Text style={styles.adminRejectText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {portalShareClientId ? (
+              <View style={styles.portalAddCard}>
+                <Text style={styles.adminSectionTitle}>Share with client</Text>
+                <View style={styles.adminRoleChipRow}>
+                  {[
+                    ['report', 'Report'],
+                    ['project', 'Project'],
+                    ['invoice', 'Invoice'],
+                    ['document', 'Document'],
+                    ['announcement', 'Announce'],
+                  ].map(([id, label]) => (
+                    <Pressable
+                      key={id}
+                      onPress={() => setPortalShareType?.(id)}
+                      style={[styles.filterChip, portalShareType === id && styles.filterChipActive]}>
+                      <Text style={[styles.filterChipText, portalShareType === id && styles.filterChipTextActive]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  value={portalShareTitle}
+                  onChangeText={setPortalShareTitle}
+                  placeholder="Title *"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={styles.portalInput}
+                />
+                <TextInput
+                  value={portalShareSummary}
+                  onChangeText={setPortalShareSummary}
+                  placeholder="Summary (optional)"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={[styles.portalInput, { minHeight: 64 }]}
+                  multiline
+                />
+                <View style={styles.adminActionRow}>
+                  <Pressable
+                    style={[styles.adminPromoteBtn, { backgroundColor: '#2563eb', flex: 1 }]}
+                    disabled={portalSaving}
+                    onPress={() => handleCreatePortalShare?.()}>
+                    {portalSaving ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.adminPromoteText}>Share</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={styles.adminRejectBtn}
+                    onPress={() => setPortalShareClientId?.(null)}
+                    disabled={portalSaving}>
+                    <Text style={styles.adminRejectText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            <Text style={[styles.adminSectionTitle, { marginTop: 8 }]}>Clients</Text>
+            {portalLoading ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.primaryMid} /> : null}
+            {!portalLoading && portalClients.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyText}>No clients yet. Add a client to get started.</Text>
+              </View>
+            ) : null}
+            {portalClients.map((client) => (
+              <View key={String(client.id)} style={styles.adminUserCard}>
+                <Text style={styles.adminMemberName}>{client.companyName || 'Client'}</Text>
+                <Text style={styles.adminMemberEmail}>
+                  {client.contactName ? `${client.contactName} · ` : ''}
+                  {client.contactEmail || '—'}
+                </Text>
+                <Text style={styles.adminMemberMeta}>
+                  {client.shareCount ?? 0} shares · {client.userCount ?? 0} portal users ·{' '}
+                  {String(client.status || 'active')}
+                </Text>
+                <View style={styles.adminActionRow}>
+                  <Pressable
+                    style={[styles.adminPromoteBtn, { backgroundColor: '#2563eb' }]}
+                    disabled={Boolean(portalActionKey)}
+                    onPress={() => handleInvitePortalClient?.(client)}>
+                    {portalActionKey === `inv-${client.id}` ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="email-fast-outline" size={14} color="#fff" />
+                        <Text style={styles.adminPromoteText}>Invite</Text>
+                      </>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.adminPromoteBtn, { backgroundColor: '#0d9488' }]}
+                    disabled={Boolean(portalActionKey)}
+                    onPress={() => setPortalShareClientId?.(client.id)}>
+                    <MaterialCommunityIcons name="share-variant-outline" size={14} color="#fff" />
+                    <Text style={styles.adminPromoteText}>Share</Text>
+                  </Pressable>
+                  <TouchableOpacity
+                    style={styles.adminDeleteBtn}
+                    disabled={Boolean(portalActionKey)}
+                    onPress={() => handleDeletePortalClient?.(client)}>
+                    {portalActionKey === `del-${client.id}` ? (
+                      <ActivityIndicator size="small" color="#ef4444" />
+                    ) : (
+                      <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
           </View>
         ) : null}
       </KeyboardAwareScrollView>

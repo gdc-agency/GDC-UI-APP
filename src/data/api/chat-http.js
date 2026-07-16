@@ -1,6 +1,49 @@
 import { getChatApiBaseUrl } from '@/data/constants/api-config';
+import { isLegacyRenderHost } from '@/data/constants/backend-urls';
 
 const REQUEST_TIMEOUT_MS = 45000;
+
+/** Base64url → JSON payload (RN-safe, no atob dependency). */
+function decodeJwtPayload(token) {
+  try {
+    const part = String(token || '').split('.')[1];
+    if (!part) return null;
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=');
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let bytes = '';
+    for (let i = 0; i < base64.length; i += 4) {
+      const e1 = chars.indexOf(base64[i]);
+      const e2 = chars.indexOf(base64[i + 1]);
+      const e3 = chars.indexOf(base64[i + 2]);
+      const e4 = chars.indexOf(base64[i + 3]);
+      const c1 = (e1 << 2) | (e2 >> 4);
+      const c2 = ((e2 & 15) << 4) | (e3 >> 2);
+      const c3 = ((e3 & 3) << 6) | e4;
+      bytes += String.fromCharCode(c1);
+      if (e3 !== 64 && e3 !== -1) bytes += String.fromCharCode(c2);
+      if (e4 !== 64 && e4 !== -1) bytes += String.fromCharCode(c3);
+    }
+    const json = decodeURIComponent(
+      bytes
+        .split('')
+        .map((ch) => `%${`00${ch.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join(''),
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/** Chat backend identifies the caller by `x-user-id` (+ `x-organization-id`), not the JWT. */
+function chatIdentityHeaders(token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return {};
+  const out = {};
+  if (payload.id != null) out['x-user-id'] = String(payload.id);
+  if (payload.organization_id != null) out['x-organization-id'] = String(payload.organization_id);
+  return out;
+}
 
 function chatNetworkHint() {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -30,11 +73,17 @@ export class ChatApiError extends Error {
 export async function chatApiRequest(path, options = {}) {
   const { method = 'GET', token, body, headers = {}, isFormData = false } = options;
   const base = getChatApiBaseUrl();
+  if (isLegacyRenderHost(base)) {
+    throw new Error(
+      'This app is pointing at a retired chat backend. Restart Expo with cache clear (npx expo start --lan -c).',
+    );
+  }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
   /** @type {Record<string, string>} */
   const h = {
     Accept: 'application/json',
+    ...chatIdentityHeaders(token),
     ...headers,
   };
   if (token) {

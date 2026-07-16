@@ -5,6 +5,15 @@ import { ProfileAvatar } from '@/components/ui/profile-avatar';
 import { useTheme } from '@/context/theme-context';
 import { cn } from '@/theme/cn';
 import { resolveProfileImageUri } from '@/utils/chat-directory';
+import {
+  asPermissionUser,
+  canAddMembersToGroupThread,
+  canDeleteGroup,
+  canManageGroupSettings,
+  isEligibleGroupMemberContact,
+  isGroupThreadAdmin,
+  threadFromServer,
+} from '@/utils/chat-permissions';
 import { groupMemberRole, resolveGroupMember } from '@/utils/resolve-group-member';
 import * as ImagePicker from 'expo-image-picker';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
@@ -96,6 +105,7 @@ const MemberInfoRow = memo(function MemberInfoRow({ item, role, isMe, canManage,
 export function GroupInfoScreen({
   thread,
   myUserId,
+  viewerUser,
   directory,
   addMemberPool,
   onlineUserIds,
@@ -117,8 +127,34 @@ export function GroupInfoScreen({
   const memberIds = Array.isArray(server.memberIds) ? server.memberIds.map(String) : [];
   const adminIds = Array.isArray(server.adminIds) ? server.adminIds.map(String) : [];
   const createdById = server.createdById != null ? String(server.createdById) : '';
-  const isAdmin =
-    adminIds.includes(String(myUserId)) || createdById === String(myUserId);
+
+  const permissionThread = useMemo(() => threadFromServer(server), [server]);
+  const viewer = useMemo(
+    () =>
+      asPermissionUser({
+        id: viewerUser?.id ?? myUserId,
+        role: viewerUser?.role,
+        team: viewerUser?.team_name ?? viewerUser?.team,
+      }),
+    [myUserId, viewerUser],
+  );
+  const canManageSettings = useMemo(
+    () => canManageGroupSettings(permissionThread, viewer),
+    [permissionThread, viewer],
+  );
+  const canAddMembers = useMemo(
+    () => canAddMembersToGroupThread(permissionThread, viewer),
+    [permissionThread, viewer],
+  );
+  const canDeleteGroupChat = useMemo(
+    () => canDeleteGroup(permissionThread, viewer),
+    [permissionThread, viewer],
+  );
+  const canManageMembers = useMemo(
+    () => isGroupThreadAdmin(permissionThread, viewer),
+    [permissionThread, viewer],
+  );
+  const groupScope = String(server.scope || 'group');
 
   const [name, setName] = useState('');
   const [savingName, setSavingName] = useState(false);
@@ -187,9 +223,10 @@ export function GroupInfoScreen({
     const inGroup = new Set(memberIds);
     return addPoolList
       .filter((c) => !inGroup.has(String(c.id)))
+      .filter((c) => isEligibleGroupMemberContact(groupScope, c))
       .filter((c) => matchesAddSearch(c, q))
       .slice(0, 120);
-  }, [addPoolList, memberIds, addSearch]);
+  }, [addPoolList, memberIds, addSearch, groupScope]);
 
   const saveName = async () => {
     if (!chatId || !name.trim() || savingName) return;
@@ -204,7 +241,7 @@ export function GroupInfoScreen({
   };
 
   const pickAvatar = async () => {
-    if (!chatId || !isAdmin || savingAvatar) return;
+    if (!chatId || !canManageSettings || savingAvatar) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -296,12 +333,12 @@ export function GroupInfoScreen({
         item={{ ...item, busy: memberBusy }}
         role={item.role}
         isMe={String(item.id) === String(myUserId)}
-        canManage={isAdmin}
+        canManage={canManageMembers}
         onMenu={openMemberMenu}
         colors={colors}
       />
     ),
-    [colors, isAdmin, memberBusy, myUserId, openMemberMenu],
+    [colors, canManageMembers, memberBusy, myUserId, openMemberMenu],
   );
 
   const creatorName = creatorProfile.displayName || creatorProfile.name || 'Unknown';
@@ -323,7 +360,7 @@ export function GroupInfoScreen({
           <Pressable
             className="relative mb-5"
             onPress={pickAvatar}
-            disabled={!isAdmin || savingAvatar}
+            disabled={!canManageSettings || savingAvatar}
             accessibilityRole="button"
             accessibilityLabel="Group photo">
             <GroupAvatar uri={avatarUri} name={name || 'Group'} size={112} showInitialsFallback />
@@ -342,14 +379,14 @@ export function GroupInfoScreen({
                 }}>
                 <ActivityIndicator color="#fff" size="small" />
               </View>
-            ) : isAdmin ? (
+            ) : canManageSettings ? (
               <View className="absolute bottom-1 right-1 rounded-2xl bg-primary-mid p-2">
                 <MaterialCommunityIcons name="camera" size={14} color="#fff" />
               </View>
             ) : null}
           </Pressable>
 
-          {isAdmin ? (
+          {canManageSettings ? (
             <View className="w-full max-w-[400px] flex-row gap-2">
               <TextInput
                 value={name}
@@ -399,7 +436,7 @@ export function GroupInfoScreen({
           style={{ minHeight: membersCardMinH, flexGrow: 1 }}>
           <View className="mb-2.5 flex-row items-center justify-between">
             <Text className="text-sm font-extrabold text-text-muted">{memberIds.length} members</Text>
-            {isAdmin ? (
+            {canAddMembers ? (
               <Pressable className="flex-row items-center gap-1.5" onPress={() => setAddOpen((v) => !v)} disabled={memberBusy}>
                 <MaterialCommunityIcons name="account-plus-outline" size={20} color={colors.primaryMid} />
                 <Text className="text-sm font-bold text-primary-mid">Add members</Text>
@@ -492,7 +529,7 @@ export function GroupInfoScreen({
             <MaterialCommunityIcons name="logout" size={20} color="#ef4444" />
             <Text className="text-[15px] font-bold text-[#ef4444]">Leave group</Text>
           </Pressable>
-          {isAdmin ? (
+          {canDeleteGroupChat ? (
             <Pressable
               className="flex-row items-center gap-3 px-4 py-4"
               onPress={() => {

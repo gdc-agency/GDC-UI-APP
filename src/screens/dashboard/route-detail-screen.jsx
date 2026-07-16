@@ -1,7 +1,7 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,7 +13,6 @@ import { RequestsSection } from '@/components/dashboard/route-modules/requests-s
 import { TeamTlSection } from '@/components/dashboard/route-modules/team-tl-section';
 import { TimesheetSection } from '@/components/dashboard/route-modules/timesheet-section';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
-import { GDC_MODULES } from '@/data/constants/gdc-modules';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
 import {
@@ -24,8 +23,11 @@ import {
     createDepartment,
     createLeaveRequest as createLeaveRequestApi,
     createManualTimeRequest as createManualTimeRequestApi,
+    createPortalClient,
+    createPortalShare,
     createTask as createTaskApi,
     deleteDepartment,
+    deletePortalClient,
     deleteTask as deleteTaskApi,
     forwardTaskToTeamLeader,
     getAllUsers,
@@ -33,25 +35,32 @@ import {
     getAttendance7Days,
     getAttendanceSummary,
     getClockHistory,
-    getMyTodayStatus,
     getClockRecords,
     getCurrentShift,
     getLeadershipDailyOverview,
     getManualTimesheetRecords,
+    getMyTeamRoster,
+    getMyTodayStatus,
     getPendingUsersList,
+    getPortalOrgStats,
+    getShiftStatus,
+    getAttendanceControlSettings,
     getTaskAssignableUsers,
     getTeamLeaderDailyBundle,
-    getMyTeamRoster,
     getTeams,
+    invitePortalClient,
     listDepartments,
     listLeaveRequests,
     listManualTimeRequests,
     listMyEmployeeDailyUpdates,
+    listPortalClients,
     listTasks,
     rejectLeaveRequest as rejectLeaveRequestApi,
     rejectManualTimeRequest as rejectManualTimeRequestApi,
     rejectUser,
     saveShiftTiming,
+    setAttendanceControlSettings,
+    setShiftStatus,
     sendTaskToReview,
     startTaskWork,
     submitTask as submitTaskApi,
@@ -61,6 +70,7 @@ import {
     upsertMyEmployeeDailyUpdate,
     upsertTeamLeaderDailySummary,
 } from '@/data/api';
+import { GDC_MODULES } from '@/data/constants/gdc-modules';
 import {
     isApprovedRow,
     isVerifiedRow,
@@ -73,19 +83,18 @@ import {
     apiLeaveTypeFromUi,
     apiRoleFromDisplayFilter,
     apiTimeFromAmPm,
+    applyViewerAvatarToOwnRequests,
     buildAttendanceRows,
     buildMyAvailabilityLogFromSevenDays,
-    applyViewerAvatarToOwnRequests,
-    enrichRequestsWithAvatars,
-    filterMyOwnRequests,
     employeesFromTeamRoster,
+    enrichRequestsWithAvatars,
     enrichTimesheetLogsWithAvatars,
     enrichTimesheetUserAvatars,
     filterAttendanceOverviewUsers,
+    filterMyOwnRequests,
     filterUsersForAttendanceViewer,
     isExcludedAttendanceOverviewRole,
     mapClockHistoryToAvailabilityLog,
-    mapTodayStatusToAvailabilityStatus,
     mapClockHistoryToLog,
     mapLeaveRowToUi,
     mapManualRowToUi,
@@ -93,11 +102,31 @@ import {
     mapSevenDayUserRow,
     mapSummaryUserToAvailability,
     mapThirtyDayUserRow,
+    mapTodayStatusToAvailabilityStatus,
     mapTodaySummaryUserRow
 } from '@/utils/attendance-ui-map';
+import { fetchChatParticipantSnapshots } from '@/data/api/profile-api';
+import {
+  computeMyAvailabilityKpis,
+  filterAvailabilityLogByRange,
+  getAvailabilityLogRange,
+  teamsMatch,
+} from '@/utils/availability-helpers';
 import { resolveProfileImageUri } from '@/utils/chat-directory';
-import { isAdminOrHrRole, isAdminRole, isEmployeeRole } from '@/utils/roles';
-import { mapTaskRowToProjectTask } from '@/utils/task-ui-map';
+import { countProjectManagerStats } from '@/utils/dashboard-task-stats';
+import {
+  breakInputToMinutes,
+  DEFAULT_WORK_WEEK_DAYS,
+  minutesToBreakInput,
+  normalizeShiftPayload,
+  todayDateInput,
+} from '@/utils/time-control';
+import { canCreateProjectTask, isAdminOrHrRole, isAdminRole, isHrRole, isTeamLeaderRole } from '@/utils/roles';
+import {
+  formatTaskRef,
+  getTaskCardAssignment,
+} from '@/utils/task-card-display';
+import { displayRoleFromApi, getManagementTaskDisplayStatus, mapTaskRowToProjectTask } from '@/utils/task-ui-map';
 import { normalizeTeamsList } from '@/utils/teams-api-response';
 
 /** Background refresh while Task / Daily Updates routes are open (same cadence as dashboard home). */
@@ -155,6 +184,9 @@ export default function RouteDetailScreen() {
   const [projectTasks, setProjectTasks] = useState([]);
   const [projectTasksLoading, setProjectTasksLoading] = useState(false);
   const [taskAssignableRaw, setTaskAssignableRaw] = useState([]);
+  const [projectPeopleById, setProjectPeopleById] = useState(
+    /** @type {Record<string, { id: number, name: string, role: string, team: string }>} */ ({}),
+  );
   const [taskAssignableLoading, setTaskAssignableLoading] = useState(false);
   const [taskAssignableError, setTaskAssignableError] = useState(null);
   const [projectSearch, setProjectSearch] = useState('');
@@ -178,6 +210,8 @@ export default function RouteDetailScreen() {
   const [forwardTlId, setForwardTlId] = useState(null);
   const [forwardTlDropdownOpen, setForwardTlDropdownOpen] = useState(false);
   const [projectStatusMenuOpen, setProjectStatusMenuOpen] = useState(false);
+  const [projectTeamFilter, setProjectTeamFilter] = useState('All Teams');
+  const [projectTeamMenuOpen, setProjectTeamMenuOpen] = useState(false);
   const [teamTlRosterLoading, setTeamTlRosterLoading] = useState(false);
   const [teamTlRosterError, setTeamTlRosterError] = useState(null);
   const [teamRosterTeams, setTeamRosterTeams] = useState([]);
@@ -193,8 +227,46 @@ export default function RouteDetailScreen() {
   const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [newDepartment, setNewDepartment] = useState('');
+  const [portalClients, setPortalClients] = useState([]);
+  const [portalStats, setPortalStats] = useState({
+    totalClients: 0,
+    totalShares: 0,
+    portalUsers: 0,
+    engagementPercent: 0,
+  });
+  const [portalSearch, setPortalSearch] = useState('');
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalAddOpen, setPortalAddOpen] = useState(false);
+  const [portalCompanyName, setPortalCompanyName] = useState('');
+  const [portalContactName, setPortalContactName] = useState('');
+  const [portalContactEmail, setPortalContactEmail] = useState('');
+  const [portalSaving, setPortalSaving] = useState(false);
+  const [portalActionKey, setPortalActionKey] = useState(null);
+  const [portalShareClientId, setPortalShareClientId] = useState(null);
+  const [portalShareType, setPortalShareType] = useState('report');
+  const [portalShareTitle, setPortalShareTitle] = useState('');
+  const [portalShareSummary, setPortalShareSummary] = useState('');
   const [shiftSaveLoading, setShiftSaveLoading] = useState(false);
   const [deptAddLoading, setDeptAddLoading] = useState(false);
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const [shiftTimezone, setShiftTimezone] = useState('Asia/Karachi');
+  const [shiftWorkWeekDays, setShiftWorkWeekDays] = useState([...DEFAULT_WORK_WEEK_DAYS]);
+  const [shiftBreakStart, setShiftBreakStart] = useState('');
+  const [shiftBreakDuration, setShiftBreakDuration] = useState('01:00');
+  const [shiftLateAfter, setShiftLateAfter] = useState(15);
+  const [shiftClockInCutoff, setShiftClockInCutoff] = useState(60);
+  const [shiftGraceBefore, setShiftGraceBefore] = useState(5);
+  const [shiftMinHours, setShiftMinHours] = useState(4);
+  const [shiftAutoCheckout, setShiftAutoCheckout] = useState(12);
+  const [shiftHolidays, setShiftHolidays] = useState([]);
+  const [shiftHolidayDraft, setShiftHolidayDraft] = useState('');
+  const [shiftEnabled, setShiftEnabled] = useState(false);
+  const [shiftId, setShiftId] = useState(null);
+  const [liveShiftNotifications, setLiveShiftNotifications] = useState(true);
+  const [shiftControlSnapshot, setShiftControlSnapshot] = useState(null);
+  const [shiftLastUpdatedAt, setShiftLastUpdatedAt] = useState(null);
+  const [shiftLastUpdatedBy, setShiftLastUpdatedBy] = useState(null);
+  const [timezoneMenuOpen, setTimezoneMenuOpen] = useState(false);
   const [timesheetWindow, setTimesheetWindow] = useState('7d');
   const [tlTimesheetTab, setTlTimesheetTab] = useState('my-attendance');
   const [myRequestsTab, setMyRequestsTab] = useState('leave');
@@ -223,6 +295,10 @@ export default function RouteDetailScreen() {
   const [hoveredAvailabilityStatus, setHoveredAvailabilityStatus] = useState(null);
   const [availabilityFromDate, setAvailabilityFromDate] = useState('');
   const [availabilityToDate, setAvailabilityToDate] = useState('');
+  const [availabilityTab, setAvailabilityTab] = useState('my');
+  const [availabilityLogPreset, setAvailabilityLogPreset] = useState('7d');
+  const [availabilityShift, setAvailabilityShift] = useState(null);
+  const [myAvailabilityToday, setMyAvailabilityToday] = useState(null);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [manualRequests, setManualRequests] = useState([]);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -244,9 +320,9 @@ export default function RouteDetailScreen() {
   const [rejectTargetType, setRejectTargetType] = useState('leave');
   const [rejectReason, setRejectReason] = useState('');
   const [leaveTypeDropdownOpen, setLeaveTypeDropdownOpen] = useState(false);
-  const [shiftDate, setShiftDate] = useState('2026-05-07');
-  const [shiftStart, setShiftStart] = useState('10:00 AM');
-  const [shiftEnd, setShiftEnd] = useState('07:00 PM');
+  const [shiftDate, setShiftDate] = useState(() => todayDateInput());
+  const [shiftStart, setShiftStart] = useState('09:00 AM');
+  const [shiftEnd, setShiftEnd] = useState('06:00 PM');
   const forwardDropdownAnim = useRef(new Animated.Value(0)).current;
 
   const fetchAdminDirectory = useCallback(async () => {
@@ -304,10 +380,166 @@ export default function RouteDetailScreen() {
     fetchDepartments();
   }, [slug, adminControlTab, token, user?.role, fetchDepartments]);
 
+  const fetchPortalClients = useCallback(async (searchTerm) => {
+    if (!token || !isAdminRole(user?.role)) return;
+    setPortalLoading(true);
+    try {
+      const q = typeof searchTerm === 'string' ? searchTerm : portalSearch;
+      const res = await listPortalClients(token, {
+        page: 1,
+        limit: 50,
+        search: String(q || '').trim() || undefined,
+      });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setPortalClients(rows);
+      if (res?.stats && typeof res.stats === 'object') {
+        setPortalStats({
+          totalClients: Number(res.stats.totalClients) || 0,
+          totalShares: Number(res.stats.totalShares) || 0,
+          portalUsers: Number(res.stats.portalUsers) || 0,
+          engagementPercent: Number(res.stats.engagementPercent) || 0,
+        });
+      } else {
+        try {
+          const statsRes = await getPortalOrgStats(token);
+          const s = statsRes?.data || {};
+          setPortalStats({
+            totalClients: Number(s.totalClients) || 0,
+            totalShares: Number(s.totalShares) || 0,
+            portalUsers: Number(s.portalUsers) || 0,
+            engagementPercent: Number(s.engagementPercent) || 0,
+          });
+        } catch {
+          /* stats optional */
+        }
+      }
+    } catch (e) {
+      Alert.alert('Client Portal', e?.message ?? 'Could not load clients');
+    } finally {
+      setPortalLoading(false);
+    }
+  }, [token, user?.role, portalSearch]);
+
+  useEffect(() => {
+    if (slug !== 'admin' || !isAdminRole(user?.role) || !token) return;
+    if (adminControlTab !== 'client-portal') return;
+    void fetchPortalClients('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when tab opens
+  }, [slug, adminControlTab, token, user?.role]);
+
+  const handleCreatePortalClient = useCallback(async () => {
+    const companyName = portalCompanyName.trim();
+    const contactEmail = portalContactEmail.trim();
+    if (!companyName || !contactEmail) {
+      Alert.alert('Add client', 'Company name and contact email are required.');
+      return;
+    }
+    setPortalSaving(true);
+    try {
+      await createPortalClient(token, {
+        companyName,
+        contactEmail,
+        contactName: portalContactName.trim() || undefined,
+      });
+      setPortalCompanyName('');
+      setPortalContactName('');
+      setPortalContactEmail('');
+      setPortalAddOpen(false);
+      await fetchPortalClients();
+      Alert.alert('Client Portal', 'Client added.');
+    } catch (e) {
+      Alert.alert('Add client', e?.message ?? 'Failed to add client');
+    } finally {
+      setPortalSaving(false);
+    }
+  }, [
+    token,
+    portalCompanyName,
+    portalContactEmail,
+    portalContactName,
+    fetchPortalClients,
+  ]);
+
+  const handleDeletePortalClient = useCallback(
+    (client) => {
+      Alert.alert('Delete client', `Remove ${client.companyName || 'this client'}?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setPortalActionKey(`del-${client.id}`);
+            try {
+              await deletePortalClient(token, client.id);
+              await fetchPortalClients();
+            } catch (e) {
+              Alert.alert('Delete client', e?.message ?? 'Failed');
+            } finally {
+              setPortalActionKey(null);
+            }
+          },
+        },
+      ]);
+    },
+    [token, fetchPortalClients],
+  );
+
+  const handleInvitePortalClient = useCallback(
+    async (client) => {
+      setPortalActionKey(`inv-${client.id}`);
+      try {
+        const res = await invitePortalClient(token, client.id);
+        const link = res?.data?.inviteLink;
+        Alert.alert(
+          'Invite sent',
+          link ? `Invite ready for ${res?.data?.email || client.contactEmail}.` : res?.message || 'Invite sent.',
+        );
+      } catch (e) {
+        Alert.alert('Invite', e?.message ?? 'Failed to send invite');
+      } finally {
+        setPortalActionKey(null);
+      }
+    },
+    [token],
+  );
+
+  const handleCreatePortalShare = useCallback(async () => {
+    const title = portalShareTitle.trim();
+    if (!portalShareClientId || !title) {
+      Alert.alert('Share', 'Title is required.');
+      return;
+    }
+    setPortalSaving(true);
+    try {
+      await createPortalShare(token, portalShareClientId, {
+        shareType: portalShareType === 'announcement' ? 'report' : portalShareType,
+        title: portalShareType === 'announcement' ? `[Announcement] ${title}` : title,
+        summary: portalShareSummary.trim() || undefined,
+      });
+      setPortalShareClientId(null);
+      setPortalShareTitle('');
+      setPortalShareSummary('');
+      setPortalShareType('report');
+      await fetchPortalClients();
+      Alert.alert('Share', 'Shared with client.');
+    } catch (e) {
+      Alert.alert('Share', e?.message ?? 'Failed to share');
+    } finally {
+      setPortalSaving(false);
+    }
+  }, [
+    token,
+    portalShareClientId,
+    portalShareTitle,
+    portalShareType,
+    portalShareSummary,
+    fetchPortalClients,
+  ]);
+
   const loadTaskAssignableUsers = useCallback(async () => {
     if (!token || slug !== 'project-manager') return;
-    if (!isAdminOrHrRole(user?.role)) {
-      setTaskAssignableRaw([]);
+    if (!canCreateProjectTask(user?.role) && user?.role !== 'HR') {
+      setTaskAssignableRaw((prev) => (prev.length ? [] : prev));
       setTaskAssignableError(null);
       return;
     }
@@ -321,9 +553,24 @@ export default function RouteDetailScreen() {
           id: Number(r.id),
           name: String(r.name ?? r.full_name ?? r.username ?? '').trim(),
           role: r.role,
+          team: String(r.team_name ?? r.team ?? r.department ?? '').trim(),
         }))
         .filter((r) => Number.isFinite(r.id) && r.name);
-      setTaskAssignableRaw(normalized);
+      setTaskAssignableRaw((prev) => {
+        if (
+          prev.length === normalized.length &&
+          prev.every(
+            (p, i) =>
+              p.id === normalized[i].id &&
+              p.name === normalized[i].name &&
+              String(p.role) === String(normalized[i].role) &&
+              p.team === normalized[i].team,
+          )
+        ) {
+          return prev;
+        }
+        return normalized;
+      });
     } catch (e) {
       setTaskAssignableRaw([]);
       setTaskAssignableError(e?.message ?? 'Could not load assignable users (check Task API + Auth).');
@@ -332,54 +579,128 @@ export default function RouteDetailScreen() {
     }
   }, [token, slug, user?.role]);
 
-  const loadProjectTasks = useCallback(async () => {
-    if (!token || slug !== 'project-manager') return;
-    setProjectTasksLoading(true);
-    try {
-      const query = {};
-      const f = String(projectStatusFilter || 'all').toLowerCase().trim();
-      if (f === 'pending') query.status = 'pending';
-      else if (f === 'in progress') query.status = 'in_progress';
-      else if (f === 'review') query.status = 'review';
-      else if (f === 'submitted') query.status = 'submitted';
-      else if (f === 'approved') query.status = 'approved';
-      const sq = projectSearch.trim();
-      if (sq) query.q = sq;
-      const from = projectFromDate.trim();
-      const to = projectToDate.trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(from)) query.from = from;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) query.to = to;
-      const rows = await listTasks(token, query);
-      setProjectTasks(rows.map(mapTaskRowToProjectTask));
-    } catch (e) {
-      Alert.alert('Tasks', e?.message ?? 'Could not load tasks');
-    } finally {
-      setProjectTasksLoading(false);
+  const loadProjectTasks = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!token || slug !== 'project-manager') return;
+      if (!silent) setProjectTasksLoading(true);
+      try {
+        const query = {};
+        const f = String(projectStatusFilter || 'all').toLowerCase().trim();
+        if (f === 'pending') query.status = 'pending';
+        else if (f === 'in progress') query.status = 'in_progress';
+        else if (f === 'review') query.status = 'review';
+        else if (f === 'submitted') query.status = 'submitted';
+        else if (f === 'approved') query.status = 'approved';
+        const sq = projectSearch.trim();
+        if (sq) query.q = sq;
+        const from = projectFromDate.trim();
+        const to = projectToDate.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(from)) query.from = from;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(to)) query.to = to;
+        const rows = await listTasks(token, query);
+        const mapped = rows.map(mapTaskRowToProjectTask);
+        setProjectTasks(mapped);
+
+        // Resolve Assigned by / Assigned to names (CRM uses full user store).
+        const peopleIds = [
+          ...new Set(
+            mapped
+              .flatMap((t) => [t.createdByUserId, t.assignedByUserId, t.assignedToUserId])
+              .filter((id) => id != null && Number.isFinite(Number(id)))
+              .map((id) => String(id)),
+          ),
+        ];
+        if (peopleIds.length) {
+          try {
+            const snapRes = await fetchChatParticipantSnapshots(token, peopleIds);
+            const snapRows = Array.isArray(snapRes?.data)
+              ? snapRes.data
+              : Array.isArray(snapRes)
+                ? snapRes
+                : [];
+            setProjectPeopleById((prev) => {
+              const next = { ...prev };
+              for (const row of snapRows) {
+                const id = row?.id != null ? Number(row.id) : NaN;
+                if (!Number.isFinite(id)) continue;
+                const name = String(row.name ?? row.full_name ?? row.username ?? '').trim();
+                if (!name) continue;
+                next[String(id)] = {
+                  id,
+                  name,
+                  role: displayRoleFromApi(row.role),
+                  team: String(row.team_name ?? row.team ?? row.department ?? '').trim(),
+                };
+              }
+              return next;
+            });
+          } catch {
+            /* name resolution is best-effort */
+          }
+        }
+      } catch (e) {
+        if (!silent) Alert.alert('Tasks', e?.message ?? 'Could not load tasks');
+      } finally {
+        if (!silent) setProjectTasksLoading(false);
+      }
+    },
+    [token, slug, projectStatusFilter, projectSearch, projectFromDate, projectToDate],
+  );
+
+  const loadProjectTasksRef = useRef(loadProjectTasks);
+  const loadTaskAssignableUsersRef = useRef(loadTaskAssignableUsers);
+  loadProjectTasksRef.current = loadProjectTasks;
+  loadTaskAssignableUsersRef.current = loadTaskAssignableUsers;
+
+  const projectTasksHydratedRef = useRef(false);
+  useEffect(() => {
+    if (slug !== 'project-manager') {
+      projectTasksHydratedRef.current = false;
+      return undefined;
     }
-  }, [token, slug, projectStatusFilter, projectSearch, projectFromDate, projectToDate]);
+    return undefined;
+  }, [slug]);
 
   useFocusEffect(
     useCallback(() => {
       if (slug !== 'project-manager' || !token) return undefined;
-      void loadProjectTasks();
-      void loadTaskAssignableUsers();
+      const silent = projectTasksHydratedRef.current;
+      void (async () => {
+        await loadProjectTasksRef.current({ silent });
+        projectTasksHydratedRef.current = true;
+      })();
+      void loadTaskAssignableUsersRef.current();
       return undefined;
-    }, [slug, token, loadProjectTasks, loadTaskAssignableUsers]),
+    }, [slug, token]),
   );
 
   useEffect(() => {
     if (slug !== 'project-manager' || !token) return undefined;
     const id = setInterval(() => {
-      void loadProjectTasks();
-      void loadTaskAssignableUsers();
+      void loadProjectTasksRef.current({ silent: true });
+      void loadTaskAssignableUsersRef.current();
     }, DATA_POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [slug, token, loadProjectTasks, loadTaskAssignableUsers]);
+  }, [slug, token]);
+
+  // First open: show loading at most 1s, then go silent even if request still running.
+  useEffect(() => {
+    if (slug !== 'project-manager' || !projectTasksLoading) return undefined;
+    const t = setTimeout(() => setProjectTasksLoading(false), 1000);
+    return () => clearTimeout(t);
+  }, [slug, projectTasksLoading]);
+
+  // Filter changes: silent refresh (no spinner loop).
+  useEffect(() => {
+    if (slug !== 'project-manager' || !token) return;
+    if (!projectTasksHydratedRef.current) return;
+    void loadProjectTasksRef.current({ silent: true });
+  }, [slug, token, projectStatusFilter, projectSearch, projectFromDate, projectToDate]);
 
   useEffect(() => {
-    if (slug !== 'project-manager' || !createTaskOpen || !token || !isAdminRole(user?.role)) return;
-    void loadTaskAssignableUsers();
-  }, [createTaskOpen, slug, token, user?.role, loadTaskAssignableUsers]);
+    if (slug !== 'project-manager' || !createTaskOpen || !token || !canCreateProjectTask(user?.role)) return;
+    void loadTaskAssignableUsersRef.current();
+  }, [createTaskOpen, slug, token, user?.role]);
 
   useEffect(() => {
     if (!roleModalOpen) setAdminRoleSavingTarget(null);
@@ -451,15 +772,19 @@ export default function RouteDetailScreen() {
     }
     if (slug === 'availability' && filter) {
       const q = String(filter).toLowerCase();
+      setAvailabilityTab('team');
       if (q === 'present') {
         setAvailabilityQuickFilter('present');
-        setAvailabilityStatusFilter('Available');
-      } else if (q === 'absent') {
-        setAvailabilityQuickFilter('absent');
-        setAvailabilityStatusFilter('Unavailable');
+        setAvailabilityStatusFilter('present');
+      } else if (q === 'absent' || q === 'offline') {
+        setAvailabilityQuickFilter('offline');
+        setAvailabilityStatusFilter('offline');
       } else if (q === 'leave') {
         setAvailabilityQuickFilter('leave');
-        setAvailabilityStatusFilter('Leave');
+        setAvailabilityStatusFilter('leave');
+      } else if (q === 'away') {
+        setAvailabilityQuickFilter('away');
+        setAvailabilityStatusFilter('away');
       } else if (q === 'all') {
         setAvailabilityQuickFilter('all');
         setAvailabilityStatusFilter('all');
@@ -608,26 +933,105 @@ export default function RouteDetailScreen() {
   const filteredProjectTasks = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
     const f = String(projectStatusFilter || 'all').toLowerCase().trim();
+    const teamF = String(projectTeamFilter || 'All Teams').trim();
+    const teamMap = Object.fromEntries(
+      taskAssignableRaw
+        .filter((u) => u?.id != null && u.team)
+        .map((u) => [String(u.id), String(u.team).trim()]),
+    );
     return visibleProjectTasks.filter((task) => {
+      const assigneeTeam =
+        String(task.assigneeTeam || teamMap[String(task.assignedToUserId)] || '').trim();
+      if (teamF && teamF !== 'All Teams') {
+        if (assigneeTeam !== teamF) return false;
+      }
       if (f !== 'all') {
         if (f === 'overdue') {
           const today = new Date().toISOString().slice(0, 10);
           if (!task.deadline || task.deadline >= today) return false;
           const st = String(task.status || '').toLowerCase();
-          if (!st.includes('pending') && !st.includes('progress')) return false;
+          if (st === 'approved') return false;
         } else if (f === 'completed') {
           const st = String(task.status || '').toLowerCase();
-          if (!st.includes('approved') && !st.includes('submitted')) return false;
-        } else if (String(task.status || '').toLowerCase() !== f) return false;
+          if (!st.includes('approved')) return false;
+        } else if (f === 'in progress' || f === 'working') {
+          const st = String(task.status || '').toLowerCase();
+          if (!st.includes('progress') && st !== 'working') return false;
+        } else if (String(task.status || '').toLowerCase() !== f) {
+          return false;
+        }
       }
       if (projectFromDate && task.deadline < projectFromDate) return false;
       if (projectToDate && task.deadline > projectToDate) return false;
       if (!q) return true;
       const haystack =
-        `${task.id} ${task.title} ${task.description} ${task.assignee} ${task.assignedToName ?? ''} ${task.priority} ${task.status} ${task.attachmentName ?? ''}`.toLowerCase();
+        `${task.id} ${task.title} ${task.description} ${task.assignee} ${task.assignedToName ?? ''} ${task.priority} ${task.status} ${task.attachmentName ?? ''} ${assigneeTeam}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [projectFromDate, projectSearch, projectStatusFilter, projectToDate, visibleProjectTasks]);
+  }, [projectFromDate, projectSearch, projectStatusFilter, projectTeamFilter, projectToDate, visibleProjectTasks, taskAssignableRaw]);
+
+  const projectManagerStats = useMemo(
+    () => countProjectManagerStats(visibleProjectTasks, user?.role),
+    [visibleProjectTasks, user?.role],
+  );
+
+  const projectTeamOptions = useMemo(() => {
+    const teams = new Set();
+    for (const t of visibleProjectTasks) {
+      const team = String(t.assigneeTeam || '').trim();
+      if (team) teams.add(team);
+    }
+    for (const u of taskAssignableRaw) {
+      const team = String(u.team || '').trim();
+      if (team) teams.add(team);
+    }
+    return ['All Teams', ...Array.from(teams).sort((a, b) => a.localeCompare(b))];
+  }, [visibleProjectTasks, taskAssignableRaw]);
+
+  const showTeamInProjects = isAdminOrHrRole(user?.role);
+  const canCreateProject = canCreateProjectTask(user?.role);
+
+  const taskUserDirectoryById = useMemo(() => {
+    /** @type {Record<string, { id: number, name: string, role: string, team: string }>} */
+    const map = { ...projectPeopleById };
+    for (const u of taskAssignableRaw) {
+      if (u?.id == null) continue;
+      const key = String(u.id);
+      map[key] = {
+        id: u.id,
+        name: u.name || map[key]?.name || '',
+        role: displayRoleFromApi(u.role) || map[key]?.role || '',
+        team: u.team || map[key]?.team || '',
+      };
+    }
+    if (user?.id != null) {
+      map[String(user.id)] = {
+        id: Number(user.id),
+        name: String(user.name || user.full_name || '').trim() || 'You',
+        role: String(user.role || ''),
+        team: String(user.team_name ?? user.team ?? '').trim(),
+      };
+    }
+    return map;
+  }, [taskAssignableRaw, projectPeopleById, user]);
+
+  const enrichTaskTeam = useCallback(
+    (task) => {
+      if (task?.assigneeTeam) return task;
+      const id = task?.assignedToUserId;
+      if (id == null) return task;
+      const row = taskUserDirectoryById[String(id)];
+      if (!row?.team) return task;
+      return { ...task, assigneeTeam: row.team };
+    },
+    [taskUserDirectoryById],
+  );
+
+  const filteredProjectTasksEnriched = useMemo(
+    () => filteredProjectTasks.map(enrichTaskTeam),
+    [filteredProjectTasks, enrichTaskTeam],
+  );
+
   const formatProjectDueDate = useCallback((isoDate) => {
     if (!isoDate) return 'Due date not set';
     const parsed = new Date(isoDate);
@@ -656,6 +1060,20 @@ export default function RouteDetailScreen() {
     }
     return { pill: styles.projectStatusDefault, text: styles.projectStatusDefaultText };
   }, [styles]);
+
+  const assignableUsersForCreate = useMemo(() => {
+    if (!canCreateProjectTask(user?.role)) return [];
+    return taskAssignableRaw
+      .map((u) => ({
+        id: u.id,
+        name: String(u.name || '').trim(),
+        role: displayRoleFromApi(u.role),
+        team: u.team || '',
+      }))
+      .filter((u) => u.name);
+  }, [user?.role, taskAssignableRaw]);
+
+  /** @deprecated Prefer assignableUsersForCreate — kept for forward flow HR filter */
   const hrAssignableUsers = useMemo(() => {
     if (!isAdminRole(user?.role)) return [];
     return taskAssignableRaw
@@ -663,6 +1081,43 @@ export default function RouteDetailScreen() {
       .map((u) => ({ id: u.id, name: String(u.name || '').trim() }))
       .filter((u) => u.name);
   }, [user?.role, taskAssignableRaw]);
+
+  const canManagePendingProjectTask = useCallback(
+    (task) => {
+      if (!user?.role || !task || String(task.status || '') !== 'Pending') return false;
+      const myUid = parseInt(String(user.id), 10);
+      if (!Number.isFinite(myUid)) return false;
+      const createdBy = task.createdByUserId ?? task.assignedByUserId;
+      const assigneeRole = String(task.assignedRole || '');
+      const assigneeTeam = String(task.assigneeTeam || taskUserDirectoryById[String(task.assignedToUserId)]?.team || '').trim();
+      const myTeam = String(user.team_name ?? user.team ?? '').trim();
+
+      if (isAdminRole(user.role)) {
+        return createdBy === myUid;
+      }
+      if (isHrRole(user.role)) {
+        if (task.createdByRole === 'Admin' && task.assignedToUserId === myUid) return false;
+        if (createdBy !== myUid) return false;
+        return assigneeRole === 'Team Leader' || assigneeRole === 'Employee';
+      }
+      if (isTeamLeaderRole(user.role)) {
+        if (createdBy !== myUid) return false;
+        return assigneeRole === 'Employee' && (!!myTeam ? assigneeTeam === myTeam : true);
+      }
+      return false;
+    },
+    [user, taskUserDirectoryById],
+  );
+
+  const getProjectTaskDisplayStatus = useCallback(
+    (task) => getManagementTaskDisplayStatus(task, user?.role),
+    [user?.role],
+  );
+
+  const getProjectCardAssignment = useCallback(
+    (task) => getTaskCardAssignment(enrichTaskTeam(task), user, taskUserDirectoryById),
+    [enrichTaskTeam, user, taskUserDirectoryById],
+  );
 
   const tlForwardPickList = useMemo(() => {
     if (user?.role !== 'HR') return [];
@@ -764,17 +1219,30 @@ export default function RouteDetailScreen() {
       }
 
       if (slug === 'availability') {
-        const showTeamBoard = isAdminRole(user?.role);
-        if (showTeamBoard) {
-          const summary = await getAttendanceSummary(token, {
-            role: apiRoleFromDisplayFilter(availabilityRoleFilter),
-          });
+        const role = user?.role;
+        const isAdmin = isAdminRole(role);
+        const isHr = isHrRole(role);
+        const isTl = isTeamLeaderRole(role);
+        const needTeam = isAdmin || isHr || isTl;
+        const needPersonal = !isAdmin;
+
+        const loadTeamUsers = async () => {
+          const roleParam = isTl
+            ? 'employee'
+            : apiRoleFromDisplayFilter(availabilityRoleFilter);
+          const summary = await getAttendanceSummary(token, { role: roleParam });
           let availUsers = filterUsersForAttendanceViewer(
-            user?.role,
+            role,
             summary.users
               .filter((row) => !isExcludedAttendanceOverviewRole(row.role))
               .map((row) => mapSummaryUserToAvailability(row)),
           );
+          if (isTl) {
+            const myTeam = String(user?.team_name ?? user?.department ?? '').trim();
+            availUsers = availUsers.filter(
+              (u) => u.role === 'Employee' && teamsMatch(u.team, myTeam),
+            );
+          }
           if (availUsers.some((u) => !u.avatarUrl)) {
             try {
               const authRes = await getAllUsers(token, { approvedOnly: true });
@@ -783,23 +1251,24 @@ export default function RouteDetailScreen() {
               /* attendance profile_image only */
             }
           }
-          setAvailabilityUsers(availUsers);
-          setMyAvailabilityLog([]);
-        } else {
+          return availUsers;
+        };
+
+        const loadPersonal = async () => {
           const gdc = user?.gdc_id ? String(user.gdc_id).trim() : '';
-          const [todayRow, sevenRows, history] = await Promise.all([
+          const [todayRow, sevenRows, history, leaves, shift] = await Promise.all([
             getMyTodayStatus(token).catch(() => null),
             getAttendance7Days(token, gdc ? { search: gdc } : {}),
             getClockHistory(token),
+            listLeaveRequests(token).catch(() => []),
+            getCurrentShift(token).catch(() => null),
           ]);
           const meRow =
             (gdc ? sevenRows.find((r) => String(r.gdc_id ?? '').trim() === gdc) : null) ||
             sevenRows[0] ||
             null;
           const logByDate = new Map();
-          const baseLog = meRow
-            ? buildMyAvailabilityLogFromSevenDays(meRow, history)
-            : [];
+          const baseLog = meRow ? buildMyAvailabilityLogFromSevenDays(meRow, history) : [];
           for (const row of baseLog) {
             if (row.date) logByDate.set(row.date, row);
           }
@@ -809,38 +1278,73 @@ export default function RouteDetailScreen() {
             if (!logByDate.has(mapped.date)) logByDate.set(mapped.date, mapped);
           }
           const log = [...logByDate.values()].sort((a, b) => b.date.localeCompare(a.date));
-          setMyAvailabilityLog(log);
           const todayStatus = mapTodayStatusToAvailabilityStatus(todayRow?.today_status);
-          setAvailabilityUsers([
-            {
-              gdcId: gdc || String(todayRow?.gdc_id ?? ''),
-              name: String(todayRow?.name ?? user?.name ?? ''),
-              role: user?.role ?? 'Employee',
-              team: String(user?.team_name ?? user?.department ?? '—'),
-              avatarUrl: resolveProfileImageUri(user?.avatar) || null,
-              status: todayStatus,
-              attendanceLabel:
-                todayStatus === 'Available'
-                  ? 'Present'
-                  : todayStatus === 'Leave'
-                    ? 'Leave'
-                    : 'Absent',
-              activityLabel: todayStatus === 'Available' ? 'Working' : todayStatus === 'Leave' ? 'Leave' : 'Away',
-              active: todayStatus === 'Available',
-            },
-          ]);
+          const meUser = {
+            gdcId: gdc || String(todayRow?.gdc_id ?? ''),
+            name: String(todayRow?.name ?? user?.name ?? ''),
+            role: user?.role ?? 'Employee',
+            team: String(user?.team_name ?? user?.department ?? '—'),
+            avatarUrl: resolveProfileImageUri(user?.avatar) || null,
+            status: todayStatus,
+            cardStatus:
+              todayStatus === 'Leave'
+                ? 'leave'
+                : todayStatus === 'Available'
+                  ? 'present'
+                  : 'offline',
+            attendanceLabel:
+              todayStatus === 'Available' ? 'Present' : todayStatus === 'Leave' ? 'On Leave' : 'Offline',
+            activityLabel:
+              todayStatus === 'Available' ? 'Working' : todayStatus === 'Leave' ? 'Leave' : 'Offline',
+            active: todayStatus === 'Available',
+            checkIn: todayRow?.check_in ? String(todayRow.check_in) : null,
+            checkOut: todayRow?.check_out ? String(todayRow.check_out) : null,
+            checkInLabel: todayRow?.check_in
+              ? String(todayRow.check_in).slice(11, 16) || '—'
+              : '—',
+            checkOutLabel: todayRow?.check_out
+              ? String(todayRow.check_out).slice(11, 16) || '—'
+              : '—',
+            liveStatus: String(todayRow?.live_status ?? todayRow?.today_status ?? '—'),
+          };
+          const leaveUi = (Array.isArray(leaves) ? leaves : []).map((row) => mapLeaveRowToUi(row));
+          const shiftObj =
+            shift && typeof shift === 'object'
+              ? shift.data && typeof shift.data === 'object'
+                ? shift.data
+                : shift
+              : null;
+          return { log, meUser, leaveUi, shift: shiftObj };
+        };
+
+        if (needTeam && needPersonal) {
+          const [teamUsers, personal] = await Promise.all([loadTeamUsers(), loadPersonal()]);
+          setAvailabilityUsers(teamUsers);
+          setMyAvailabilityLog(personal.log);
+          setLeaveRequests(personal.leaveUi);
+          setAvailabilityShift(personal.shift && typeof personal.shift === 'object' ? personal.shift : null);
+          setMyAvailabilityToday(personal.meUser);
+        } else if (needTeam) {
+          const teamUsers = await loadTeamUsers();
+          setAvailabilityUsers(teamUsers);
+          setMyAvailabilityLog([]);
+          setAvailabilityShift(null);
+          setMyAvailabilityToday(null);
+        } else {
+          const personal = await loadPersonal();
+          setMyAvailabilityLog(personal.log);
+          setLeaveRequests(personal.leaveUi);
+          setAvailabilityShift(personal.shift && typeof personal.shift === 'object' ? personal.shift : null);
+          setAvailabilityUsers([personal.meUser]);
+          setMyAvailabilityToday(personal.meUser);
         }
         return;
       }
 
       if (slug === 'admin') {
-        const shift = await getCurrentShift(token);
-        if (shift && typeof shift === 'object') {
-          const s = /** @type {{ effective_date?: string; shift_start?: string; shift_end?: string }} */ (shift);
-          if (s.effective_date) setShiftDate(String(s.effective_date).slice(0, 10));
-          if (s.shift_start) setShiftStart(amPmFromApiTime(s.shift_start));
-          if (s.shift_end) setShiftEnd(amPmFromApiTime(s.shift_end));
-        }
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(String(shiftDate || '')) ? shiftDate : undefined;
+        const shift = await getCurrentShift(token, day);
+        if (shift) applyShiftFromApi(shift);
         return;
       }
 
@@ -947,7 +1451,7 @@ export default function RouteDetailScreen() {
           setTimesheetLogs([]);
         }
 
-        if (user?.role === 'Employee') {
+        if (user?.role === 'Employee' || user?.role === 'HR') {
           const history = await getClockHistory(token);
           let historyLogs = history.map((row) => mapClockHistoryToLog(row));
           const authAvatar = resolveProfileImageUri(user?.avatar);
@@ -1061,6 +1565,8 @@ export default function RouteDetailScreen() {
     user?.name,
     user?.avatar,
     user?.gdc_id,
+    shiftDate,
+    applyShiftFromApi,
   ]);
 
   useFocusEffect(
@@ -1198,24 +1704,26 @@ export default function RouteDetailScreen() {
     user?.role,
   ]);
   const employeeProfile = useMemo(() => {
-    if (user?.role !== 'Employee') return null;
+    // Personal "My attendance" for Employee + HR (CRM includes HR My attendance).
+    if (user?.role !== 'Employee' && user?.role !== 'HR') return null;
     const authAvatar = resolveProfileImageUri(user?.avatar);
     const gid = user?.gdc_id ? String(user.gdc_id) : '';
+    const roleWanted = user.role === 'HR' ? 'HR' : 'Employee';
     if (gid) {
       const match = timesheetUsers.find((u) => u.gdcId === gid);
-      if (match) return { ...match, avatarUrl: match.avatarUrl || authAvatar };
+      if (match) return { ...match, avatarUrl: match.avatarUrl || authAvatar, role: match.role || roleWanted };
     }
     const fallback =
-      timesheetUsers.find((u) => u.role === 'Employee' && u.name === user.name) ||
-      timesheetUsers.find((u) => u.role === 'Employee') || {
+      timesheetUsers.find((u) => u.role === roleWanted && u.name === user.name) ||
+      timesheetUsers.find((u) => u.role === roleWanted) || {
         gdcId: gid || 'me',
-        name: user?.name || 'Employee',
-        role: 'Employee',
-        team: user?.team_name || '—',
+        name: user?.name || roleWanted,
+        role: roleWanted,
+        team: user?.team_name || user?.department || '—',
         avatarUrl: authAvatar,
       };
     return fallback.avatarUrl ? fallback : { ...fallback, avatarUrl: authAvatar };
-  }, [timesheetUsers, user?.avatar, user?.gdc_id, user?.name, user?.role, user?.team_name]);
+  }, [timesheetUsers, user?.avatar, user?.department, user?.gdc_id, user?.name, user?.role, user?.team_name]);
   const employeeAttendanceLogs = useMemo(() => {
     if (!employeeProfile) return [];
     return timesheetLogs
@@ -1225,9 +1733,12 @@ export default function RouteDetailScreen() {
   const employeeAttendanceSummary = useMemo(() => {
     const totalHours = employeeAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
     const overtime = employeeAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
-    const lateMarks = employeeAttendanceLogs.filter((row) => row.status === 'L').length;
-    return { totalHours, overtime, lateMarks };
-  }, [employeeAttendanceLogs]);
+    const lateMarks = employeeAttendanceLogs.filter((row) => row.status === 'L' || row.status === 'Late').length;
+    const presentDays = employeeAttendanceLogs.filter((row) => Number(row.hours) > 0).length;
+    const workingDays = Math.max(timesheetDays.length, 1);
+    const attendancePct = Math.round((presentDays / workingDays) * 1000) / 10;
+    return { totalHours, overtime, lateMarks, attendancePct, presentDays, workingDays };
+  }, [employeeAttendanceLogs, timesheetDays.length]);
   const employeeAttendanceEntry = useMemo(() => {
     if (!employeeProfile) return null;
     const rows = buildAttendanceRows([employeeProfile], timesheetDays, timesheetLogs);
@@ -1274,9 +1785,12 @@ export default function RouteDetailScreen() {
   const tlMyAttendanceSummary = useMemo(() => {
     const totalHours = tlMyAttendanceLogs.reduce((sum, row) => sum + row.hours, 0);
     const overtime = tlMyAttendanceLogs.reduce((sum, row) => sum + Math.max(0, row.hours - 8), 0);
-    const lateMarks = tlMyAttendanceLogs.filter((row) => row.status === 'L').length;
-    return { totalHours, overtime, lateMarks };
-  }, [tlMyAttendanceLogs]);
+    const lateMarks = tlMyAttendanceLogs.filter((row) => row.status === 'L' || row.status === 'Late').length;
+    const presentDays = tlMyAttendanceLogs.filter((row) => Number(row.hours) > 0).length;
+    const workingDays = Math.max(timesheetDays.length, 1);
+    const attendancePct = Math.round((presentDays / workingDays) * 1000) / 10;
+    return { totalHours, overtime, lateMarks, attendancePct, presentDays, workingDays };
+  }, [tlMyAttendanceLogs, timesheetDays.length]);
   const tlMyAttendanceEntry = useMemo(() => {
     if (!tlProfile) return null;
     const rows = buildAttendanceRows([tlProfile], timesheetDays, timesheetLogs);
@@ -1401,12 +1915,11 @@ export default function RouteDetailScreen() {
     const q = availabilitySearch.trim().toLowerCase();
     return availabilityUsers.filter((u) => {
       if (availabilityRoleFilter !== 'all' && u.role !== availabilityRoleFilter) return false;
-      if (availabilityStatusFilter !== 'all' && u.status !== availabilityStatusFilter) return false;
-      if (availabilityQuickFilter === 'present' && u.status !== 'Available') return false;
-      if (availabilityQuickFilter === 'absent' && u.status !== 'Unavailable') return false;
-      if (availabilityQuickFilter === 'leave' && u.status !== 'Leave') return false;
+      const card = u.cardStatus || (u.status === 'Leave' ? 'leave' : u.status === 'Available' ? 'present' : 'offline');
+      if (availabilityStatusFilter !== 'all' && card !== availabilityStatusFilter) return false;
+      if (availabilityQuickFilter !== 'all' && card !== availabilityQuickFilter) return false;
       if (!q) return true;
-      return `${u.name} ${u.gdcId} ${u.team} ${u.role} ${u.status}`.toLowerCase().includes(q);
+      return `${u.name} ${u.gdcId} ${u.team} ${u.role} ${u.status} ${u.email || ''}`.toLowerCase().includes(q);
     });
   }, [
     availabilityQuickFilter,
@@ -1417,26 +1930,40 @@ export default function RouteDetailScreen() {
   ]);
 
   const availabilitySummary = useMemo(() => {
-    const present = filteredAvailabilityUsers.filter((u) => u.status === 'Available').length;
-    const absent = filteredAvailabilityUsers.filter((u) => u.status === 'Unavailable').length;
-    const leave = filteredAvailabilityUsers.filter((u) => u.status === 'Leave').length;
-    return { total: filteredAvailabilityUsers.length, present, absent, leave };
+    const present = filteredAvailabilityUsers.filter((u) => (u.cardStatus || '') === 'present').length;
+    const away = filteredAvailabilityUsers.filter((u) => (u.cardStatus || '') === 'away').length;
+    const leave = filteredAvailabilityUsers.filter((u) => (u.cardStatus || '') === 'leave').length;
+    const offline = filteredAvailabilityUsers.filter((u) => (u.cardStatus || '') === 'offline').length;
+    const total = filteredAvailabilityUsers.length;
+    const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
+    return { total, present, away, leave, offline, pct };
   }, [filteredAvailabilityUsers]);
 
+  const availabilityLogRange = useMemo(() => {
+    if (availabilityFromDate || availabilityToDate) {
+      return { start: availabilityFromDate || '', end: availabilityToDate || '' };
+    }
+    return getAvailabilityLogRange(availabilityLogPreset);
+  }, [availabilityFromDate, availabilityToDate, availabilityLogPreset]);
+
   const filteredMyAvailabilityLog = useMemo(
-    () =>
-      myAvailabilityLog.filter((r) => {
-        if (availabilityFromDate && r.date < availabilityFromDate) return false;
-        if (availabilityToDate && r.date > availabilityToDate) return false;
-        return true;
-      }),
-    [availabilityFromDate, availabilityToDate, myAvailabilityLog],
+    () => filterAvailabilityLogByRange(myAvailabilityLog, availabilityLogRange.start, availabilityLogRange.end),
+    [availabilityLogRange.end, availabilityLogRange.start, myAvailabilityLog],
   );
 
   const myLeaveRequests = useMemo(() => {
     if (!user) return [];
     return filterMyOwnRequests(leaveRequests, user);
   }, [leaveRequests, user]);
+
+  const myAvailabilityKpis = useMemo(
+    () =>
+      computeMyAvailabilityKpis(filteredMyAvailabilityLog, myLeaveRequests, {
+        gdcId: user?.gdc_id,
+        name: user?.name,
+      }),
+    [filteredMyAvailabilityLog, myLeaveRequests, user?.gdc_id, user?.name],
+  );
 
   const filteredAdminLeaveRequests = useMemo(() => {
     const q = requestAdminSearch.trim().toLowerCase();
@@ -1597,15 +2124,168 @@ export default function RouteDetailScreen() {
     setRejectReason('');
   };
 
+  const applyShiftFromApi = useCallback((raw) => {
+    const current = normalizeShiftPayload(raw);
+    if (!current) return;
+    if (current.effective_date) setShiftDate(String(current.effective_date).slice(0, 10));
+    if (current.shift_start) setShiftStart(amPmFromApiTime(current.shift_start));
+    if (current.shift_end) setShiftEnd(amPmFromApiTime(current.shift_end));
+    if (current.break_start) setShiftBreakStart(amPmFromApiTime(current.break_start));
+    else setShiftBreakStart('');
+    if (typeof current.break_duration_minutes === 'number') {
+      setShiftBreakDuration(minutesToBreakInput(current.break_duration_minutes));
+    }
+    if (current.timezone) setShiftTimezone(String(current.timezone));
+    const sid = current.shift_id ?? current.id;
+    if (sid != null) setShiftId(Number(sid));
+    if (typeof current.is_enabled === 'boolean') setShiftEnabled(current.is_enabled);
+    if (current.updated_at) setShiftLastUpdatedAt(String(current.updated_at));
+    if (current.updated_by_name) setShiftLastUpdatedBy(String(current.updated_by_name));
+    setShiftLateAfter(Number(current.late_after_minutes ?? 15));
+    setShiftClockInCutoff(Number(current.clock_in_cutoff_minutes ?? 60));
+    setShiftGraceBefore(Number(current.grace_before_start_minutes ?? 5));
+    setShiftMinHours(Number(current.minimum_working_hours ?? 4));
+    setShiftAutoCheckout(Number(current.auto_checkout_after_hours ?? 12));
+    setShiftWorkWeekDays(
+      Array.isArray(current.work_week_days) && current.work_week_days.length
+        ? [...current.work_week_days]
+        : [...DEFAULT_WORK_WEEK_DAYS],
+    );
+    setShiftHolidays(Array.isArray(current.holiday_dates) ? [...current.holiday_dates] : []);
+  }, []);
+
+  const loadTimeControl = useCallback(
+    async (asOf) => {
+      if (!token || !isAdminRole(user?.role)) return;
+      setShiftLoading(true);
+      try {
+        const day = asOf || todayDateInput();
+        const [status, current, control] = await Promise.all([
+          getShiftStatus(token, day).catch(() => ({ shift_id: null, is_enabled: false })),
+          getCurrentShift(token, day).catch(() => null),
+          getAttendanceControlSettings(token).catch(() => null),
+        ]);
+        setShiftEnabled(Boolean(status.is_enabled));
+        if (status.shift_id != null) setShiftId(status.shift_id);
+        if (current) applyShiftFromApi(current);
+        if (control) {
+          setShiftControlSnapshot(control);
+          setLiveShiftNotifications(Boolean(control.live_shift_notifications_enabled));
+        }
+      } catch (e) {
+        Alert.alert('Time Control', e?.message ?? 'Could not load shift config');
+      } finally {
+        setShiftLoading(false);
+      }
+    },
+    [token, user?.role, applyShiftFromApi],
+  );
+
+  useEffect(() => {
+    if (slug !== 'admin' || !isAdminRole(user?.role) || !token) return;
+    if (adminControlTab !== 'time') return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(shiftDate || ''))) return;
+    void loadTimeControl(shiftDate);
+  }, [slug, adminControlTab, token, user?.role, shiftDate, loadTimeControl]);
+
+  const toggleShiftWorkWeekDay = useCallback((day) => {
+    setShiftWorkWeekDays((prev) => {
+      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      return next.length ? [...new Set(next)].sort((a, b) => a - b) : [...DEFAULT_WORK_WEEK_DAYS];
+    });
+  }, []);
+
+  const addShiftHoliday = useCallback(() => {
+    const iso = String(shiftHolidayDraft || '').trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      Alert.alert('Holiday', 'Use YYYY-MM-DD format.');
+      return;
+    }
+    setShiftHolidays((prev) => (prev.includes(iso) ? prev : [...prev, iso].sort()));
+    setShiftHolidayDraft('');
+  }, [shiftHolidayDraft]);
+
+  const removeShiftHoliday = useCallback((iso) => {
+    setShiftHolidays((prev) => prev.filter((d) => d !== iso));
+  }, []);
+
+  const toggleShiftEnabled = useCallback(
+    async (next) => {
+      try {
+        await setShiftStatus(token, { shift_id: shiftId ?? 1, is_enabled: next });
+        setShiftEnabled(next);
+      } catch (e) {
+        Alert.alert('Shift status', e?.message ?? 'Could not update');
+      }
+    },
+    [token, shiftId],
+  );
+
+  useEffect(() => {
+    if (slug !== 'admin' || adminControlTab !== 'time') return;
+    if (!token || !shiftControlSnapshot) return;
+    const timer = setTimeout(() => {
+      void setAttendanceControlSettings(token, {
+        ...shiftControlSnapshot,
+        live_shift_notifications_enabled: liveShiftNotifications,
+      }).catch(() => undefined);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [liveShiftNotifications, shiftControlSnapshot, slug, adminControlTab, token]);
+
   const handleSaveShiftTiming = async () => {
     if (!token || !shiftDate || !shiftStart || !shiftEnd || shiftSaveLoading) return;
+    const startApi = apiTimeFromAmPm(shiftStart);
+    const endApi = apiTimeFromAmPm(shiftEnd);
+    const [sh, sm] = String(startApi).split(':').map((x) => Number.parseInt(x, 10));
+    const [eh, em] = String(endApi).split(':').map((x) => Number.parseInt(x, 10));
+    if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) {
+      Alert.alert('Shift', 'Enter valid office start/end times.');
+      return;
+    }
+    if (eh * 60 + em <= sh * 60 + sm) {
+      Alert.alert('Shift', 'Office end must be after office start.');
+      return;
+    }
+    const breakMinutes = breakInputToMinutes(shiftBreakDuration);
+    if (breakMinutes == null) {
+      Alert.alert('Shift', 'Enter break length as HH:MM (e.g. 00:30).');
+      return;
+    }
+    if (String(shiftBreakStart || '').trim() && breakMinutes <= 0) {
+      Alert.alert('Shift', 'Set a break length when break start is configured.');
+      return;
+    }
+    if (!shiftWorkWeekDays.length) {
+      Alert.alert('Shift', 'Select at least one working day.');
+      return;
+    }
+    if (shiftClockInCutoff < shiftLateAfter) {
+      Alert.alert('Shift', 'Clock-in cutoff must be at or after the late mark window.');
+      return;
+    }
     setShiftSaveLoading(true);
     try {
-      await saveShiftTiming(token, {
-        shift_start: apiTimeFromAmPm(shiftStart),
-        shift_end: apiTimeFromAmPm(shiftEnd),
+      const saved = await saveShiftTiming(token, {
+        shift_start: startApi,
+        shift_end: endApi,
         effective_date: shiftDate,
+        break_start: String(shiftBreakStart || '').trim()
+          ? apiTimeFromAmPm(shiftBreakStart)
+          : null,
+        break_duration_minutes: breakMinutes,
+        timezone: shiftTimezone,
+        late_after_minutes: shiftLateAfter,
+        clock_in_cutoff_minutes: shiftClockInCutoff,
+        grace_before_start_minutes: shiftGraceBefore,
+        minimum_working_hours: shiftMinHours,
+        auto_checkout_after_hours: shiftAutoCheckout,
+        work_week_days: shiftWorkWeekDays,
+        holiday_dates: shiftHolidays,
       });
+      applyShiftFromApi(saved);
+      setShiftLastUpdatedAt(new Date().toISOString());
+      setShiftLastUpdatedBy(user?.name || 'Admin');
       Alert.alert('Saved', 'Shift timing updated.');
     } catch (err) {
       Alert.alert('Shift save failed', err instanceof Error ? err.message : 'Could not save shift');
@@ -1671,9 +2351,25 @@ export default function RouteDetailScreen() {
         if (!selected) return;
         const formatted = formatTimeAmPm(selected);
         if (target === 'start') setShiftStart(formatted);
-        else setShiftEnd(formatted);
+        else if (target === 'end') setShiftEnd(formatted);
+        else if (target === 'break') setShiftBreakStart(formatted);
       },
       mode: 'time',
+      is24Hour: false,
+    });
+  };
+
+  const openShiftBreakStartPicker = () => openShiftTimePicker('break');
+
+  const openHolidayDatePicker = () => {
+    const parsed = shiftHolidayDraft ? new Date(`${shiftHolidayDraft}T00:00:00`) : new Date();
+    const safe = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    DateTimePickerAndroid.open({
+      value: safe,
+      onChange: (_event, selected) => {
+        if (selected) setShiftHolidayDraft(formatDateISO(selected));
+      },
+      mode: 'date',
       is24Hour: false,
     });
   };
@@ -1928,6 +2624,10 @@ export default function RouteDetailScreen() {
   };
 
   const openCreateProjectTaskModal = () => {
+    if (!canCreateProject) {
+      Alert.alert('Projects', 'You are not allowed to create projects.');
+      return;
+    }
     resetProjectForm();
     setCreateTaskOpen(true);
   };
@@ -1953,15 +2653,20 @@ export default function RouteDetailScreen() {
       return;
     }
 
-    const resolveHrAssigneeId = () => {
+    const resolveAssigneeId = () => {
       if (taskAssigneeUserId != null && Number.isFinite(Number(taskAssigneeUserId))) return Number(taskAssigneeUserId);
       const trimmed = taskAssignee.trim().toLowerCase();
-      const row = hrAssignableUsers.find((u) => String(u.name || '').trim().toLowerCase() === trimmed);
+      const pool = assignableUsersForCreate.length ? assignableUsersForCreate : hrAssignableUsers;
+      const row = pool.find((u) => String(u.name || '').trim().toLowerCase() === trimmed);
       return row && row.id != null ? Number(row.id) : null;
     };
 
     if (editingTaskId) {
       const existing = projectTasks.find((t) => t.id === editingTaskId);
+      if (!canManagePendingProjectTask(existing)) {
+        Alert.alert('Tasks', 'You cannot edit this task.');
+        return;
+      }
       const apiId = existing?.apiNumericId;
       if (!Number.isFinite(apiId)) {
         Alert.alert('Tasks', 'Cannot update this task (missing server id).');
@@ -1974,10 +2679,8 @@ export default function RouteDetailScreen() {
           deadline,
           description: taskDescription.trim() || '',
         };
-        if (isAdminRole(user?.role)) {
-          const hid = resolveHrAssigneeId();
-          if (hid) patch.assigned_to = hid;
-        }
+        const aid = resolveAssigneeId();
+        if (aid) patch.assigned_to = aid;
         if (taskAttachmentUri) {
           patch.attachmentUri = taskAttachmentUri;
           patch.attachmentName = taskAttachmentName;
@@ -1995,13 +2698,17 @@ export default function RouteDetailScreen() {
       return;
     }
 
-    if (!isAdminRole(user?.role)) {
-      Alert.alert('Tasks', 'Only administrators can create tasks here.');
+    if (!canCreateProject) {
+      Alert.alert('Tasks', 'You are not allowed to create projects.');
       return;
     }
-    const assignedTo = resolveHrAssigneeId();
+    const assignedTo = resolveAssigneeId();
     if (!Number.isFinite(assignedTo)) {
-      Alert.alert('Assign HR', 'Choose an HR user from the Assign to HR dropdown.');
+      Alert.alert('Assign to', 'Choose someone from the Assign to dropdown.');
+      return;
+    }
+    if (!taskAttachmentUri) {
+      Alert.alert('Attachment', 'An attachment is required when creating a project.');
       return;
     }
     setSaveProjectTaskPhase('saving');
@@ -2011,7 +2718,7 @@ export default function RouteDetailScreen() {
         assigned_to: assignedTo,
         deadline,
         description: taskDescription.trim() || undefined,
-        attachmentUri: taskAttachmentUri || undefined,
+        attachmentUri: taskAttachmentUri,
         attachmentName: taskAttachmentName || undefined,
       });
       await loadProjectTasks();
@@ -2027,6 +2734,7 @@ export default function RouteDetailScreen() {
   };
 
   const handleEditProjectTask = (task) => {
+    if (!canManagePendingProjectTask(task)) return;
     setEditingTaskId(task.id);
     setTaskTitle(task.title);
     setTaskDescription(task.description);
@@ -2043,6 +2751,10 @@ export default function RouteDetailScreen() {
   const handleDeleteProjectTask = (taskId) => {
     if (!token) return;
     const task = projectTasks.find((t) => t.id === taskId);
+    if (!canManagePendingProjectTask(task)) {
+      Alert.alert('Tasks', 'You cannot delete this task.');
+      return;
+    }
     const apiId = task?.apiNumericId;
     if (!Number.isFinite(apiId)) {
       Alert.alert('Tasks', 'Cannot delete this task.');
@@ -2213,6 +2925,7 @@ export default function RouteDetailScreen() {
     return { present, absent, leave, totalHours };
   }, [filteredMyAvailabilityLog]);
   const currentAvailabilityStatus = useMemo(() => {
+    if (myAvailabilityToday?.status) return myAvailabilityToday.status;
     if (!user?.role) return 'Available';
     const gdc = user?.gdc_id ? String(user.gdc_id).trim() : '';
     const match =
@@ -2220,7 +2933,7 @@ export default function RouteDetailScreen() {
       availabilityUsers.find((u) => u.name === user?.name && u.role === user.role) ||
       availabilityUsers[0];
     return match?.status || 'Available';
-  }, [availabilityUsers, user?.gdc_id, user?.name, user?.role]);
+  }, [availabilityUsers, myAvailabilityToday, user?.gdc_id, user?.name, user?.role]);
   const updateMyAvailabilityStatus = (nextStatus) => {
     if (!user?.role) return;
     setAvailabilityUsers((prev) => {
@@ -2284,6 +2997,14 @@ export default function RouteDetailScreen() {
         setProjectStatusFilter={setProjectStatusFilter}
         projectStatusMenuOpen={projectStatusMenuOpen}
         setProjectStatusMenuOpen={setProjectStatusMenuOpen}
+        projectTeamFilter={projectTeamFilter}
+        setProjectTeamFilter={setProjectTeamFilter}
+        projectTeamMenuOpen={projectTeamMenuOpen}
+        setProjectTeamMenuOpen={setProjectTeamMenuOpen}
+        projectTeamOptions={projectTeamOptions}
+        showTeamInProjects={showTeamInProjects}
+        projectManagerStats={projectManagerStats}
+        canCreateProject={canCreateProject}
         projectFromDate={projectFromDate}
         setProjectFromDate={setProjectFromDate}
         projectToDate={projectToDate}
@@ -2291,10 +3012,14 @@ export default function RouteDetailScreen() {
         openCreateProjectTaskModal={openCreateProjectTaskModal}
         closeProjectTaskModal={closeProjectTaskModal}
         projectTasksLoading={projectTasksLoading}
-        filteredProjectTasks={filteredProjectTasks}
+        filteredProjectTasks={filteredProjectTasksEnriched}
         setSelectedProjectTask={setSelectedProjectTask}
         handleEditProjectTask={handleEditProjectTask}
         handleDeleteProjectTask={handleDeleteProjectTask}
+        canManagePendingProjectTask={canManagePendingProjectTask}
+        getProjectTaskDisplayStatus={getProjectTaskDisplayStatus}
+        getProjectCardAssignment={getProjectCardAssignment}
+        formatTaskRef={formatTaskRef}
         projectStatusTone={projectStatusTone}
         employeeNameByGdcId={employeeNameByGdcId}
         formatProjectDueDate={formatProjectDueDate}
@@ -2306,6 +3031,7 @@ export default function RouteDetailScreen() {
         setTaskAssignee={setTaskAssignee}
         taskAssigneeUserId={taskAssigneeUserId}
         setTaskAssigneeUserId={setTaskAssigneeUserId}
+        assignableUsersForCreate={assignableUsersForCreate}
         hrAssignableUsers={hrAssignableUsers}
         taskDeadline={taskDeadline}
         setTaskDeadline={setTaskDeadline}
@@ -2408,6 +3134,9 @@ export default function RouteDetailScreen() {
         styles={styles}
         ctx={{
           user,
+          router,
+          availabilityTab,
+          setAvailabilityTab,
           setAvailabilityRoleFilter,
           availabilityRoleFilter,
           setAvailabilityStatusFilter,
@@ -2417,15 +3146,21 @@ export default function RouteDetailScreen() {
           availabilitySearch,
           setAvailabilitySearch,
           filteredAvailabilityUsers,
-          updateMyAvailabilityStatus,
-          setHoveredAvailabilityStatus,
-          hoveredAvailabilityStatus,
+          availabilitySummary,
           currentAvailabilityStatus,
+          myAvailabilityToday,
           myAvailabilitySummary,
+          myAvailabilityKpis,
+          availabilityLogPreset,
+          setAvailabilityLogPreset,
+          setAvailabilityFromDate,
+          setAvailabilityToDate,
           openAvailabilityDatePicker,
           availabilityFromDate,
           availabilityToDate,
           filteredMyAvailabilityLog,
+          myAvailabilityLog,
+          availabilityShift,
           attendanceLoading,
           attendanceError,
           onRetryAttendance: loadAttendanceScreen,
@@ -2463,14 +3198,76 @@ export default function RouteDetailScreen() {
           setShiftEnd,
           openShiftDatePicker,
           openShiftTimePicker,
+          openShiftBreakStartPicker,
+          openHolidayDatePicker,
           handleSaveShiftTiming,
           shiftSaveLoading,
+          shiftLoading,
+          shiftTimezone,
+          setShiftTimezone,
+          shiftWorkWeekDays,
+          toggleShiftWorkWeekDay,
+          shiftBreakStart,
+          setShiftBreakStart,
+          shiftBreakDuration,
+          setShiftBreakDuration,
+          shiftLateAfter,
+          setShiftLateAfter,
+          shiftClockInCutoff,
+          setShiftClockInCutoff,
+          shiftGraceBefore,
+          setShiftGraceBefore,
+          shiftMinHours,
+          setShiftMinHours,
+          shiftAutoCheckout,
+          setShiftAutoCheckout,
+          shiftHolidays,
+          shiftHolidayDraft,
+          setShiftHolidayDraft,
+          addShiftHoliday,
+          removeShiftHoliday,
+          shiftEnabled,
+          toggleShiftEnabled,
+          liveShiftNotifications,
+          setLiveShiftNotifications,
+          shiftLastUpdatedAt,
+          shiftLastUpdatedBy,
+          timezoneMenuOpen,
+          setTimezoneMenuOpen,
           newDepartment,
           setNewDepartment,
           handleAddDepartment,
           deptAddLoading,
           departments,
           setDepartments,
+          portalClients,
+          portalStats,
+          portalSearch,
+          setPortalSearch,
+          portalLoading,
+          portalAddOpen,
+          setPortalAddOpen,
+          portalCompanyName,
+          setPortalCompanyName,
+          portalContactName,
+          setPortalContactName,
+          portalContactEmail,
+          setPortalContactEmail,
+          portalSaving,
+          portalActionKey,
+          portalShareClientId,
+          setPortalShareClientId,
+          portalShareType,
+          setPortalShareType,
+          portalShareTitle,
+          setPortalShareTitle,
+          portalShareSummary,
+          setPortalShareSummary,
+          handleCreatePortalClient,
+          handleDeletePortalClient,
+          handleInvitePortalClient,
+          handleCreatePortalShare,
+          refreshPortalClients: fetchPortalClients,
           roleModalOpen,
           setRoleModalOpen,
           setSelectedAdminUserId,

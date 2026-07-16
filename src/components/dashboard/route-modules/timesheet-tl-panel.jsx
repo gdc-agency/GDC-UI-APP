@@ -112,7 +112,7 @@ function HeroCard({ icon, title, timesheetWindow, setTimesheetWindow, timesheetD
   );
 }
 
-function TlMyAttendance({ ctx }) {
+function TlMyAttendance({ ctx, router }) {
   const { moduleStyles } = useTheme();
   const tls = moduleStyles.timesheetTl.styles;
   const TlColors = moduleStyles.timesheetTl.colors;
@@ -138,27 +138,35 @@ function TlMyAttendance({ ctx }) {
         timesheetDays={timesheetDays}
       />
 
+      <Text style={[tls.panelSub, { marginTop: -4, marginBottom: 4 }]}>
+        Track and manage your work hours
+      </Text>
+
       <View style={tls.statsGrid}>
         <View style={tls.statTile}>
-          <Text style={tls.statTileLabel}>Total hours ({rangeShort})</Text>
-          <Text style={[tls.statTileValue, { color: TsColors.blue }]}>{tlMyAttendanceSummary.totalHours.toFixed(1)}</Text>
+          <Text style={tls.statTileLabel}>Total hours</Text>
+          <Text style={[tls.statTileValue, { color: TsColors.blue }]}>
+            {(tlMyAttendanceSummary?.totalHours ?? 0).toFixed(1)}
+          </Text>
           <Text style={tls.statTileUnit}>hours</Text>
           <MaterialCommunityIcons name="chart-line" size={56} color="#DBEAFE" style={tls.statDeco} />
         </View>
         <View style={tls.statTile}>
-          <Text style={tls.statTileLabel}>Overtime ({rangeShort})</Text>
-          <Text style={[tls.statTileValue, { color: TlColors.violet }]}>{tlMyAttendanceSummary.overtime.toFixed(1)}</Text>
+          <Text style={tls.statTileLabel}>Overtime</Text>
+          <Text style={[tls.statTileValue, { color: TlColors.violet }]}>
+            {(tlMyAttendanceSummary?.overtime ?? 0).toFixed(1)}
+          </Text>
           <Text style={tls.statTileUnit}>hours</Text>
           <MaterialCommunityIcons name="trending-up" size={56} color="#EDE9FE" style={tls.statDeco} />
         </View>
         <View style={[tls.statTile, { flexBasis: '100%' }]}>
-          <Text style={tls.statTileLabel}>Late marks ({rangeShort})</Text>
+          <Text style={tls.statTileLabel}>Late marks</Text>
           <Text
             style={[
               tls.statTileValue,
-              { color: tlMyAttendanceSummary.lateMarks > 0 ? '#DC2626' : '#16A34A' },
+              { color: (tlMyAttendanceSummary?.lateMarks ?? 0) > 0 ? '#DC2626' : '#16A34A' },
             ]}>
-            {tlMyAttendanceSummary.lateMarks}
+            {tlMyAttendanceSummary?.lateMarks ?? 0}
           </Text>
           <Text style={tls.statTileUnit}>instances</Text>
           <MaterialCommunityIcons name="alert-circle-outline" size={56} color="#FEE2E2" style={tls.statDeco} />
@@ -178,12 +186,28 @@ function TlMyAttendance({ ctx }) {
               </Text>
             </View>
           </View>
+          {typeof router?.push === 'function' ? (
+            <Pressable
+              onPress={() => router.push('/dashboard/(tabs)/route/my-requests?tab=manual')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: '#EEF2FF',
+              }}>
+              <MaterialCommunityIcons name="plus" size={16} color={TlColors.indigo} />
+              <Text style={{ fontSize: 12, fontWeight: '800', color: TlColors.indigo }}>Request manual time</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {tlMyAttendanceLogs.length === 0 ? (
           <View style={tls.emptyBox}>
             <MaterialCommunityIcons name="clipboard-text-clock-outline" size={48} color="#CBD5E1" />
-            <Text style={tls.emptyTitle}>No clock records yet</Text>
+            <Text style={tls.emptyTitle}>No shifts in this window</Text>
             <Text style={tls.emptySub}>Your clock in/out history will appear here.</Text>
           </View>
         ) : (
@@ -210,7 +234,7 @@ function TlTeamOverview({ ctx }) {
     <View style={tls.stack}>
       <HeroCard
         icon="account-group-outline"
-        title="Team overview"
+        title="Team attendance"
         timesheetWindow={timesheetWindow}
         setTimesheetWindow={setTimesheetWindow}
         timesheetDays={timesheetDays}
@@ -303,7 +327,7 @@ function TlTeamRecords({ ctx }) {
   );
 }
 
-export function TimesheetTlPanel({ ctx }) {
+export function TimesheetTlPanel({ ctx, router }) {
   const { tlTimesheetTab } = ctx;
 
   if (tlTimesheetTab === 'team-overview') {
@@ -312,6 +336,6 @@ export function TimesheetTlPanel({ ctx }) {
   if (tlTimesheetTab === 'team-records') {
     return <TlTeamRecords ctx={ctx} />;
   }
-  return <TlMyAttendance ctx={ctx} />;
+  return <TlMyAttendance ctx={ctx} router={router} />;
 }
 

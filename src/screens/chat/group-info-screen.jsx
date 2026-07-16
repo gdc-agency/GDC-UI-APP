@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 import { GroupInfoScreen } from '@/components/chat/group-info-screen';
@@ -11,7 +11,7 @@ import { ensureGdcSocketConnected } from '@/data/realtime/gdc-socket';
 export default function GroupInfoRoute() {
   const { chatId } = useLocalSearchParams();
   const cid = chatId != null ? String(chatId) : '';
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { colors } = useTheme();
   const inbox = useGdcInbox();
   const {
@@ -67,6 +67,7 @@ export default function GroupInfoRoute() {
     <GroupInfoScreen
       thread={thread}
       myUserId={myUserId}
+      viewerUser={user}
       directory={directory}
       addMemberPool={groupContacts}
       onlineUserIds={onlineUserIds}

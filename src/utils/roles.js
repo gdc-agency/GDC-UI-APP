@@ -28,3 +28,12 @@ export function normalizeRoleSlug(role) {
 export function isEmployeeRole(role) {
   return normalizeRoleSlug(role) === 'employee';
 }
+
+export function isTeamLeaderRole(role) {
+  return normalizeRoleSlug(role) === 'team_leader';
+}
+
+/** Admin, HR, or Team Leader — can create projects/tasks in CRM. */
+export function canCreateProjectTask(role) {
+  return isAdminRole(role) || isHrRole(role) || isTeamLeaderRole(role);
+}

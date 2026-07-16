@@ -8,19 +8,19 @@ const TL_SUB_TABS = [
   {
     tabId: 'my-attendance',
     label: 'My attendance',
-    short: 'Attendance',
+    short: 'Mine',
     icon: 'account-clock-outline',
   },
   {
     tabId: 'team-overview',
-    label: 'Team overview',
-    short: 'Overview',
+    label: 'Team attendance',
+    short: 'Team',
     icon: 'account-group-outline',
   },
   {
     tabId: 'team-records',
-    label: 'Team records',
-    short: 'Records',
+    label: 'Team attendance log',
+    short: 'Log',
     icon: 'clipboard-text-clock-outline',
   },
 ];

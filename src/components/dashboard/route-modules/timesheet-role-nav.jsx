@@ -5,7 +5,7 @@ import { TlTimesheetTabNav } from './tl-timesheet-tab-nav';
 import { timesheetNavTabsForRole } from '@/utils/timesheet-tabs-config';
 
 /**
- * Website-style underline tabs (not Admin segmented Attendance/Clock/Manual header).
+ * Website-style underline tabs (not Admin segmented Overview/Logs/Manual header).
  */
 export function TimesheetRoleNav({ user, slug, router, styles, tlTimesheetTab, setTlTimesheetTab }) {
   const tabs = timesheetNavTabsForRole(user?.role);
@@ -32,11 +32,16 @@ export function TimesheetRoleNav({ user, slug, router, styles, tlTimesheetTab, s
         contentContainerStyle={styles.tlTimesheetTabs}
         style={styles.tlTimesheetTabsScroll}>
         {tabs.map((tab) => {
-          const active = slug === tab.slug;
+          const active =
+            slug === tab.slug &&
+            (!tab.tabId || String(tlTimesheetTab || 'my-attendance') === String(tab.tabId));
           return (
             <Pressable
               key={`${tab.slug}-${tab.tabId || tab.label}`}
               onPress={() => {
+                if (tab.tabId && typeof setTlTimesheetTab === 'function') {
+                  setTlTimesheetTab(tab.tabId);
+                }
                 if (slug !== tab.slug) {
                   router.push(`/dashboard/(tabs)/route/${tab.slug}`);
                 }

@@ -29,7 +29,22 @@ import { ensureGdcSocketConnected, getGdcSocket } from '@/data/realtime/gdc-sock
 import { readLocalUriAsDataUrl } from '@/utils/chat-attachment-read';
 import { patchMessagesWithTombstone, toDeletedMessageUi } from '@/utils/chat-deleted-message';
 import { formatDisplayRole, formatFileSize, mapDirectoryUser, resolveProfileImageUri } from '@/utils/chat-directory';
+import {
+  asPermissionUser,
+  canCreateGroup,
+  canDmPair,
+  groupScopeForRole as groupScopeForRoleFromPermissions,
+  isPendingUserRole,
+  validateCreateGroup,
+  viewerFromAuth,
+} from '@/utils/chat-permissions';
 import { clearChatInAppNotice, messagePreviewLabel, publishChatInAppNotice } from '@/utils/chat-in-app-notice';
+import {
+    loadPreviewCache,
+    previewHasContent,
+    savePreviewCache,
+    slimPreviewForCache,
+} from '@/utils/chat-inbox-preview-cache';
 import {
     finalizeOutgoingMessage,
     isMessageUploading,
@@ -41,12 +56,6 @@ import {
     sortThreadsByRecent,
     threadIdEquals,
 } from '@/utils/chat-thread-inbox';
-import {
-    loadPreviewCache,
-    previewHasContent,
-    savePreviewCache,
-    slimPreviewForCache,
-} from '@/utils/chat-inbox-preview-cache';
 import {
     runWithTransferProgress,
     startTransferProgressAnimator,
@@ -180,25 +189,6 @@ function reconcileOutgoingMessage(messages, tempId, confirmedUi) {
   const temp = messages.find((m) => String(m.id) === tid);
   const filtered = messages.filter((m) => String(m.id) !== tid && String(m.id) !== cid);
   return mergeMessageList(filtered, preserveOutgoingAttachmentUri(confirmedUi, temp));
-}
-
-function normalizeRoleKey(role) {
-  return String(role || '')
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace('teamleader', 'team_leader');
-}
-
-function canStartPersonalChat(myRole, targetRole) {
-  const me = normalizeRoleKey(myRole);
-  const target = normalizeRoleKey(targetRole);
-  if (!target) return false;
-  if (me === 'admin') return ['hr', 'team_leader', 'employee'].includes(target);
-  if (me === 'hr') return ['admin', 'team_leader', 'employee'].includes(target);
-  if (me === 'team_leader') return ['admin', 'hr', 'employee'].includes(target);
-  if (me === 'employee') return ['admin', 'hr', 'team_leader'].includes(target);
-  return false;
 }
 
 function storageKey(prefix, userId) {
@@ -589,6 +579,7 @@ export function useGdcChatInbox({ token, user }) {
               ...mapped,
               name: mapped.displayName,
               status: mapped.roleLabel,
+              team: mapped.team || String(u?.team_name ?? u?.team ?? u?.teamName ?? '').trim(),
               online: false,
               gdc_id: u?.gdc_id != null ? String(u.gdc_id) : u?.gdcId != null ? String(u.gdcId) : '',
               email: u?.email != null ? String(u.email) : '',
@@ -604,6 +595,13 @@ export function useGdcChatInbox({ token, user }) {
         allDirectoryRows = [];
       }
 
+      const viewer = viewerFromAuth(user);
+      const dmEligible = (row) => {
+        if (!row || isPendingUserRole(row.roleLabel)) return false;
+        const target = asPermissionUser(row);
+        return !!target && !!viewer && canDmPair(viewer, target);
+      };
+
       let rows = [];
       if (isAdminRole(user.role) || user.role === 'HR') {
         let data = [];
@@ -613,7 +611,7 @@ export function useGdcChatInbox({ token, user }) {
         } catch {
           data = allDirectoryRows;
         }
-        rows = mapRows(data).filter((row) => canStartPersonalChat(user.role, row.roleLabel));
+        rows = mapRows(data).filter(dmEligible);
       } else {
         let members = [];
         try {
@@ -623,7 +621,7 @@ export function useGdcChatInbox({ token, user }) {
           const roster = await getMyTeamRoster(token);
           members = Array.isArray(roster?.members) ? roster.members : [];
         }
-        rows = mapRows(members).filter((row) => canStartPersonalChat(user.role, row.roleLabel));
+        rows = mapRows(members).filter(dmEligible);
       }
       const mergedList = mergeDirectoryLists(allDirectoryRows, rows);
       const contactIds = new Set(rows.map((r) => String(r.id)));
@@ -898,7 +896,7 @@ export function useGdcChatInbox({ token, user }) {
 
     const poll = setInterval(() => {
       void refreshThreadsRef.current?.({ silent: true });
-    }, 90000);
+    }, 30000);
 
     return () => {
       appSub.remove();
@@ -1000,6 +998,32 @@ export function useGdcChatInbox({ token, user }) {
     },
     [hiddenMessageIdsByChat, token, myId],
   );
+
+  /**
+   * Delivery fallback: while a chat is open, re-fetch its messages on an interval so
+   * new messages (e.g. sent from the CRM) still appear even if the Socket.IO relay is
+   * down or the org chat-backend has no GDC_API_URL / INTERNAL_NOTIFY_KEY configured.
+   */
+  useEffect(() => {
+    if (!token || !myId || !activeChatId) return undefined;
+    const chatId = String(activeChatId);
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight) return;
+      if (AppState.currentState !== 'active') return;
+      if (!threadIdEquals(selectedChatIdRef.current, chatId)) return;
+      inFlight = true;
+      try {
+        await loadMessagesForChat(chatId);
+      } catch {
+        /* transient poll error — next tick retries */
+      } finally {
+        inFlight = false;
+      }
+    };
+    const interval = setInterval(() => void tick(), 5000);
+    return () => clearInterval(interval);
+  }, [token, myId, activeChatId, loadMessagesForChat]);
 
   const loadOlderMessages = useCallback(
     async (chatId) => {
@@ -1307,6 +1331,25 @@ export function useGdcChatInbox({ token, user }) {
       openAfterCreate = true,
     }) => {
       if (!token || !myId) throw new Error('Not signed in');
+      const scopeResolved = scope || groupScopeForRoleFromPermissions(user?.role);
+      const resolveUser = (id) => {
+        if (String(id) === String(myId)) {
+          return asPermissionUser({ id: myId, role: user?.role, team: user?.team_name ?? user?.team });
+        }
+        const row =
+          directoryRows.find((r) => String(r.id) === String(id)) ||
+          contacts.find((r) => String(r.id) === String(id));
+        return asPermissionUser(row);
+      };
+      const validation = validateCreateGroup({
+        viewer: viewerFromAuth(user),
+        scope: scopeResolved,
+        memberIds,
+        resolveUser,
+        name,
+      });
+      if (!validation.ok) throw new Error(validation.error || 'Not allowed to create group');
+
       const unique = Array.from(new Set([myId, ...memberIds.map(String)])).filter(Boolean);
       const idem = idempotencyKey || createGroupIdempotencyKey();
       const guardKey = buildGroupCreateKey({
@@ -1334,7 +1377,7 @@ export function useGdcChatInbox({ token, user }) {
           }
         }
         const thread = await createGroupChat(token, {
-          scope,
+          scope: scopeResolved,
           name: name || 'Group',
           memberIds: unique,
           privacyLockedInvites: !!privacyLockedInvites,
@@ -1356,6 +1399,9 @@ export function useGdcChatInbox({ token, user }) {
     [
       token,
       myId,
+      user,
+      directoryRows,
+      contacts,
       applyServerThreadPatch,
       refreshThreads,
       openChat,
@@ -2124,13 +2170,12 @@ export function useGdcChatInbox({ token, user }) {
     [userDirectoryById],
   );
 
-  const groupScopeForRole = useCallback(() => {
-    const r = user?.role;
-    if (isAdminRole(r)) return 'group';
-    if (r === 'HR') return 'hr_group';
-    if (r === 'Team Leader') return 'tl_group';
-    return 'group';
-  }, [user?.role]);
+  const groupScopeForRole = useCallback(
+    () => groupScopeForRoleFromPermissions(user?.role),
+    [user?.role],
+  );
+
+  const canCreateGroupChat = useMemo(() => canCreateGroup(user?.role), [user?.role]);
 
   const isPeerTyping = !!typingPeerId;
 
@@ -2242,6 +2287,7 @@ export function useGdcChatInbox({ token, user }) {
     sendText,
     sendAttachment,
     groupScopeForRole,
+    canCreateGroup: canCreateGroupChat,
     myUserId: myId,
     userDirectoryById,
     onlineUserIds,

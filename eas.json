@@ -7,6 +7,13 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_MODE": "remote",
+        "EXPO_PUBLIC_API_BASE_URL": "https://org-gdc-backend.onrender.com",
+        "EXPO_PUBLIC_TASK_API_BASE_URL": "https://org-task-backend.onrender.com",
+        "EXPO_PUBLIC_CHAT_API_BASE_URL": "https://org-chat-backend-rey1.onrender.com",
+        "EXPO_PUBLIC_ATTENDANCE_API_BASE_URL": "https://org-attendence-backend.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }
@@ -15,7 +22,12 @@
       "developmentClient": false,
       "distribution": "internal",
       "env": {
-        "APK_ARCH": "arm64"
+        "APK_ARCH": "arm64",
+        "EXPO_PUBLIC_API_MODE": "remote",
+        "EXPO_PUBLIC_API_BASE_URL": "https://org-gdc-backend.onrender.com",
+        "EXPO_PUBLIC_TASK_API_BASE_URL": "https://org-task-backend.onrender.com",
+        "EXPO_PUBLIC_CHAT_API_BASE_URL": "https://org-chat-backend-rey1.onrender.com",
+        "EXPO_PUBLIC_ATTENDANCE_API_BASE_URL": "https://org-attendence-backend.onrender.com"
       },
       "android": {
         "buildType": "apk"
@@ -25,7 +37,12 @@
       "developmentClient": false,
       "distribution": "internal",
       "env": {
-        "APK_ARCH": "universal"
+        "APK_ARCH": "universal",
+        "EXPO_PUBLIC_API_MODE": "remote",
+        "EXPO_PUBLIC_API_BASE_URL": "https://org-gdc-backend.onrender.com",
+        "EXPO_PUBLIC_TASK_API_BASE_URL": "https://org-task-backend.onrender.com",
+        "EXPO_PUBLIC_CHAT_API_BASE_URL": "https://org-chat-backend-rey1.onrender.com",
+        "EXPO_PUBLIC_ATTENDANCE_API_BASE_URL": "https://org-attendence-backend.onrender.com"
       },
       "android": {
         "buildType": "apk"
@@ -35,7 +52,12 @@
       "developmentClient": false,
       "autoIncrement": true,
       "env": {
-        "APK_ARCH": "arm64"
+        "APK_ARCH": "arm64",
+        "EXPO_PUBLIC_API_MODE": "remote",
+        "EXPO_PUBLIC_API_BASE_URL": "https://org-gdc-backend.onrender.com",
+        "EXPO_PUBLIC_TASK_API_BASE_URL": "https://org-task-backend.onrender.com",
+        "EXPO_PUBLIC_CHAT_API_BASE_URL": "https://org-chat-backend-rey1.onrender.com",
+        "EXPO_PUBLIC_ATTENDANCE_API_BASE_URL": "https://org-attendence-backend.onrender.com"
       },
       "android": {
         "buildType": "app-bundle"
@@ -50,7 +72,12 @@
     "production-apk-universal": {
       "extends": "production",
       "env": {
-        "APK_ARCH": "universal"
+        "APK_ARCH": "universal",
+        "EXPO_PUBLIC_API_MODE": "remote",
+        "EXPO_PUBLIC_API_BASE_URL": "https://org-gdc-backend.onrender.com",
+        "EXPO_PUBLIC_TASK_API_BASE_URL": "https://org-task-backend.onrender.com",
+        "EXPO_PUBLIC_CHAT_API_BASE_URL": "https://org-chat-backend-rey1.onrender.com",
+        "EXPO_PUBLIC_ATTENDANCE_API_BASE_URL": "https://org-attendence-backend.onrender.com"
       },
       "android": {
         "buildType": "apk"

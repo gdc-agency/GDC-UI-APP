@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '@/data/constants/api-config';
+import { isLegacyRenderHost } from '@/data/constants/backend-urls';
 import { Platform } from 'react-native';
 
 /** Wrong host / firewall: avoid infinite spinner on mobile. */
@@ -38,7 +39,13 @@ export class ApiError extends Error {
  */
 export async function apiRequest(path, options = {}) {
   const { method = 'GET', token, body, headers = {}, isFormData = false } = options;
-  const url = `${getApiBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+  const base = getApiBaseUrl();
+  if (isLegacyRenderHost(base)) {
+    throw new Error(
+      'This app is pointing at a retired backend URL. Restart Expo with cache clear (npx expo start --lan -c) and reload the app.',
+    );
+  }
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
   /** @type {Record<string, string>} */
   const h = {

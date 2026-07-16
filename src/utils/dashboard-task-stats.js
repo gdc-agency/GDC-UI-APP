@@ -39,18 +39,59 @@ export function countDashboardTaskBuckets(visibleTasks, todayYmd) {
     const st = String(t.status || '');
     const sl = st.toLowerCase();
     if (sl === 'pending') pending += 1;
-    else if (sl.includes('progress')) inProgress += 1;
+    else if (sl.includes('progress') || sl === 'working') inProgress += 1;
     else if (sl === 'review') review += 1;
     else if (sl === 'submitted') submitted += 1;
     else if (sl === 'approved') approved += 1;
 
     const dl = t.deadline != null ? String(t.deadline) : '';
     if (dl && dl < today) {
-      if (sl.includes('pending') || sl.includes('progress')) overdue += 1;
+      if (sl.includes('pending') || sl.includes('progress') || sl === 'working') overdue += 1;
     }
   }
 
   return { pending, inProgress, review, submitted, approved, overdue };
+}
+
+/**
+ * CRM Project Manager header stats (Total / Active / Completed / Pending / Overdue).
+ *
+ * @param {Array<Record<string, unknown>>} visibleTasks
+ * @param {string | null | undefined} viewerRole
+ * @param {string} [todayYmd]
+ */
+export function countProjectManagerStats(visibleTasks, viewerRole, todayYmd) {
+  const today = todayYmd || new Date().toISOString().slice(0, 10);
+  const isMgmt = viewerRole === 'Admin' || viewerRole === 'HR';
+  let active = 0;
+  let completed = 0;
+  let pending = 0;
+  let overdue = 0;
+
+  for (const t of visibleTasks) {
+    const status = String(t.status || 'Pending');
+    const display =
+      isMgmt && (status === 'In Progress' || status.toLowerCase() === 'working')
+        ? 'Working'
+        : status;
+    const dl = t.deadline != null ? String(t.deadline).slice(0, 10) : '';
+    const isApproved = status === 'Approved' || display === 'Approved';
+    if (dl && dl < today && !isApproved) overdue += 1;
+    if (isApproved) completed += 1;
+    else if (display === 'Pending' || status === 'Pending') pending += 1;
+    else if (
+      display === 'Working' ||
+      status === 'In Progress' ||
+      status === 'Submitted' ||
+      status === 'Review'
+    ) {
+      active += 1;
+    }
+  }
+
+  const total = visibleTasks.length;
+  const pct = (n) => (total > 0 ? `${Math.round((n / total) * 1000) / 10}%` : '0%');
+  return { total, active, completed, pending, overdue, pct };
 }
 
 /**

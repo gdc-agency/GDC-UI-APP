@@ -18,8 +18,18 @@ import { AnimatedBlock } from '@/components/ui/animated-block';
 import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { DashboardTopbar } from '@/components/dashboard/topbar';
 import { useTheme } from '@/context/theme-context';
-import { isAdminRole } from '@/utils/roles';
+import { canCreateProjectTask, isAdminOrHrRole } from '@/utils/roles';
 import { promptTaskAttachmentActions } from '@/utils/task-document-open';
+
+const PM_STATUS_OPTIONS = ['all', 'pending', 'in progress', 'submitted', 'review', 'approved'];
+
+const PM_STAT_META = [
+  { key: 'total', label: 'Total Projects', icon: 'account-group-outline', subKey: 'all', tone: '#4f46e5', bg: '#eef2ff' },
+  { key: 'active', label: 'Active Projects', icon: 'play-circle-outline', subKey: 'pct', tone: '#059669', bg: '#ecfdf5' },
+  { key: 'completed', label: 'Completed', icon: 'check-circle-outline', subKey: 'pct', tone: '#7c3aed', bg: '#f5f3ff' },
+  { key: 'pending', label: 'Pending', icon: 'clock-outline', subKey: 'pct', tone: '#d97706', bg: '#fffbeb' },
+  { key: 'overdue', label: 'Overdue', icon: 'alert-circle-outline', subKey: 'pct', tone: '#e11d48', bg: '#fff1f2' },
+];
 
 export function ProjectManagerSection({
   styles,
@@ -31,6 +41,14 @@ export function ProjectManagerSection({
   setProjectStatusFilter,
   projectStatusMenuOpen,
   setProjectStatusMenuOpen,
+  projectTeamFilter = 'All Teams',
+  setProjectTeamFilter,
+  projectTeamMenuOpen = false,
+  setProjectTeamMenuOpen,
+  projectTeamOptions = ['All Teams'],
+  showTeamInProjects = false,
+  projectManagerStats = { total: 0, active: 0, completed: 0, pending: 0, overdue: 0, pct: () => '0%' },
+  canCreateProject = false,
   projectFromDate,
   setProjectFromDate,
   projectToDate,
@@ -42,6 +60,10 @@ export function ProjectManagerSection({
   setSelectedProjectTask,
   handleEditProjectTask,
   handleDeleteProjectTask,
+  canManagePendingProjectTask = () => false,
+  getProjectTaskDisplayStatus = (t) => t?.status || 'Pending',
+  getProjectCardAssignment = () => ({}),
+  formatTaskRef = () => '',
   projectStatusTone,
   employeeNameByGdcId,
   formatProjectDueDate,
@@ -53,6 +75,7 @@ export function ProjectManagerSection({
   setTaskAssignee,
   taskAssigneeUserId,
   setTaskAssigneeUserId,
+  assignableUsersForCreate = [],
   hrAssignableUsers,
   taskDeadline,
   setTaskDeadline,
@@ -89,7 +112,16 @@ export function ProjectManagerSection({
 }) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const selectedDetailStatusTone = selectedProjectTask ? projectStatusTone(selectedProjectTask.status) : null;
+  const selectedDisplayStatus = selectedProjectTask
+    ? getProjectTaskDisplayStatus(selectedProjectTask)
+    : null;
+  const selectedDetailStatusTone = selectedDisplayStatus ? projectStatusTone(selectedDisplayStatus) : null;
+  const assigneePool = assignableUsersForCreate.length
+    ? assignableUsersForCreate
+    : Array.isArray(hrAssignableUsers)
+      ? hrAssignableUsers
+      : [];
+  const showCreate = canCreateProject || canCreateProjectTask(user?.role);
   const [iosDeadlinePickerOpen, setIosDeadlinePickerOpen] = useState(false);
   const [hrAssignMenuOpen, setHrAssignMenuOpen] = useState(false);
   const hrAssignDropdownAnim = useRef(new Animated.Value(0)).current;
@@ -181,34 +213,76 @@ export function ProjectManagerSection({
       <KeyboardAwareScrollView contentContainerStyle={styles.scroll}>
         <AnimatedBlock delay={0}>
         <View style={styles.hero}>
-          <View style={styles.heroIcon}>
-            <MaterialCommunityIcons name="clipboard-list-outline" size={20} color="#fff" />
+          <View style={styles.pmHeroRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+              <View style={styles.heroIcon}>
+                <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.pmHeroCopy}>
+                <Text style={styles.heroTitle}>Projects</Text>
+                <Text style={styles.pmHeroSubtitle}>Manage projects, deadlines and team progress.</Text>
+              </View>
+            </View>
+            {showCreate ? (
+              <Pressable style={styles.pmNewProjectBtn} onPress={openCreateProjectTaskModal}>
+                <MaterialCommunityIcons name="plus" size={18} color="#fff" />
+                <Text style={styles.pmNewProjectBtnText}>New Project</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Project Manager</Text>
-          </View>
+        </View>
+        </AnimatedBlock>
+
+        <AnimatedBlock delay={40}>
+        <View style={styles.pmStatsRow}>
+          {PM_STAT_META.map((meta) => {
+            const value = Number(projectManagerStats?.[meta.key] ?? 0);
+            const sub =
+              meta.subKey === 'all'
+                ? 'All time'
+                : typeof projectManagerStats?.pct === 'function'
+                  ? `${projectManagerStats.pct(value)} of total`
+                  : '';
+            return (
+              <View key={meta.key} style={styles.pmStatCard}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.pmStatLabel}>{meta.label}</Text>
+                  <Text style={styles.pmStatValue}>{value}</Text>
+                  <Text style={[styles.pmStatSub, { color: meta.tone }]}>{sub}</Text>
+                </View>
+                <View style={[styles.pmStatIconWrap, { backgroundColor: isDark ? colors.surfaceElevated : meta.bg }]}>
+                  <MaterialCommunityIcons name={meta.icon} size={20} color={meta.tone} />
+                </View>
+              </View>
+            );
+          })}
         </View>
         </AnimatedBlock>
 
         <AnimatedBlock delay={80}>
         <View style={[styles.panel, { marginTop: 8 }]}>
           <Text style={styles.panelTitle}>Filters</Text>
-          <Text style={styles.panelSub}>Search by task, filter by status and deadline range.</Text>
+          <Text style={styles.panelSub}>Search by project name, filter by status and deadline range.</Text>
           <View style={styles.searchWrap}>
             <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
             <TextInput
               value={projectSearch}
               onChangeText={setProjectSearch}
-              placeholder="Search project tasks..."
+              placeholder="Search by project name…"
               placeholderTextColor={colors.inputPlaceholder}
               style={styles.searchInput}
             />
           </View>
           <View style={styles.pmFilterSelectWrap}>
-            <Pressable style={styles.pmFilterSelectBtn} onPress={() => setProjectStatusMenuOpen((prev) => !prev)}>
+            <Pressable
+              style={styles.pmFilterSelectBtn}
+              onPress={() => {
+                setProjectStatusMenuOpen((prev) => !prev);
+                setProjectTeamMenuOpen?.(false);
+              }}>
               <Text style={styles.pmFilterSelectText}>
                 {projectStatusFilter === 'all'
-                  ? 'All'
+                  ? 'All Status'
                   : projectStatusFilter
                       .split(' ')
                       .map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`)
@@ -218,7 +292,7 @@ export function ProjectManagerSection({
             </Pressable>
             {projectStatusMenuOpen ? (
               <View style={styles.pmFilterSelectMenuInline}>
-                {['all', 'pending', 'in progress', 'review', 'submitted', 'overdue', 'approved', 'completed'].map((status) => (
+                {PM_STATUS_OPTIONS.map((status) => (
                   <Pressable
                     key={status}
                     onPress={() => {
@@ -228,7 +302,7 @@ export function ProjectManagerSection({
                     style={[styles.pmFilterOption, projectStatusFilter === status && styles.pmFilterOptionActive]}>
                     <Text style={[styles.pmFilterOptionText, projectStatusFilter === status && styles.pmFilterOptionTextActive]}>
                       {status === 'all'
-                        ? 'All'
+                        ? 'All Status'
                         : status
                             .split(' ')
                             .map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`)
@@ -239,6 +313,36 @@ export function ProjectManagerSection({
               </View>
             ) : null}
           </View>
+          {showTeamInProjects || isAdminOrHrRole(user?.role) ? (
+            <View style={[styles.pmFilterSelectWrap, { zIndex: 30 }]}>
+              <Pressable
+                style={styles.pmFilterSelectBtn}
+                onPress={() => {
+                  setProjectTeamMenuOpen?.((prev) => !prev);
+                  setProjectStatusMenuOpen(false);
+                }}>
+                <Text style={styles.pmFilterSelectText}>{projectTeamFilter || 'All Teams'}</Text>
+                <MaterialCommunityIcons name={projectTeamMenuOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+              </Pressable>
+              {projectTeamMenuOpen ? (
+                <View style={styles.pmFilterSelectMenuInline}>
+                  {(projectTeamOptions || ['All Teams']).map((team) => (
+                    <Pressable
+                      key={team}
+                      onPress={() => {
+                        setProjectTeamFilter?.(team);
+                        setProjectTeamMenuOpen?.(false);
+                      }}
+                      style={[styles.pmFilterOption, projectTeamFilter === team && styles.pmFilterOptionActive]}>
+                      <Text style={[styles.pmFilterOptionText, projectTeamFilter === team && styles.pmFilterOptionTextActive]}>
+                        {team}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           <View style={styles.dateFilterRow}>
             <Pressable
               style={styles.filterDateField}
@@ -285,27 +389,26 @@ export function ProjectManagerSection({
               <Text style={styles.filterDateClearText}>Clear date range</Text>
             </Pressable>
           ) : null}
-          {isAdminRole(user?.role) ? (
-            <Pressable style={[styles.actionBtn, { alignSelf: 'stretch', alignItems: 'center' }]} onPress={openCreateProjectTaskModal}>
-              <Text style={styles.actionBtnText}>Create Task</Text>
-            </Pressable>
-          ) : null}
         </View>
 
         <View style={[styles.panel, { marginTop: 12 }]}>
-          <Text style={styles.panelTitle}>Task List</Text>
+          <Text style={styles.panelTitle}>Projects</Text>
           <Text style={styles.panelSub}></Text>
-          {projectTasksLoading ? (
+          {projectTasksLoading && filteredProjectTasks.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>Loading tasks…</Text>
             </View>
           ) : filteredProjectTasks.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No tasks match current filters.</Text>
+              <Text style={styles.emptyText}>No tasks match this filter.</Text>
             </View>
           ) : (
             filteredProjectTasks.map((task) => {
-              const statusTone = projectStatusTone(task.status);
+              const displayStatus = getProjectTaskDisplayStatus(task);
+              const statusTone = projectStatusTone(displayStatus);
+              const assignment = getProjectCardAssignment(task);
+              const taskRef = formatTaskRef(task.apiNumericId ?? task.id);
+              const canManage = canManagePendingProjectTask(task);
               return (
               <Pressable key={task.id} style={[styles.projectCard, isCompactMobile && styles.projectCardCompact]} onPress={() => setSelectedProjectTask(task)}>
                 <View style={[styles.projectDateStrip, isCompactMobile && styles.projectDateStripCompact]}>
@@ -319,7 +422,7 @@ export function ProjectManagerSection({
                     <Text style={styles.projectTitle} numberOfLines={1} ellipsizeMode="tail">
                       {task.title}
                     </Text>
-                    {isAdminRole(user?.role) ? (
+                    {canManage ? (
                       <View style={styles.taskActionRow}>
                         <Pressable onPress={() => handleEditProjectTask(task)} style={styles.editBtn} onPressIn={(e) => e.stopPropagation()}>
                           <MaterialCommunityIcons name="pencil-outline" size={16} color="#ffffff" />
@@ -332,26 +435,27 @@ export function ProjectManagerSection({
                   </View>
                   <View style={[styles.projectStatePill, statusTone.pill]}>
                     <Text style={[styles.projectStateText, statusTone.text]}>
-                      {String(task.status || 'Pending').toUpperCase()}
+                      {String(displayStatus || 'Pending').toUpperCase()}
                     </Text>
                   </View>
-                  <View style={styles.projectIdentityRow}>
-                    <View style={styles.projectAssigneeBadge}>
-                      <Text style={styles.projectAssigneeBadgeText}>
-                        {String(task.assignedToName || employeeNameByGdcId[task.gdcId] || task.assignee || 'Unassigned').toUpperCase()}
-                      </Text>
+                  {taskRef ? <Text style={styles.projectTaskRef}>{taskRef}</Text> : null}
+                  {assignment.teamChip ? (
+                    <View style={styles.projectTeamChip}>
+                      <Text style={styles.projectTeamChipText}>{assignment.teamChip}</Text>
                     </View>
-                  </View>
-                  <View style={styles.projectInfoLine}>
-                    <MaterialCommunityIcons name="briefcase-outline" size={17} color={colors.primaryLight} />
-                    <Text style={styles.projectInfoText} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit={false}>
-                      {task.description || '—'}
+                  ) : null}
+                  {assignment.assignedBy ? (
+                    <Text style={styles.projectAssignLine} numberOfLines={1}>
+                      <Text style={styles.projectAssignLabel}>Assigned by: </Text>
+                      {assignment.assignedBy}
                     </Text>
-                  </View>
-                  <View style={styles.projectInfoLine}>
-                    <MaterialCommunityIcons name="account-outline" size={17} color={colors.primaryLight} />
-                    <Text style={styles.projectInfoText}>{task.assignedRole || task.assignee || 'Employee'}</Text>
-                  </View>
+                  ) : null}
+                  {assignment.assignedTo ? (
+                    <Text style={styles.projectAssignLine} numberOfLines={1}>
+                      <Text style={styles.projectAssignLabel}>Assigned to: </Text>
+                      {assignment.assignedTo}
+                    </Text>
+                  ) : null}
                   <View style={styles.projectDueLine}>
                     <MaterialCommunityIcons name="calendar-month-outline" size={18} color={colors.textSecondary} />
                     <Text style={styles.projectDueText}>{formatProjectDueDate(task.deadline)}</Text>
@@ -375,7 +479,7 @@ export function ProjectManagerSection({
               nestedScrollEnabled
               onScrollBeginDrag={() => setHrAssignMenuOpen(false)}>
               <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>{editingTaskId ? 'Update Project Task' : 'Create Project Task'}</Text>
+                <Text style={styles.modalTitle}>{editingTaskId ? 'Edit task' : 'New task'}</Text>
                 <View style={[styles.formLabelRow, styles.formLabelRowTight]}>
                   <View style={styles.formIconCol}>
                     <MaterialCommunityIcons name="format-list-checks" size={20} color={colors.primaryLight} />
@@ -389,7 +493,7 @@ export function ProjectManagerSection({
                   placeholderTextColor={colors.inputPlaceholder}
                   style={styles.input}
                 />
-                {isAdminRole(user?.role) ? (
+                {showCreate ? (
                   <View>
                     <View style={styles.formLabelRow}>
                       <View style={styles.formIconCol}>
@@ -398,12 +502,12 @@ export function ProjectManagerSection({
                       <Text style={styles.formLabelUpper}>ASSIGN TO *</Text>
                     </View>
                     {taskAssignableLoading ? (
-                      <Text style={[styles.panelSub, { marginTop: 6 }]}>Loading HR users…</Text>
+                      <Text style={[styles.panelSub, { marginTop: 6 }]}>Loading people…</Text>
                     ) : null}
                     {!taskAssignableLoading && taskAssignableError ? (
                       <Text style={{ fontSize: 12, color: colors.dangerText, fontWeight: '600', marginTop: 6 }}>{taskAssignableError}</Text>
                     ) : null}
-                    {!taskAssignableLoading && !taskAssignableError && hrAssignableUsers.length > 0 ? (
+                    {!taskAssignableLoading && !taskAssignableError && assigneePool.length > 0 ? (
                       <View style={[styles.hrAssignSelectWrap, hrAssignMenuOpen && styles.hrAssignSelectWrapRaised]}>
                         <Pressable
                           onPress={() => setHrAssignMenuOpen((o) => !o)}
@@ -414,7 +518,7 @@ export function ProjectManagerSection({
                               !String(taskAssignee || '').trim() && styles.hrAssignSelectBtnPlaceholder,
                             ]}
                             numberOfLines={1}>
-                            {String(taskAssignee || '').trim() || 'Select HR'}
+                            {String(taskAssignee || '').trim() || 'Select person'}
                           </Text>
                           <MaterialCommunityIcons name={hrAssignMenuOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
                         </Pressable>
@@ -439,12 +543,15 @@ export function ProjectManagerSection({
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator
                             style={{ maxHeight: 220 }}>
-                            {hrAssignableUsers.map((hr, idx) => {
-                              const id = typeof hr === 'object' && hr != null ? hr.id : null;
-                              const label = typeof hr === 'object' && hr != null ? String(hr.name || '').trim() : String(hr);
+                            {assigneePool.map((person, idx) => {
+                              const id = typeof person === 'object' && person != null ? person.id : null;
+                              const label =
+                                typeof person === 'object' && person != null ? String(person.name || '').trim() : String(person);
+                              const roleLabel =
+                                typeof person === 'object' && person?.role ? String(person.role) : '';
                               const idNum = id != null ? Number(id) : NaN;
                               const selected = Number.isFinite(idNum) && taskAssigneeUserId === idNum;
-                              const last = idx === hrAssignableUsers.length - 1;
+                              const last = idx === assigneePool.length - 1;
                               return (
                                 <Pressable
                                   key={Number.isFinite(idNum) ? String(idNum) : label}
@@ -462,7 +569,7 @@ export function ProjectManagerSection({
                                   <Text
                                     style={[styles.hrAssignSelectOptionText, selected && styles.hrAssignSelectOptionTextActive]}
                                     numberOfLines={1}>
-                                    {label}
+                                    {roleLabel ? `${label} (${roleLabel})` : label}
                                   </Text>
                                 </Pressable>
                               );
@@ -472,7 +579,7 @@ export function ProjectManagerSection({
                       </View>
                     ) : !taskAssignableLoading && !taskAssignableError ? (
                       <Text style={[styles.panelSub, { marginTop: 6 }]}>
-                        No HR users in the list. Confirm Task Management service and Auth assignable-users API.
+                        No assignable users found. Confirm Task Management + Auth assignable-users API.
                       </Text>
                     ) : null}
                   </View>
@@ -497,8 +604,10 @@ export function ProjectManagerSection({
                   <View style={styles.formIconCol}>
                     <MaterialCommunityIcons name="paperclip" size={20} color={colors.primaryLight} />
                   </View>
-                  <Text style={styles.formLabelUpper}>ATTACHMENT</Text>
-                  <Text style={styles.formLabelMuted}> (optional · max 5 MB)</Text>
+                  <Text style={styles.formLabelUpper}>ATTACHMENT{editingTaskId ? '' : ' *'}</Text>
+                  <Text style={styles.formLabelMuted}>
+                    {editingTaskId ? ' (optional · max 5 MB)' : ' (required · max 5 MB)'}
+                  </Text>
                 </View>
                 <View style={styles.attachmentField}>
                   <View style={styles.attachmentPicker}>
@@ -555,7 +664,7 @@ export function ProjectManagerSection({
                         <Text style={styles.actionBtnText}>{editingTaskId ? 'Updated!' : 'Saved!'}</Text>
                       </View>
                     ) : (
-                      <Text style={styles.actionBtnText}>{editingTaskId ? 'Update Task' : 'Save Task'}</Text>
+                      <Text style={styles.actionBtnText}>{editingTaskId ? 'Save changes' : 'Create task'}</Text>
                     )}
                   </Pressable>
                 </View>
@@ -661,7 +770,7 @@ export function ProjectManagerSection({
                     </Text>
                   </View>
                   <View style={styles.taskDetailHeaderActions}>
-                    {isAdminRole(user?.role) ? (
+                    {selectedProjectTask && canManagePendingProjectTask(selectedProjectTask) ? (
                       <>
                         <Pressable
                           style={styles.taskDetailActionBtn}
@@ -717,7 +826,7 @@ export function ProjectManagerSection({
                     {selectedDetailStatusTone ? (
                       <View style={[styles.projectStatePill, selectedDetailStatusTone.pill]}>
                         <Text style={[styles.projectStateText, selectedDetailStatusTone.text]}>
-                          {String(selectedProjectTask?.status || 'Pending').toUpperCase()}
+                          {String(selectedDisplayStatus || 'Pending').toUpperCase()}
                         </Text>
                       </View>
                     ) : null}

@@ -11,6 +11,7 @@ export function formatDisplayRole(roleRaw) {
   if (r === 'hr') return 'HR';
   if (r === 'team_leader' || r === 'team leader') return 'Team Leader';
   if (r === 'employee') return 'Employee';
+  if (r === 'pending' || r === 'pending_user' || r === 'pending user') return 'Pending User';
   return roleRaw ? String(roleRaw) : '';
 }
 
@@ -71,8 +72,9 @@ export function mapDirectoryUser(id, u) {
   const sid = String(id);
   const displayName = String(u?.name ?? u?.full_name ?? u?.username ?? u?.email ?? u?.gdc_id ?? 'User').trim();
   const roleLabel = formatDisplayRole(u?.role);
+  const team = String(u?.team_name ?? u?.team ?? u?.teamName ?? '').trim();
   const avatarUrl = resolveProfileImageUri(u?.profile_image ?? u?.profileImage ?? u?.avatar ?? u?.photo);
-  return { id: sid, displayName, roleLabel, avatarUrl };
+  return { id: sid, displayName, roleLabel, team, avatarUrl };
 }
 
 // NEW CODE ADDED FOR CHAT LIST NAME LOADING — prefer directory name over "Chat" placeholder

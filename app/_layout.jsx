@@ -6,10 +6,18 @@ import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 import 'react-native-reanimated';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import {
+  getApiBaseUrl,
+  getApiMode,
+  getAttendanceApiBaseUrl,
+  getChatApiBaseUrl,
+  getTaskApiBaseUrl,
+} from '@/data/constants/api-config';
 import { AuthProvider } from '../src/context/auth-context';
 import { ThemeProvider, useTheme } from '../src/context/theme-context';
 
@@ -43,6 +51,15 @@ function RootShell() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+    console.log('[GDC] API mode:', getApiMode());
+    console.log('[GDC] Auth:', getApiBaseUrl());
+    console.log('[GDC] Task:', getTaskApiBaseUrl());
+    console.log('[GDC] Chat:', getChatApiBaseUrl());
+    console.log('[GDC] Attendance:', getAttendanceApiBaseUrl());
+  }, []);
+
   return (
     <SafeAreaProvider>
       <KeyboardProvider preload={false} preserveEdgeToEdge>

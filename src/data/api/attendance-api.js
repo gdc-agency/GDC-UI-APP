@@ -195,13 +195,82 @@ export async function rejectManualTimeRequest(token, id, body) {
 
 /**
  * @param {string} token
- * @param {{ shift_start: string; shift_end: string; effective_date: string }} body
+ * @param {Record<string, unknown>} body
  */
 export async function saveShiftTiming(token, body) {
   return attendanceApiRequest('/api/shift-timing', { method: 'POST', token, body });
 }
 
-/** @param {string} token */
-export async function getCurrentShift(token) {
-  return attendanceApiRequest('/api/current-shift', { token });
+/**
+ * @param {string} token
+ * @param {string} [asOfDate]
+ */
+export async function getCurrentShift(token, asOfDate) {
+  const qs = asOfDate ? `?date=${encodeURIComponent(asOfDate)}` : '';
+  return attendanceApiRequest(`/api/current-shift${qs}`, { token });
+}
+
+/**
+ * @param {string} token
+ * @param {string} [asOfDate]
+ */
+export async function getShiftStatus(token, asOfDate) {
+  const qs = asOfDate ? `?date=${encodeURIComponent(asOfDate)}` : '';
+  const res = await attendanceApiRequest(`/api/shift-status${qs}`, { token });
+  if (!res || typeof res !== 'object') return { shift_id: null, is_enabled: false };
+  const d = /** @type {{ data?: { shift_id?: number|null; is_enabled?: boolean }; shift_id?: number|null; is_enabled?: boolean }} */ (
+    res
+  );
+  const inner = d.data && typeof d.data === 'object' ? d.data : d;
+  return {
+    shift_id: inner.shift_id ?? null,
+    is_enabled: Boolean(inner.is_enabled),
+  };
+}
+
+/**
+ * @param {string} token
+ * @param {{ shift_id: number; is_enabled: boolean }} body
+ */
+export async function setShiftStatus(token, body) {
+  return attendanceApiRequest('/api/shift-status', { method: 'POST', token, body });
+}
+
+/**
+ * @param {string} token
+ */
+export async function getAttendanceControlSettings(token) {
+  const res = await attendanceApiRequest('/api/attendance-control-settings', { token });
+  if (!res || typeof res !== 'object') {
+    return { live_shift_notifications_enabled: true };
+  }
+  const d = /** @type {{ data?: Record<string, unknown> } & Record<string, unknown>} */ (res);
+  const inner = d.data && typeof d.data === 'object' ? d.data : d;
+  return {
+    live_shift_notifications_enabled:
+      inner.live_shift_notifications_enabled == null
+        ? true
+        : Boolean(inner.live_shift_notifications_enabled),
+    geo_fencing_enabled: Boolean(inner.geo_fencing_enabled),
+    geo_fencing_use_global_radius:
+      inner.geo_fencing_use_global_radius == null ? true : Boolean(inner.geo_fencing_use_global_radius),
+    geo_fencing_global_radius_miles: Number(inner.geo_fencing_global_radius_miles ?? 0),
+    geo_fencing_site_radius_miles:
+      inner.geo_fencing_site_radius_miles && typeof inner.geo_fencing_site_radius_miles === 'object'
+        ? inner.geo_fencing_site_radius_miles
+        : {},
+    geo_fencing_office_lat: inner.geo_fencing_office_lat == null ? null : Number(inner.geo_fencing_office_lat),
+    geo_fencing_office_lng: inner.geo_fencing_office_lng == null ? null : Number(inner.geo_fencing_office_lng),
+    geo_fencing_radius_unit: inner.geo_fencing_radius_unit === 'meters' ? 'meters' : 'miles',
+  };
+}
+
+/**
+ * Save attendance control — pass previous geo fields through so we don't wipe them.
+ * Mobile UI does not edit geo-fencing.
+ * @param {string} token
+ * @param {Record<string, unknown>} body
+ */
+export async function setAttendanceControlSettings(token, body) {
+  return attendanceApiRequest('/api/attendance-control-settings', { method: 'POST', token, body });
 }

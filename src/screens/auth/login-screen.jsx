@@ -1,24 +1,24 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedBlock } from '@/components/ui/animated-block';
-import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import { AuthBrandBlock } from '@/components/auth/auth-brand-block';
 import { AuthPrimaryButton } from '@/components/auth/auth-primary-button';
+import { AnimatedBlock } from '@/components/ui/animated-block';
+import { KeyboardAwareScrollView } from '@/components/ui/keyboard-aware-scroll-view';
 import MaterialCommunityIcons from '@/components/ui/material-community-icons';
 import { WaveDivider } from '@/components/wave-divider';
 import { useAuth } from '@/context/auth-context';

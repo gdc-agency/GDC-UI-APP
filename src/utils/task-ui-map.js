@@ -33,6 +33,21 @@ export function displayStatusFromApi(raw) {
 }
 
 /**
+ * Admin/HR list/detail display — In Progress → Working.
+ * @param {{ status?: string }} task
+ * @param {string | null | undefined} viewerRole
+ */
+export function getManagementTaskDisplayStatus(task, viewerRole) {
+  const role = String(viewerRole || '');
+  const status = String(task?.status || 'Pending');
+  if (role !== 'Admin' && role !== 'HR') return status;
+  if (status === 'Submitted' || status === 'Review' || status === 'Approved') return status;
+  if (status === 'In Progress') return 'Working';
+  if (status === 'Pending') return 'Pending';
+  return status;
+}
+
+/**
  * @param {Record<string, unknown>} row - task row from Task API (mapRowToClient)
  */
 export function mapTaskRowToProjectTask(row) {
@@ -52,17 +67,25 @@ export function mapTaskRowToProjectTask(row) {
   /** @type {unknown[]} */
   const history = Array.isArray(row.history) ? row.history : [];
   let forwardedBy = '';
+  let createdByName = row.creator_name != null ? String(row.creator_name) : '';
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const h = history[i];
-    if (h && typeof h === 'object' && String(h.action || '').includes('Forward')) {
+    if (!h || typeof h !== 'object') continue;
+    if (String(h.action || '').includes('Forward')) {
       const ar = h.actorRole != null ? String(h.actorRole) : '';
       forwardedBy = ar || 'HR';
-      break;
+    }
+    if (!createdByName && String(h.action || '').toLowerCase().includes('creat')) {
+      createdByName = h.actorName != null ? String(h.actorName) : createdByName;
     }
   }
 
   /** @type {unknown[]} */
   const comments = Array.isArray(row.comments) ? row.comments : [];
+
+  const assigneeTeam = String(
+    row.assigned_team ?? row.assignee_team ?? row.team_name ?? row.team ?? row.forwarded_team ?? '',
+  ).trim();
 
   return {
     id: String(row.id),
@@ -74,7 +97,10 @@ export function mapTaskRowToProjectTask(row) {
     assignedRole,
     assignedToName: name,
     assignedToUserId: Number.isFinite(assignedTo) ? assignedTo : null,
+    assignedByUserId: Number.isFinite(createdBy) ? createdBy : null,
     createdByUserId: Number.isFinite(createdBy) ? createdBy : null,
+    createdByName: createdByName || undefined,
+    assigneeTeam: assigneeTeam || undefined,
     priority: 'Medium',
     status,
     deadline,

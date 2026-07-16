@@ -70,6 +70,7 @@ export function NewChatPicker({
   directoryHydrated = true,
   onSelectContact,
   onCreateGroup,
+  canCreateGroup = true,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -170,33 +171,35 @@ export function NewChatPicker({
             New chat
           </Text>
 
-          <Pressable
-            className="mb-3 flex-row items-center gap-3 rounded-2xl border px-3 py-3"
-            style={({ pressed }) => ({
-              backgroundColor: colors.surfaceMuted,
-              borderColor: colors.borderLight,
-              opacity: pressed ? 0.88 : 1,
-            })}
-            onPress={() => {
-              closeAnimated();
-              setTimeout(() => onCreateGroup(), 220);
-            }}
-            disabled={!!startingId}>
-            <View
-              className="h-12 w-12 items-center justify-center rounded-full"
-              style={{ backgroundColor: colors.primaryMid }}>
-              <MaterialCommunityIcons name="account-group-outline" size={24} color="#fff" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-bold" style={{ color: colors.text }}>
-                Create group
-              </Text>
-              <Text className="mt-0.5 text-xs" style={{ color: colors.textMuted }}>
-                Start a team conversation
-              </Text>
-            </View>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
-          </Pressable>
+          {canCreateGroup ? (
+            <Pressable
+              className="mb-3 flex-row items-center gap-3 rounded-2xl border px-3 py-3"
+              style={({ pressed }) => ({
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.borderLight,
+                opacity: pressed ? 0.88 : 1,
+              })}
+              onPress={() => {
+                closeAnimated();
+                setTimeout(() => onCreateGroup(), 220);
+              }}
+              disabled={!!startingId}>
+              <View
+                className="h-12 w-12 items-center justify-center rounded-full"
+                style={{ backgroundColor: colors.primaryMid }}>
+                <MaterialCommunityIcons name="account-group-outline" size={24} color="#fff" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-bold" style={{ color: colors.text }}>
+                  Create group
+                </Text>
+                <Text className="mt-0.5 text-xs" style={{ color: colors.textMuted }}>
+                  Start a team conversation
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+            </Pressable>
+          ) : null}
 
           <View
             className="mb-2.5 flex-row items-center rounded-[14px] border px-3"

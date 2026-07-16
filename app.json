@@ -70,14 +70,15 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiBaseUrl": "https://gdc-backend-yrit.onrender.com",
-      "taskApiBaseUrl": "https://taskmanagment-backend-34i7.onrender.com",
-      "chatApiBaseUrl": "https://chat-backend-y6j2.onrender.com",
-      "attendanceApiBaseUrl": "https://attendence-service-rdvv.onrender.com",
-      "apiPort": 5001,
-      "taskApiPort": 4000,
-      "chatApiPort": 5003,
-      "attendanceApiPort": 5000,
+      "apiMode": "remote",
+      "apiBaseUrl": "https://org-gdc-backend.onrender.com",
+      "taskApiBaseUrl": "https://org-task-backend.onrender.com",
+      "chatApiBaseUrl": "https://org-chat-backend-rey1.onrender.com",
+      "attendanceApiBaseUrl": "https://org-attendence-backend.onrender.com",
+      "apiPort": 5000,
+      "taskApiPort": 5001,
+      "chatApiPort": 5002,
+      "attendanceApiPort": 5003,
       "router": {},
       "eas": {
         "projectId": "36cc37ec-7449-40dc-89bc-9014a36ff7f6"

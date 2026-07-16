@@ -97,7 +97,9 @@ export function DashboardHeroCard({ user, gdcLabel, nowText, roleCode }) {
             {user?.name ?? 'User'}
           </Text>
           <View className="mt-2.5 gap-2">
-            <HeroChip icon="shield-account-outline">Role: {user?.role ?? 'Member'}</HeroChip>
+            <HeroChip icon="office-building-outline">
+              {user?.organization_name?.trim() || 'Organization'}
+            </HeroChip>
             <HeroChip icon="card-account-details-outline">GDC_ID: {gdcLabel}</HeroChip>
             <HeroChip icon="clock-outline">{nowText}</HeroChip>
           </View>

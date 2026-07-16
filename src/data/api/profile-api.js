@@ -23,6 +23,8 @@ export function parseProfileResponse(data) {
     'team_id',
     'team_name',
     'work_site',
+    'organization_name',
+    'organization_id',
   ];
   const user = o.user;
   if (user && typeof user === 'object' && !Array.isArray(user)) {
