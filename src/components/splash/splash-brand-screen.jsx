@@ -9,7 +9,7 @@ import { BRAND_SLOGAN } from '@/data/constants/brand';
 import { SplashLoadingRing } from './splash-loading-ring';
 
 /**
- * Branded splash — corner waves, GDC logo, title, tagline.
+ * Branded splash — corner waves, WorkTym logo, title, tagline.
  * @param {{ loading?: boolean; statusBarStyle?: 'light' | 'dark' | 'auto' }} props
  */
 export function SplashBrandScreen({ loading = false, statusBarStyle = 'dark' }) {

@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { AuthBrandDivider } from '@/components/auth/auth-scene-background';
 import {
+  BRAND_LOGO_DARK_SOURCE,
   BRAND_LOGO_SOURCE,
   BRAND_NAVY,
   BRAND_ORANGE,
@@ -14,7 +15,8 @@ import { useTheme } from '@/context/theme-context';
 const LOGO_SIZE = 108;
 
 /**
- * Centered GDC logo + split "Global Digital Care" title.
+ * Centered WorkTym logo + "WorkTym" title (orange T).
+ * Light: blue WT. Dark: white WT.
  * @param {{ showDivider?: boolean; showAcronym?: boolean; slogan?: string | null; compact?: boolean; lightOnDark?: boolean }} props
  */
 export function AuthBrandBlock({
@@ -29,21 +31,22 @@ export function AuthBrandBlock({
   const titleColor = onDark ? '#FFFFFF' : BRAND_NAVY;
   const sloganColor = onDark ? 'rgba(255,255,255,0.9)' : '#64748B';
   const titleSize = compact ? 24 : 28;
+  const logoSource = onDark ? BRAND_LOGO_DARK_SOURCE : BRAND_LOGO_SOURCE;
 
   return (
     <View className="items-center">
       <Image
-        source={BRAND_LOGO_SOURCE}
+        source={logoSource}
         style={{ width: LOGO_SIZE, height: LOGO_SIZE, backgroundColor: 'transparent' }}
         contentFit="contain"
-        accessibilityLabel="Global Digital Care logo"
+        accessibilityLabel="WorkTym logo"
       />
       {showAcronym ? (
         <View className="mt-4 w-full max-w-[240px] flex-row items-center">
           <View className="h-px flex-1" style={{ backgroundColor: onDark ? 'rgba(255,255,255,0.25)' : '#CBD5E1' }} />
           <Text className="mx-3 text-[22px] font-extrabold tracking-[1px]">
-            <Text style={{ color: onDark ? '#FFFFFF' : BRAND_NAVY }}>GD</Text>
-            <Text style={{ color: BRAND_ORANGE }}>C</Text>
+            <Text style={{ color: onDark ? '#FFFFFF' : BRAND_NAVY }}>W</Text>
+            <Text style={{ color: BRAND_ORANGE }}>T</Text>
           </Text>
           <View className="h-px flex-1" style={{ backgroundColor: onDark ? 'rgba(255,255,255,0.25)' : '#CBD5E1' }} />
         </View>
@@ -51,9 +54,9 @@ export function AuthBrandBlock({
       <Text
         className={showAcronym ? 'mt-3 text-center' : 'mt-3 text-center'}
         style={{ fontSize: titleSize, lineHeight: titleSize + 6 }}>
-        <Text style={{ color: titleColor, fontWeight: '800' }}>Global </Text>
-        <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>Digital </Text>
-        <Text style={{ color: titleColor, fontWeight: '800' }}>Care</Text>
+        <Text style={{ color: titleColor, fontWeight: '800' }}>Work</Text>
+        <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>T</Text>
+        <Text style={{ color: titleColor, fontWeight: '800' }}>ym</Text>
       </Text>
       {showDivider ? <AuthBrandDivider isDark={onDark} /> : null}
       {slogan ? (

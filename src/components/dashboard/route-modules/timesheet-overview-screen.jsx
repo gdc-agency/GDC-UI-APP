@@ -318,7 +318,7 @@ export function TimesheetOverviewScreen({
               <TextInput
                 value={timesheetSearch}
                 onChangeText={setTimesheetSearch}
-                placeholder="Search by name, GDC ID or team"
+                placeholder="Search by name, WorkTym ID or team"
                 placeholderTextColor="#9CA3AF"
                 style={ts.searchInput}
               />

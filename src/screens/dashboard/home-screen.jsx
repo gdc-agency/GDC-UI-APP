@@ -350,7 +350,7 @@ export default function DashboardHomeScreen() {
     return () => clearInterval(id);
   }, [token, user?.role, loadDashboardTaskBoard, loadAdminStats, loadHrDashboardStats]);
 
-  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '0001').toUpperCase()}`;
+  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `WT-${String(user?.id ?? '0001').toUpperCase()}`;
 
   const rolePanelProps = {
     role: user?.role,

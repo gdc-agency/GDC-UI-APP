@@ -230,7 +230,7 @@ export function AdminSection({ styles, ctx }) {
                 <TextInput
                   value={adminUserSearch}
                   onChangeText={setAdminUserSearch}
-                  placeholder="Search by name or GDC ID..."
+                  placeholder="Search by name or WorkTym ID..."
                   placeholderTextColor={colors.inputPlaceholder}
                   style={styles.searchInput}
                 />

@@ -260,7 +260,7 @@ function ManualRecordCard({ entry }) {
       </View>
 
       <View style={[ts.logMetaBar, ts.logMetaBarManual]}>
-        <MetaTile icon="card-account-details-outline" label="GDC ID" value={entry.gdcId} tone="amber" />
+        <MetaTile icon="card-account-details-outline" label="WorkTym ID" value={entry.gdcId} tone="amber" />
         <MetaTile icon="calendar-month-outline" label="Date" value={formatClockDisplayDate(entry.date)} tone="amber" />
         <MetaTile icon="clock-outline" label="Duration" value={duration} tone="amber" />
       </View>
@@ -376,7 +376,7 @@ export function TimesheetRecordsView({
               <TextInput
                 value={recordSearch}
                 onChangeText={setRecordSearch}
-                placeholder="GDC-ID or name"
+                placeholder="WorkTym-ID or name"
                 placeholderTextColor={TsColors.inputPlaceholder}
                 style={[ts.logFilterInputText, { paddingVertical: 0 }]}
               />

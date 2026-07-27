@@ -380,7 +380,7 @@ function TeamAvailabilityBoard({ ctx }) {
           <TextInput
             value={availabilitySearch}
             onChangeText={setAvailabilitySearch}
-            placeholder="Search name, GDC ID, team..."
+            placeholder="Search name, WorkTym ID, team..."
             placeholderTextColor={AvColors.inputPlaceholder}
             style={av.searchInput}
           />

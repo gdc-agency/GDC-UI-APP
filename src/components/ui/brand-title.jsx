@@ -10,7 +10,7 @@ const SIZES = {
   lg: { fontSize: 17, lineHeight: 22 },
 };
 
-/** Inline "Global Digital Care" — navy/white + orange split (topbar, drawer). */
+/** Inline "WorkTym" — navy/white + orange T (topbar, drawer). */
 export function BrandTitle({ size = 'md', numberOfLines = 1, className }) {
   const { isDark } = useTheme();
   const titleColor = isDark ? '#FFFFFF' : BRAND_NAVY;
@@ -21,8 +21,9 @@ export function BrandTitle({ size = 'md', numberOfLines = 1, className }) {
       className={className}
       numberOfLines={numberOfLines}
       style={{ fontSize, lineHeight }}>
-      <Text style={{ color: titleColor, fontWeight: '800' }}>Global </Text>
-      <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>Digital Care</Text>
+      <Text style={{ color: titleColor, fontWeight: '800' }}>Work</Text>
+      <Text style={{ color: BRAND_ORANGE, fontWeight: '800' }}>T</Text>
+      <Text style={{ color: titleColor, fontWeight: '800' }}>ym</Text>
     </Text>
   );
 }

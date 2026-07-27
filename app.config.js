@@ -74,7 +74,22 @@ const plugins = base.expo.plugins.map((plugin) => {
 module.exports = {
   expo: {
     ...base.expo,
+    name: 'WorkTym',
+    slug: 'crmApp',
+    scheme: 'worktym',
     plugins,
+    android: {
+      ...base.expo.android,
+      package: 'com.worktym.app',
+    },
+    ios: {
+      ...base.expo.ios,
+      bundleIdentifier: 'com.worktym.app',
+      infoPlist: {
+        ...(base.expo.ios?.infoPlist || {}),
+        CFBundleDisplayName: 'WorkTym',
+      },
+    },
     extra: {
       ...base.expo.extra,
       ...ORG_API,

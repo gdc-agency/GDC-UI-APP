@@ -197,7 +197,7 @@ export default function ProfileScreen() {
 
   const displayName = name || user?.name || 'User';
   const firstName = displayName.split(' ')?.[0] ?? 'U';
-  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `GDC-${String(user?.id ?? '')}`;
+  const gdcLabel = user?.gdc_id ? String(user.gdc_id) : `WT-${String(user?.id ?? '')}`;
   const roleLabel = user?.role ? String(user.role) : '';
   const departmentLabel = department || user?.department || '';
 

@@ -105,7 +105,7 @@ export function ClockRecordCard({ entry }) {
       </View>
 
       <View style={ts.logMetaBar}>
-        <MetaTile icon="card-account-details-outline" label="GDC ID" value={entry.gdcId} />
+        <MetaTile icon="card-account-details-outline" label="WorkTym ID" value={entry.gdcId} />
         <MetaTile icon="calendar-month-outline" label="Date" value={formatClockDisplayDate(entry.date)} />
       </View>
 

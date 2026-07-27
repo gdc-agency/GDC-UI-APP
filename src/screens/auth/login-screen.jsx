@@ -184,7 +184,7 @@ export default function LoginScreen() {
           <Pressable
             className="mb-6 self-end"
             onPress={() =>
-              Alert.alert('Forgot password?', 'Use the GDC web app forgot-password page until mobile reset is wired.')
+              Alert.alert('Forgot password?', 'Use the WorkTym web app forgot-password page until mobile reset is wired.')
             }>
             <Text className="text-sm font-semibold text-primary-mid">Forgot password?</Text>
           </Pressable>

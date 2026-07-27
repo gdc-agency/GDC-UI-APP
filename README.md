@@ -1,6 +1,6 @@
-# GDC Mobile App
+# WorkTym Mobile App
 
-Expo Router + React Native CRM app for Global Digital Care.
+Expo Router + React Native CRM app for WorkTym.
 
 ## API modes
 

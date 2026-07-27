@@ -53,11 +53,11 @@ function RootShell() {
 export default function RootLayout() {
   useEffect(() => {
     if (typeof __DEV__ === 'undefined' || !__DEV__) return;
-    console.log('[GDC] API mode:', getApiMode());
-    console.log('[GDC] Auth:', getApiBaseUrl());
-    console.log('[GDC] Task:', getTaskApiBaseUrl());
-    console.log('[GDC] Chat:', getChatApiBaseUrl());
-    console.log('[GDC] Attendance:', getAttendanceApiBaseUrl());
+    console.log('[WorkTym] API mode:', getApiMode());
+    console.log('[WorkTym] Auth:', getApiBaseUrl());
+    console.log('[WorkTym] Task:', getTaskApiBaseUrl());
+    console.log('[WorkTym] Chat:', getChatApiBaseUrl());
+    console.log('[WorkTym] Attendance:', getAttendanceApiBaseUrl());
   }, []);
 
   return (
